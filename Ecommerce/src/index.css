@@ -1,0 +1,402 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+
+  --color-slate-surface: #f8fafc;
+  --color-slate-card: #ffffff;
+  --color-slate-subtle: #f1f5f9;
+  --color-slate-border: #e2e8f0;
+
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+}
+
+/* ── Reset ─────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+}
+
+
+/* ── Sticky header offset ───────────────────────────
+   nav bar: 64px (h-16)
+   Announcement bar removed — badge strip added to hero  */
+:root {
+  --header-height: 64px;
+  --sticky-offset: var(--header-height);
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: clip;
+  /* Push anchored scroll targets below the sticky header */
+  scroll-padding-top: var(--sticky-offset);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+  width: 100%;
+}
+
+/* ── Shared page container ──────────────────────────
+   Centered, max-width with responsive side padding */
+.page-container {
+  width: 100%;
+  max-width: 1380px;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+@media (min-width: 640px) {
+  .page-container {
+    padding-inline: 1.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .page-container {
+    padding-inline: 2rem;
+  }
+}
+
+/* ── Scrollbar ──────────────────────────────────────*/
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── Flat 2.0 Cards ─────────────────────────────────*/
+.card-flat {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(15,23,42,0.04), 0 1px 2px -1px rgba(15,23,42,0.04);
+  transition: all 0.2s cubic-bezier(0.16,1,0.3,1);
+  min-width: 0;
+}
+.card-flat:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px -5px rgba(15,23,42,0.07), 0 8px 10px -6px rgba(15,23,42,0.04);
+}
+.card-flat-interactive {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(15,23,42,0.04);
+  transition: all 0.2s ease;
+  min-width: 0;
+}
+.card-flat-interactive:hover {
+  border-color: #93c5fd;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -6px rgba(37,99,235,0.08), 0 4px 12px -2px rgba(15,23,42,0.04);
+}
+
+/* ── Bento Card ─────────────────────────────────────
+   overflow: clip instead of hidden so border-radius
+   still clips but the card itself never hides its
+   own flex children (buttons, price row etc.)       */
+.bento-card {
+  position: relative;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.25rem;
+  overflow: clip;
+  box-shadow: 0 1px 3px 0 rgba(15,23,42,0.03);
+  transition: all 0.2s ease;
+  min-width: 0;
+}
+.bento-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 20px -4px rgba(15,23,42,0.06);
+}
+
+/* ── Promo backgrounds ──────────────────────────────*/
+.bento-promo-warm {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fef3c7 100%);
+  border: 1px solid #fed7aa;
+}
+.bento-promo-cool {
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 50%, #f1f5f9 100%);
+  border: 1px solid #bfdbfe;
+}
+.bento-promo-brand {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 1px solid #334155;
+  color: #ffffff;
+}
+
+/* ── Product Card ───────────────────────────────────
+   Stable flex column. Image keeps aspect-ratio.
+   Content area grows. Action row is always at bottom.
+   No overflow-hidden on the outer wrapper.           */
+.product-card {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  min-width: 0;
+  /* No overflow: hidden — avoids clipping buttons    */
+  box-shadow: 0 1px 2px 0 rgba(15,23,42,0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.product-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 20px -4px rgba(15,23,42,0.08);
+  transform: translateY(-2px);
+}
+.product-card__image {
+  /* Clip only the image area with border-radius on the img wrapper */
+  border-radius: 0.875rem 0.875rem 0 0;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  background-color: #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+.product-card__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+.product-card:hover .product-card__image img {
+  transform: scale(1.04);
+}
+.product-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 1rem;
+  gap: 0.5rem;
+}
+.product-card__meta { flex: 1; }
+.product-card__actions {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* ── Primary / Secondary Buttons ────────────────────*/
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid #1d4ed8;
+  box-shadow: 0 1px 2px 0 rgba(37,99,235,0.2);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  outline: none;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: #1d4ed8;
+  border-color: #1e40af;
+  box-shadow: 0 4px 12px 0 rgba(37,99,235,0.25);
+  transform: translateY(-1px);
+}
+.btn-primary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.btn-primary:active:not(:disabled) {
+  background-color: #1e40af;
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(37,99,235,0.2);
+}
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px 0 rgba(15,23,42,0.04);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  outline: none;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.btn-secondary:hover:not(:disabled) { background-color: #f8fafc; border-color: #cbd5e1; }
+.btn-secondary:active:not(:disabled) { background-color: #f1f5f9; }
+.btn-secondary:focus-visible { outline: 2px solid #94a3b8; outline-offset: 2px; }
+
+/* ── Badge ──────────────────────────────────────────*/
+.badge-clean {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  line-height: 1;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+/* ── Entrance & Drawer animations ───────────────────*/
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.25s ease-out forwards; }
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-slide-in-right {
+  animation: slideInRight 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-modal-pop {
+  animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Hero Bento layout ──────────────────────────────
+   Mobile: single column
+   Desktop (1024px+): 7fr / 5fr                      */
+.hero-bento-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .hero-bento-grid {
+    grid-template-columns: 7fr 5fr;
+    gap: 1.5rem;
+    align-items: stretch;
+  }
+  .hero-bento-grid > * {
+    height: 100%;
+  }
+}
+
+/* Hero main card — clean balanced flex */
+.hero-main-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.75rem;
+  min-height: 380px;
+}
+@media (min-width: 640px) { .hero-main-card { padding: 2.25rem; } }
+@media (min-width: 1024px) { .hero-main-card { padding: 2.75rem; min-height: 440px; } }
+
+/* Hero right column — two cards with equal height distribution */
+.hero-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  height: 100%;
+}
+@media (min-width: 1024px) {
+  .hero-right-col > * {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* ── Benefit cards: 1 → 2 → 4 columns ──────────────*/
+.benefit-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 640px) {
+  .benefit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .benefit-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
+}
+
+/* ── Category Bento Grid: 1 → 2 → 12 col ───────────
+   Row 1: Electronics (7) + Fashion (5)
+   Row 2: Home (4) + Beauty (4) + Sports (4)          */
+.category-bento-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 640px) {
+  .category-bento-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .category-bento-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1.5rem; }
+}
+
+/* Large category cards (Electronics & Fashion) */
+.cat-card-large {
+  min-height: 240px;
+}
+@media (min-width: 640px) { .cat-card-large { min-height: 270px; } }
+@media (min-width: 1024px) { .cat-card-large { min-height: 280px; } }
+
+/* Small category cards (Home, Beauty, Sports) */
+.cat-card-small {
+  min-height: 180px;
+}
+@media (min-width: 640px) { .cat-card-small { min-height: 200px; } }
+
+/* ── Text-child: prevent overflow without clipping content */
+.text-child {
+  min-width: 0;
+}
+
