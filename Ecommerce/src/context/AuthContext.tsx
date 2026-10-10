@@ -12,8 +12,9 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import type { User } from '../types';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -39,6 +40,33 @@ function mapFirebaseUser(firebaseUser: NonNullable<typeof auth.currentUser>): Us
   };
 }
 
+/**
+ * Upserts a customer document in Firestore `users/{uid}`.
+ * Uses merge:true so existing fields (e.g. savedAddresses) are never overwritten.
+ */
+async function syncUserDocument(
+  firebaseUser: NonNullable<typeof auth.currentUser>,
+): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', firebaseUser.uid);
+    await setDoc(
+      userRef,
+      {
+        uid: firebaseUser.uid,
+        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Customer',
+        email: firebaseUser.email || '',
+        photoURL: firebaseUser.photoURL || null,
+        lastLoginAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (err) {
+    // Non-fatal: log but don't disrupt the user session
+    console.warn('[AuthContext] Failed to sync user document:', err);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,8 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
       auth,
-      (firebaseUser) => {
-        setUser(firebaseUser ? mapFirebaseUser(firebaseUser) : null);
+      async (firebaseUser) => {
+        if (firebaseUser) {
+          await syncUserDocument(firebaseUser);
+          setUser(mapFirebaseUser(firebaseUser));
+        } else {
+          setUser(null);
+        }
         setIsLoading(false);
       },
       () => {
@@ -78,6 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await updateProfile(credential.user, {
         displayName: name.trim(),
       });
+      await syncUserDocument({
+        ...credential.user,
+        displayName: name.trim(),
+      } as typeof credential.user);
     } catch (error) {
       await signOut(auth);
       throw error;
