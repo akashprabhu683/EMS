@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { SlidersHorizontal, X, ChevronDown, Grid3X3, List, Search, Star, ArrowRight, Package } from 'lucide-react';
 import { PRODUCTS, CATEGORIES } from '../data/products';
@@ -6,15 +6,16 @@ import { ProductCard } from '../components/ProductCard';
 import type { FilterState, SortOption } from '../types';
 import clsx from 'clsx';
 import { useCart } from '../context/CartContext';
+import { getActiveProducts } from '../services/productService';
 
 const PRICE_MAX = 700;
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'featured',   label: 'Featured Picks' },
-  { value: 'newest',     label: 'Newest Arrivals' },
-  { value: 'price-asc',  label: 'Price: Low → High' },
+  { value: 'featured', label: 'Featured Picks' },
+  { value: 'newest', label: 'Newest Arrivals' },
+  { value: 'price-asc', label: 'Price: Low → High' },
   { value: 'price-desc', label: 'Price: High → Low' },
-  { value: 'rating',     label: 'Top Customer Rating' },
+  { value: 'rating', label: 'Top Customer Rating' },
 ];
 
 export function ProductsPage() {
@@ -23,17 +24,41 @@ export function ProductsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const { addItem, openCart } = useCart();
 
+  const [products, setProducts] = useState(PRODUCTS);
+  const [productsLoading, setProductsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    getActiveProducts()
+      .then(remoteProducts => {
+        if (active && remoteProducts.length > 0) {
+          setProducts(remoteProducts);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load Firestore products:', error);
+      })
+      .finally(() => {
+        if (active) setProductsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const catParam = params.get('category');
   const searchParam = params.get('search');
   const [prevParamsKey, setPrevParamsKey] = useState(() => `${catParam ?? ''}::${searchParam ?? ''}`);
 
   const [filters, setFilters] = useState<FilterState>({
-    categories:  catParam ? [catParam] : [],
-    priceRange:  [0, PRICE_MAX],
-    rating:      0,
-    inStock:     false,
-    sortBy:      'featured',
-    search:      searchParam ?? '',
+    categories: catParam ? [catParam] : [],
+    priceRange: [0, PRICE_MAX],
+    rating: 0,
+    inStock: false,
+    sortBy: 'featured',
+    search: searchParam ?? '',
   });
 
   const currentParamsKey = `${catParam ?? ''}::${searchParam ?? ''}`;
@@ -47,7 +72,7 @@ export function ProductsPage() {
   }
 
   const filtered = useMemo(() => {
-    let list = [...PRODUCTS];
+    let list = [...products];
 
     if (filters.search.trim()) {
       const q = filters.search.toLowerCase();
@@ -62,17 +87,17 @@ export function ProductsPage() {
     }
     list = list.filter(p => p.price >= filters.priceRange[0] && p.price <= filters.priceRange[1]);
     if (filters.rating > 0) list = list.filter(p => p.rating >= filters.rating);
-    if (filters.inStock)    list = list.filter(p => p.stock > 0);
+    if (filters.inStock) list = list.filter(p => p.stock > 0);
 
     switch (filters.sortBy) {
-      case 'price-asc':  list.sort((a, b) => a.price - b.price);      break;
-      case 'price-desc': list.sort((a, b) => b.price - a.price);      break;
-      case 'rating':     list.sort((a, b) => b.rating - a.rating);    break;
-      case 'newest':     list.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)); break;
-      case 'featured':   list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0)); break;
+      case 'price-asc': list.sort((a, b) => a.price - b.price); break;
+      case 'price-desc': list.sort((a, b) => b.price - a.price); break;
+      case 'rating': list.sort((a, b) => b.rating - a.rating); break;
+      case 'newest': list.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)); break;
+      case 'featured': list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0)); break;
     }
     return list;
-  }, [filters]);
+  }, [filters, products]);
 
   const toggleCategory = (id: string) =>
     setFilters(f => ({
@@ -119,7 +144,7 @@ export function ProductsPage() {
               )}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1.5">
-              Showing {filtered.length} of {PRODUCTS.length} curated products
+              Showing {filtered.length} of {products.length} curated products
             </p>
           </div>
 
@@ -324,7 +349,11 @@ export function ProductsPage() {
 
           {/* Product Grid Area with Graceful Handling for Sparse Results */}
           <div className="flex-1 min-w-0 w-full">
-            {filtered.length === 0 ? (
+            {productsLoading && products.length === 0 ? (
+              <div className="py-12 text-center text-sm text-slate-500">
+                Loading products...
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-2xl p-12 sm:p-16 text-center space-y-4 shadow-2xs">
                 <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
                   <Package size={28} />

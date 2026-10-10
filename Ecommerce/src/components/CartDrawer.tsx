@@ -4,7 +4,18 @@ import { Link } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 
 export function CartDrawer() {
-  const { items, isOpen, closeCart, removeItem, updateQuantity, totalPrice, totalItems, clearCart } = useCart();
+  const {
+    items,
+    isOpen,
+    closeCart,
+    removeItem,
+    updateQuantity,
+    totalPrice,
+    totalItems,
+    clearCart,
+    isLoading,
+    error,
+  } = useCart();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Trap scroll when open and handle Escape key
@@ -75,6 +86,13 @@ export function CartDrawer() {
           </div>
         </div>
 
+        {/* Error notification banner if any */}
+        {error && (
+          <div className="px-6 py-2.5 bg-rose-50 border-b border-rose-200 text-xs text-rose-700 flex items-center justify-between">
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Free Shipping Progress Pill */}
         {items.length > 0 && (
           <div className="px-6 py-3 bg-blue-50/70 border-b border-blue-100/80 text-xs text-blue-900 flex items-center justify-between">
@@ -95,7 +113,12 @@ export function CartDrawer() {
 
         {/* Cart Item List */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          {items.length === 0 ? (
+          {isLoading && items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-16">
+              <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs font-semibold text-slate-500">Restoring your cart...</p>
+            </div>
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
                 <ShoppingBag size={28} />
@@ -113,73 +136,83 @@ export function CartDrawer() {
               </button>
             </div>
           ) : (
-            items.map(item => (
-              <div
-                key={item.product.id}
-                className="flex gap-3.5 bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs hover:border-slate-300 transition-colors"
-              >
-                <Link to={`/product/${item.product.id}`} onClick={closeCart} className="shrink-0">
-                  <img
-                    src={item.product.images[0]}
-                    alt={item.product.name}
-                    className="w-16 h-16 object-cover rounded-xl bg-slate-100 border border-slate-100"
-                  />
-                </Link>
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
-                    <Link
-                      to={`/product/${item.product.id}`}
-                      onClick={closeCart}
-                      className="text-xs sm:text-sm font-semibold text-slate-900 hover:text-blue-600 line-clamp-1 transition-colors"
-                    >
-                      {item.product.name}
-                    </Link>
-                    {item.selectedSize && (
-                      <p className="text-[11px] text-slate-500 mt-0.5">Size: {item.selectedSize}</p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
-                    {/* Stepper */}
-                    <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg p-0.5 bg-slate-50">
-                      <button
-                        id={`cart-qty-decrease-${item.product.id}`}
-                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                        className="w-6 h-6 rounded bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-2xs focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
-                        aria-label="Decrease quantity"
+            items.map(item => {
+              const itemKey = `${item.product.id}-${item.selectedColor || ''}-${item.selectedSize || ''}`;
+              return (
+                <div
+                  key={itemKey}
+                  className="flex gap-3.5 bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs hover:border-slate-300 transition-colors"
+                >
+                  <Link to={`/product/${item.product.id}`} onClick={closeCart} className="shrink-0">
+                    <img
+                      src={item.product.images[0]}
+                      alt={item.product.name}
+                      className="w-16 h-16 object-cover rounded-xl bg-slate-100 border border-slate-100"
+                    />
+                  </Link>
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                      <Link
+                        to={`/product/${item.product.id}`}
+                        onClick={closeCart}
+                        className="text-xs sm:text-sm font-semibold text-slate-900 hover:text-blue-600 line-clamp-1 transition-colors"
                       >
-                        <Minus size={11} />
-                      </button>
-                      <span className="text-xs font-semibold text-slate-900 w-6 text-center">{item.quantity}</span>
-                      <button
-                        id={`cart-qty-increase-${item.product.id}`}
-                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                        disabled={item.quantity >= item.product.stock}
-                        className="w-6 h-6 rounded bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-2xs disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus size={11} />
-                      </button>
+                        {item.product.name}
+                      </Link>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {item.selectedSize && (
+                          <span className="text-[11px] text-slate-500">Size: {item.selectedSize}</span>
+                        )}
+                        {item.selectedColor && (
+                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                            Color: <span className="inline-block w-2.5 h-2.5 rounded-full border border-slate-300" style={{ backgroundColor: item.selectedColor }} />
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Price & Delete */}
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs sm:text-sm font-bold text-slate-900">
-                        ${(item.product.price * item.quantity).toFixed(2)}
-                      </span>
-                      <button
-                        id={`cart-remove-${item.product.id}`}
-                        onClick={() => removeItem(item.product.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-rose-500"
-                        aria-label="Remove item"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                      {/* Stepper */}
+                      <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg p-0.5 bg-slate-50">
+                        <button
+                          id={`cart-qty-decrease-${item.product.id}`}
+                          onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedColor, item.selectedSize)}
+                          className="w-6 h-6 rounded bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-2xs focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus size={11} />
+                        </button>
+                        <span className="text-xs font-semibold text-slate-900 w-6 text-center">{item.quantity}</span>
+                        <button
+                          id={`cart-qty-increase-${item.product.id}`}
+                          onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedColor, item.selectedSize)}
+                          disabled={item.quantity >= item.product.stock}
+                          className="w-6 h-6 rounded bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-2xs disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                          aria-label="Increase quantity"
+                        >
+                          <Plus size={11} />
+                        </button>
+                      </div>
+
+                      {/* Price & Delete */}
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs sm:text-sm font-bold text-slate-900">
+                          ${(item.product.price * item.quantity).toFixed(2)}
+                        </span>
+                        <button
+                          id={`cart-remove-${item.product.id}`}
+                          onClick={() => removeItem(item.product.id, item.selectedColor, item.selectedSize)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-rose-500"
+                          aria-label="Remove item"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 

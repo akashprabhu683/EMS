@@ -13,8 +13,8 @@ export function ProductCard({ product }: ProductCardProps) {
   const { addItem, openCart } = useCart();
   const [wished, setWished]     = useState(false);
   const [adding, setAdding]     = useState(false);
-  const [imgIdx, setImgIdx]     = useState(0);
-  const [imgError, setImgError] = useState(false);
+  const [imgIdx, setImgIdx] = useState(0);
+  const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -27,6 +27,8 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   const isOutOfStock = product.stock === 0;
+  const activeImg = product.images[imgIdx] ?? product.images[0];
+  const isImageBroken = imgErrors[imgIdx] || !activeImg;
 
   return (
     <div
@@ -40,23 +42,34 @@ export function ProductCard({ product }: ProductCardProps) {
           id={`product-card-link-${product.id}`}
           className="block w-full h-full"
           tabIndex={-1}
+          onMouseEnter={() => {
+            if (product.images.length > 1 && !imgErrors[1]) {
+              setImgIdx(1);
+            }
+          }}
+          onMouseLeave={() => {
+            setImgIdx(0);
+          }}
         >
-          {imgError || !product.images[imgIdx] ? (
+          {isImageBroken ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-4 text-center">
               <Package size={32} className="mb-1 text-slate-300" />
               <span className="text-[11px] font-medium text-slate-500 line-clamp-1">{product.name}</span>
             </div>
           ) : (
             <img
-              src={product.images[imgIdx]}
+              src={activeImg}
               alt={product.name}
               width={600}
               height={450}
               loading="lazy"
-              onError={() => setImgError(true)}
+              onError={() => {
+                setImgErrors(prev => ({ ...prev, [imgIdx]: true }));
+                if (imgIdx !== 0) {
+                  setImgIdx(0);
+                }
+              }}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              onMouseEnter={() => product.images.length > 1 && setImgIdx(1)}
-              onMouseLeave={() => setImgIdx(0)}
             />
           )}
         </Link>

@@ -1,24 +1,88 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { ArrowLeft, Star, ShoppingBag, Heart, Shield, Truck, RotateCcw, Minus, Plus, ChevronRight, Check } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import {
+  ArrowLeft,
+  Star,
+  ShoppingBag,
+  Heart,
+  Shield,
+  Truck,
+  RotateCcw,
+  Minus,
+  Plus,
+  ChevronRight,
+  Check,
+  Package,
+} from 'lucide-react';
 import { PRODUCTS } from '../data/products';
 import { useCart } from '../context/CartContext';
 import { ProductCard } from '../components/ProductCard';
 import clsx from 'clsx';
+import { getActiveProducts } from '../services/productService';
+import type { Product } from '../types';
 
 export function ProductDetailPage() {
-  const { id }    = useParams<{ id: string }>();
-  const navigate  = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { addItem, openCart } = useCart();
-  const product   = PRODUCTS.find(p => p.id === id);
+  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [productsLoading, setProductsLoading] = useState(true);
 
-  const [imgIdx,    setImgIdx]    = useState(0);
-  const [quantity,  setQuantity]  = useState(1);
+  useEffect(() => {
+    let active = true;
+
+    getActiveProducts()
+      .then(remoteProducts => {
+        if (active && remoteProducts.length > 0) {
+          setProducts(remoteProducts);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load Firestore products:', error);
+      })
+      .finally(() => {
+        if (active) {
+          setProductsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const product = useMemo(() => {
+    return products.find(p => p.id === id);
+  }, [products, id]);
+
+  const [imgIdx, setImgIdx] = useState(0);
+  const [imgError, setImgError] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const [selectedColor, setColor] = useState(product?.colors?.[0]);
-  const [selectedSize,  setSize]  = useState<string | undefined>();
-  const [wished,    setWished]    = useState(false);
-  const [adding,    setAdding]    = useState(false);
-  const [tab,       setTab]       = useState<'description' | 'specs' | 'reviews'>('description');
+  const [selectedSize, setSize] = useState<string | undefined>();
+  const [wished, setWished] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [tab, setTab] = useState<'description' | 'specs' | 'reviews'>('description');
+
+  useEffect(() => {
+    setImgIdx(0);
+    setImgError(false);
+    setQuantity(1);
+    setColor(product?.colors?.[0]);
+    setSize(undefined);
+  }, [product?.id]);
+
+  if (!product && productsLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50 pt-28 text-center px-4">
+        <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-8 space-y-4 shadow-xs">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-900 font-bold text-lg">Loading Product...</p>
+          <p className="text-slate-500 text-xs">Fetching the latest catalog details.</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!product) {
     return (
@@ -34,7 +98,14 @@ export function ProductDetailPage() {
     );
   }
 
-  const related = PRODUCTS.filter(p => p.category === product.category && p.id !== product.id).slice(0, 4);
+  const related = products
+    .filter(p => p.category === product.category && p.id !== product.id)
+    .slice(0, 4);
+
+  const images = Array.isArray(product.images) && product.images.length > 0
+    ? product.images
+    : [];
+  const currentImage = images[imgIdx] ?? images[0];
 
   const handleAddToCart = async () => {
     if (product.stock === 0 || adding) return;
@@ -73,11 +144,20 @@ export function ProductDetailPage() {
             {/* Left: Product Images Gallery */}
             <div className="lg:col-span-6 space-y-4">
               <div className="relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200/80 aspect-square">
-                <img
-                  src={product.images[imgIdx]}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
+                {currentImage && !imgError ? (
+                  <img
+                    src={currentImage}
+                    alt={product.name}
+                    onError={() => setImgError(true)}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-8 text-center">
+                    <Package size={56} className="mb-2 text-slate-300" />
+                    <span className="text-sm font-medium text-slate-600 line-clamp-2 max-w-xs">{product.name}</span>
+                    <span className="text-xs text-slate-400 mt-1">No image available</span>
+                  </div>
+                )}
 
                 {/* Badges */}
                 <div className="absolute top-4 left-4 flex flex-col gap-1.5">
@@ -104,19 +184,29 @@ export function ProductDetailPage() {
               </div>
 
               {/* Thumbnails */}
-              {product.images.length > 1 && (
+              {images.length > 1 && (
                 <div className="flex gap-2.5">
-                  {product.images.map((img, i) => (
+                  {images.map((img, i) => (
                     <button
                       key={i}
                       id={`product-img-thumb-${i}`}
-                      onClick={() => setImgIdx(i)}
+                      onClick={() => {
+                        setImgIdx(i);
+                        setImgError(false);
+                      }}
                       className={clsx(
                         'w-16 h-16 rounded-xl overflow-hidden border-2 transition-all bg-slate-100',
                         imgIdx === i ? 'border-blue-600 ring-2 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
                       )}
                     >
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={img}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
                     </button>
                   ))}
                 </div>
@@ -290,9 +380,9 @@ export function ProductDetailPage() {
                 {/* Trust mini-strip */}
                 <div className="grid grid-cols-3 gap-2 pt-2">
                   {[
-                    { icon: Truck,     label: 'Free Delivery', sub: 'Orders over $50' },
+                    { icon: Truck, label: 'Free Delivery', sub: 'Orders over $50' },
                     { icon: RotateCcw, label: '30-Day Return', sub: 'Hassle-free' },
-                    { icon: Shield,    label: '2-Yr Warranty', sub: 'Official cover' },
+                    { icon: Shield, label: '2-Yr Warranty', sub: 'Official cover' },
                   ].map(({ icon: Icon, label, sub }, i) => (
                     <div key={i} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
                       <Icon size={15} className="text-blue-600 mx-auto mb-1" />
@@ -347,13 +437,13 @@ export function ProductDetailPage() {
               <table className="w-full text-xs sm:text-sm">
                 <tbody className="divide-y divide-slate-100">
                   {[
-                    ['Category',   product.category],
+                    ['Category', product.category],
                     ['Product ID', product.id.toUpperCase()],
-                    ['Inventory',  `${product.stock} units available`],
-                    ['Rating',     `${product.rating} / 5.0`],
-                    ['Reviews',    `${product.reviewCount.toLocaleString()} verified ratings`],
-                    ['Colors',     product.colors?.join(', ') ?? 'Single colorway'],
-                    ['Sizes',      product.sizes?.join(', ')  ?? 'Standard size'],
+                    ['Inventory', `${product.stock} units available`],
+                    ['Rating', `${product.rating} / 5.0`],
+                    ['Reviews', `${product.reviewCount.toLocaleString()} verified ratings`],
+                    ['Colors', product.colors?.join(', ') ?? 'Single colorway'],
+                    ['Sizes', product.sizes?.join(', ') ?? 'Standard size'],
                   ].map(([k, v]) => (
                     <tr key={k}>
                       <td className="py-2.5 pr-4 font-semibold text-slate-500 w-36">{k}</td>

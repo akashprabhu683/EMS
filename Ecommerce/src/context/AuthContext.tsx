@@ -1,5 +1,19 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from 'react';
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+} from 'firebase/auth';
 import type { User } from '../types';
+import { auth } from '../firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -7,47 +21,84 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Mock auth – will be replaced with Firebase Auth in Phase 2
+function mapFirebaseUser(firebaseUser: NonNullable<typeof auth.currentUser>): User {
+  return {
+    id: firebaseUser.uid,
+    name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Customer',
+    email: firebaseUser.email || '',
+    avatar:
+      firebaseUser.photoURL ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        firebaseUser.displayName || firebaseUser.email || 'Customer',
+      )}&background=8b5cf6&color=fff`,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async (email: string, _password: string) => {
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 800)); // simulate network
-    setUser({
-      id: 'u1',
-      name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      email,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(email)}&background=ec4899&color=fff`,
-    });
-    setIsLoading(false);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        setUser(firebaseUser ? mapFirebaseUser(firebaseUser) : null);
+        setIsLoading(false);
+      },
+      () => {
+        setUser(null);
+        setIsLoading(false);
+      },
+    );
+
+    return unsubscribe;
   }, []);
 
-  const register = useCallback(async (name: string, email: string, _password: string) => {
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setUser({
-      id: 'u' + Date.now(),
-      name,
-      email,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=8b5cf6&color=fff`,
-    });
-    setIsLoading(false);
+  const login = useCallback(async (email: string, password: string) => {
+    await signInWithEmailAndPassword(auth, email.trim(), password);
   }, []);
 
-  const logout = useCallback(() => setUser(null), []);
+  const register = useCallback(async (
+    name: string,
+    email: string,
+    password: string,
+  ) => {
+    const credential = await createUserWithEmailAndPassword(
+      auth,
+      email.trim(),
+      password,
+    );
+
+    try {
+      await updateProfile(credential.user, {
+        displayName: name.trim(),
+      });
+    } catch (error) {
+      await signOut(auth);
+      throw error;
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    await signOut(auth);
+  }, []);
 
   return (
-    <AuthContext.Provider value={{
-      user, isAuthenticated: !!user, isLoading,
-      login, register, logout,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        login,
+        register,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
