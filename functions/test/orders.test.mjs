@@ -4,7 +4,11 @@ import {
   validateAndNormalizeAddress,
   validateIdempotencyKey,
   validatePaymentMethod,
+  isValidProductId,
+  isValidHttpsUrl,
+  computeRequestFingerprint,
   executeCreateOrder,
+  MAX_DISTINCT_ITEMS_PER_ORDER,
 } from "../lib/orders.js";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -160,6 +164,7 @@ function seedDatabase(db) {
     price: 89900, // ₹899 in paise
     stock: 10,
     isActive: true,
+    imageUrl: "https://images.unsplash.com/photo-vitamin-c.jpg",
   });
 
   db._setDoc("products", "prod_2", {
@@ -167,6 +172,7 @@ function seedDatabase(db) {
     price: 39900, // ₹399 in paise
     stock: 5,
     isActive: true,
+    images: ["https://images.unsplash.com/photo-cleanser.jpg"],
   });
 
   db._setDoc("products", "prod_inactive", {
@@ -358,7 +364,7 @@ test("6. Successful COD order creation decrements stock and clears cart atomical
   assert.equal(order.data.items.length, 2);
 });
 
-test("7. Repeated requests with the same idempotency key return cached result without double-deduction", async () => {
+test("7. Repeated requests with the exact same idempotency key return cached result without double-deduction", async () => {
   const db = new MockFirestore();
   seedDatabase(db);
 
@@ -489,4 +495,180 @@ test("10. Online payment methods are safely rejected with actionable guidance", 
     },
     /Online payment method "upi" is not yet supported/
   );
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NEW HARDENING TESTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+test("11. Distinct product limit per order is enforced before reads", async () => {
+  const db = new MockFirestore();
+
+  // Create cart with 51 distinct products (limit is 50)
+  const items = [];
+  for (let i = 1; i <= 51; i++) {
+    items.push({ productId: `prod_${i}`, quantity: 1 });
+  }
+  db._setDoc("carts", "user_bulk", { items });
+
+  await assert.rejects(
+    async () => {
+      await executeCreateOrder(db, "user_bulk", {
+        shippingAddress: validShippingAddress,
+        idempotencyKey: "idem_too_many_items",
+        paymentMethod: "cod",
+      });
+    },
+    /Cart contains too many distinct items/
+  );
+});
+
+test("12. Invalid product ID format is rejected before Firestore reads", async () => {
+  const db = new MockFirestore();
+
+  // Cart with forward slash in productId (path traversal attempt)
+  db._setDoc("carts", "user_invalid_pid", {
+    items: [{ productId: "invalid/product/id", quantity: 1 }],
+  });
+
+  await assert.rejects(
+    async () => {
+      await executeCreateOrder(db, "user_invalid_pid", {
+        shippingAddress: validShippingAddress,
+        idempotencyKey: "idem_invalid_pid",
+        paymentMethod: "cod",
+      });
+    },
+    /Invalid product ID format/
+  );
+
+  assert.equal(isValidProductId("valid-prod_123.item"), true);
+  assert.equal(isValidProductId("invalid/slash"), false);
+  assert.equal(isValidProductId(".."), false);
+  assert.equal(isValidProductId(""), false);
+});
+
+test("13. Safe integer validation & arithmetic overflow protection", async () => {
+  const db = new MockFirestore();
+
+  // Seed product with invalid non-safe-integer price (float or negative)
+  db._setDoc("products", "prod_float_price", {
+    name: "Bad Price Product",
+    price: 199.99, // Float instead of integer paise
+    stock: 10,
+    isActive: true,
+  });
+
+  db._setDoc("carts", "user_bad_price", {
+    items: [{ productId: "prod_float_price", quantity: 1 }],
+  });
+
+  await assert.rejects(
+    async () => {
+      await executeCreateOrder(db, "user_bad_price", {
+        shippingAddress: validShippingAddress,
+        idempotencyKey: "idem_bad_price",
+        paymentMethod: "cod",
+      });
+    },
+    /invalid catalog price/
+  );
+});
+
+test("14. Valid and invalid HTTPS image URLs are handled correctly", () => {
+  assert.equal(isValidHttpsUrl("https://images.example.com/item.png"), true);
+  assert.equal(isValidHttpsUrl("http://insecure.example.com/item.png"), false);
+  assert.equal(isValidHttpsUrl("ftp://invalid.com/pic.jpg"), false);
+  assert.equal(isValidHttpsUrl("not-a-url"), false);
+  assert.equal(isValidHttpsUrl(null), false);
+  assert.equal(isValidHttpsUrl(12345), false);
+});
+
+test("15. Reusing idempotency key with different request details is rejected", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const key = "idem_key_reuse_mismatch";
+
+  // First call succeeds
+  await executeCreateOrder(db, "user_123", {
+    shippingAddress: validShippingAddress,
+    idempotencyKey: key,
+    paymentMethod: "cod",
+  });
+
+  // Re-seed cart with different item for same user
+  db._setDoc("carts", "user_123", {
+    items: [{ productId: "prod_1", quantity: 2 }],
+  });
+
+  // Second call using the SAME idempotency key but DIFFERENT order items
+  await assert.rejects(
+    async () => {
+      await executeCreateOrder(db, "user_123", {
+        shippingAddress: validShippingAddress,
+        idempotencyKey: key,
+        paymentMethod: "cod",
+      });
+    },
+    /previously used with different order details/
+  );
+});
+
+test("16. Corrupted or malformed existing idempotency record is rejected safely", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const key = "idem_corrupted_record";
+
+  // Intentionally inject a corrupted idempotency record (missing response and orderId)
+  db._setDoc("idempotency_records", `user_123_${key}`, {
+    corrupted: true,
+  });
+
+  await assert.rejects(
+    async () => {
+      await executeCreateOrder(db, "user_123", {
+        shippingAddress: validShippingAddress,
+        idempotencyKey: key,
+        paymentMethod: "cod",
+      });
+    },
+    /corrupted or malformed/
+  );
+});
+
+test("17. Cart modification during checkout triggers optimistic concurrency retry/rejection", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  // Simulate an external cart change that occurs concurrently during checkout execution
+  let intercepted = false;
+  const originalRunTransaction = db.runTransaction.bind(db);
+
+  db.runTransaction = async function (updateFn) {
+    return originalRunTransaction(async (txn) => {
+      const res = await updateFn(txn);
+      // Simulate concurrent cart write by outside client right before commit
+      if (!intercepted) {
+        intercepted = true;
+        // Bump cart version externally
+        db._setDoc("carts", "user_123", {
+          items: [{ productId: "prod_1", quantity: 3 }],
+        });
+      }
+      return res;
+    });
+  };
+
+  // Transaction detects the version change on cart and safely retries with fresh cart
+  const res = await executeCreateOrder(db, "user_123", {
+    shippingAddress: validShippingAddress,
+    idempotencyKey: "idem_concurrent_cart_mod",
+    paymentMethod: "cod",
+  });
+
+  // Verified transaction re-executed cleanly with the updated cart items
+  assert.ok(res.orderId);
+  assert.equal(res.itemCount, 3);
 });

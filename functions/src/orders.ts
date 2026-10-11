@@ -1,6 +1,19 @@
 import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import * as logger from "firebase-functions/logger";
+import * as crypto from "crypto";
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CONSTANTS & LIMITS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export const MAX_DISTINCT_ITEMS_PER_ORDER = 50;
+export const MAX_QUANTITY_PER_ITEM = 99;
+export const MAX_CATALOG_PRICE_PAISE = 100_000_000; // ₹10,00,000 maximum single item price in paise
+export const FREE_SHIPPING_THRESHOLD_PAISE = 99_900; // Free shipping at or above ₹999
+export const STANDARD_SHIPPING_FEE_PAISE = 4_900; // ₹49 standard shipping fee
+export const COD_FEE_PAISE = 4_900; // ₹49 Cash on Delivery handling fee
 
 /* ═══════════════════════════════════════════════════════════════════════
    TYPES & CONTRACTS
@@ -62,8 +75,39 @@ export interface CreateOrderResponse {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   INPUT VALIDATION HELPERS
+   VALIDATION HELPERS
    ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Validates whether a given string is a valid Firestore document ID.
+ * Document IDs cannot be empty, '.', '..', contain forward slashes, or exceed 128 characters.
+ */
+export function isValidProductId(id: unknown): id is string {
+  if (typeof id !== "string") return false;
+  const trimmed = id.trim();
+  if (!trimmed || trimmed === "." || trimmed === ".." || trimmed.length > 128) {
+    return false;
+  }
+  // Allow alphanumeric, hyphen, underscore, and dot (non-initial)
+  return /^[a-zA-Z0-9_\-.]{1,128}$/.test(trimmed);
+}
+
+/**
+ * Validates that an image URL is a valid, well-formed HTTPS URL.
+ */
+export function isValidHttpsUrl(url: unknown): url is string {
+  if (typeof url !== "string") return false;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith("https://") || trimmed.length > 2048) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" && Boolean(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Validates and normalizes shipping address inputs into a standard schema.
@@ -167,6 +211,35 @@ export function validatePaymentMethod(raw: unknown): "cod" {
   throw new HttpsError("invalid-argument", `Unsupported payment method "${raw}". Valid option: "cod".`);
 }
 
+/**
+ * Computes a deterministic SHA-256 fingerprint of the normalized order request.
+ * Used to detect when an existing idempotency key is reused with mismatched parameters.
+ */
+export function computeRequestFingerprint(
+  uid: string,
+  items: Array<{ productId: string; quantity: number; selectedColor?: string; selectedSize?: string }>,
+  address: NormalizedShippingAddress,
+  paymentMethod: string
+): string {
+  const sortedItems = [...items].sort((a, b) => a.productId.localeCompare(b.productId));
+  const payload = JSON.stringify({
+    uid,
+    items: sortedItems,
+    address: {
+      name: address.name,
+      phone: address.phone,
+      line1: address.line1,
+      line2: address.line2 || "",
+      city: address.city,
+      state: address.state,
+      postalCode: address.postalCode,
+      country: address.country,
+    },
+    paymentMethod,
+  });
+  return crypto.createHash("sha256").update(payload).digest("hex");
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    CORE TRANSACTION EXECUTION
    Separated for modularity, clean unit testing, and atomic safety.
@@ -195,15 +268,74 @@ export async function executeCreateOrder(
 
     // 1.1 Read idempotency record
     const idempotencySnap = await transaction.get(idempotencyRef);
-    if (idempotencySnap.exists) {
-      const existing = idempotencySnap.data();
-      if (existing && existing.response) {
-        return existing.response as CreateOrderResponse;
-      }
-    }
 
     // 1.2 Read authenticated customer's cart
     const cartSnap = await transaction.get(cartRef);
+
+    // If an idempotency record already exists, validate it and handle retry
+    if (idempotencySnap.exists) {
+      const existing = idempotencySnap.data();
+
+      // Detect malformed or corrupted idempotency record
+      if (
+        !existing ||
+        typeof existing !== "object" ||
+        typeof existing.orderId !== "string" ||
+        !existing.orderId ||
+        !existing.response ||
+        typeof existing.response !== "object" ||
+        typeof existing.response.orderId !== "string"
+      ) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Existing idempotency record for this key is corrupted or malformed. Please supply a fresh idempotency key."
+        );
+      }
+
+      // Verify shipping address and payment method match the existing idempotency record
+      const existingAddr = existing.shippingAddress;
+      const addressMatches =
+        existingAddr &&
+        existingAddr.name === normalizedAddress.name &&
+        existingAddr.phone === normalizedAddress.phone &&
+        existingAddr.line1 === normalizedAddress.line1 &&
+        (existingAddr.line2 || "") === (normalizedAddress.line2 || "") &&
+        existingAddr.city === normalizedAddress.city &&
+        existingAddr.state === normalizedAddress.state &&
+        existingAddr.postalCode === normalizedAddress.postalCode &&
+        existingAddr.country === normalizedAddress.country;
+
+      if (!addressMatches || existing.paymentMethod !== paymentMethod) {
+        throw new HttpsError(
+          "already-exists",
+          "This idempotency key was previously used with different order details. Please supply a fresh idempotency key."
+        );
+      }
+
+      // If cart still contains items, verify they match the original fingerprinted items
+      if (cartSnap.exists) {
+        const rawItems = cartSnap.data()?.items;
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          const currentCartFingerprint = computeRequestFingerprint(
+            uid,
+            rawItems.filter((i) => i && typeof i.productId === "string" && typeof i.quantity === "number"),
+            normalizedAddress,
+            paymentMethod
+          );
+          if (existing.requestFingerprint && existing.requestFingerprint !== currentCartFingerprint) {
+            throw new HttpsError(
+              "already-exists",
+              "This idempotency key was previously used with different order details. Please supply a fresh idempotency key."
+            );
+          }
+        }
+      }
+
+      // Valid retry -> return cached response safely
+      return existing.response as CreateOrderResponse;
+    }
+
+    // New order: Cart must exist and have non-empty items
     if (!cartSnap.exists) {
       throw new HttpsError("failed-precondition", "Your shopping cart is empty.");
     }
@@ -232,17 +364,25 @@ export async function executeCreateOrder(
         throw new HttpsError("invalid-argument", "Cart item is missing a valid product ID.");
       }
 
-      if (!Number.isInteger(quantity) || quantity <= 0) {
+      // Validate product ID format before using as document path
+      if (!isValidProductId(productId)) {
         throw new HttpsError(
           "invalid-argument",
-          `Invalid quantity (${quantity}) for product "${productId}". Quantity must be a positive integer.`
+          `Invalid product ID format for "${productId}". Product IDs must be 1-128 characters without slashes.`
         );
       }
 
-      if (quantity > 99) {
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
         throw new HttpsError(
           "invalid-argument",
-          `Quantity for product "${productId}" exceeds maximum permitted limit (99).`
+          `Invalid quantity (${quantity}) for product "${productId}". Quantity must be a positive safe integer.`
+        );
+      }
+
+      if (quantity > MAX_QUANTITY_PER_ITEM) {
+        throw new HttpsError(
+          "invalid-argument",
+          `Quantity for product "${productId}" exceeds maximum permitted limit (${MAX_QUANTITY_PER_ITEM}).`
         );
       }
 
@@ -252,12 +392,66 @@ export async function executeCreateOrder(
 
       productQuantityMap.set(productId, {
         quantity,
-        selectedColor: typeof item.selectedColor === "string" ? item.selectedColor : undefined,
-        selectedSize: typeof item.selectedSize === "string" ? item.selectedSize : undefined,
+        selectedColor: typeof item.selectedColor === "string" ? item.selectedColor.trim().slice(0, 50) : undefined,
+        selectedSize: typeof item.selectedSize === "string" ? item.selectedSize.trim().slice(0, 50) : undefined,
       });
     }
 
-    // 1.3 Read all authoritative product documents
+    // Enforce reasonable limit on distinct products per order before reading product documents
+    if (productQuantityMap.size > MAX_DISTINCT_ITEMS_PER_ORDER) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Cart contains too many distinct items (${productQuantityMap.size}). Maximum allowed is ${MAX_DISTINCT_ITEMS_PER_ORDER}.`
+      );
+    }
+
+    // Compute request fingerprint for idempotency validation
+    const currentFingerprint = computeRequestFingerprint(
+      uid,
+      Array.from(productQuantityMap.entries()).map(([pid, it]) => ({
+        productId: pid,
+        quantity: it.quantity,
+        selectedColor: it.selectedColor,
+        selectedSize: it.selectedSize,
+      })),
+      normalizedAddress,
+      paymentMethod
+    );
+
+    // 1.3 Validate existing idempotency record (if present)
+    if (idempotencySnap.exists) {
+      const existing = idempotencySnap.data();
+
+      // Detect malformed or corrupted idempotency record
+      if (
+        !existing ||
+        typeof existing !== "object" ||
+        typeof existing.orderId !== "string" ||
+        !existing.orderId ||
+        !existing.response ||
+        typeof existing.response !== "object" ||
+        typeof existing.response.orderId !== "string" ||
+        typeof existing.requestFingerprint !== "string"
+      ) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Existing idempotency record for this key is corrupted or malformed. Please supply a fresh idempotency key."
+        );
+      }
+
+      // Detect reuse of existing idempotency key with different request details
+      if (existing.requestFingerprint !== currentFingerprint) {
+        throw new HttpsError(
+          "already-exists",
+          "This idempotency key was previously used with different order details. Please supply a fresh idempotency key."
+        );
+      }
+
+      // Exact matching request retry -> return cached response safely
+      return existing.response as CreateOrderResponse;
+    }
+
+    // 1.4 Read all authoritative product documents
     const productIds = Array.from(productQuantityMap.keys());
     const productRefs = productIds.map((id) => db.collection("products").doc(id));
     const productSnaps = await Promise.all(productRefs.map((ref) => transaction.get(ref)));
@@ -291,7 +485,7 @@ export async function executeCreateOrder(
       }
 
       const price = Number(pData.price);
-      if (!Number.isInteger(price) || price < 0) {
+      if (!Number.isSafeInteger(price) || price <= 0 || price > MAX_CATALOG_PRICE_PAISE) {
         throw new HttpsError(
           "internal",
           `Product "${pData.name || pid}" has an invalid catalog price configuration.`
@@ -299,7 +493,7 @@ export async function executeCreateOrder(
       }
 
       const currentStock = Number(pData.stock);
-      if (!Number.isInteger(currentStock) || currentStock < 0) {
+      if (!Number.isSafeInteger(currentStock) || currentStock < 0) {
         throw new HttpsError(
           "internal",
           `Product "${pData.name || pid}" has an invalid stock configuration.`
@@ -320,15 +514,24 @@ export async function executeCreateOrder(
         );
       }
 
+      // Safe integer line total and overflow protection
       const lineTotal = price * cartItem.quantity;
+      if (!Number.isSafeInteger(lineTotal) || lineTotal <= 0) {
+        throw new HttpsError("internal", "Item total calculation resulted in an arithmetic overflow.");
+      }
+
+      if (!Number.isSafeInteger(subtotal + lineTotal) || subtotal + lineTotal > Number.MAX_SAFE_INTEGER) {
+        throw new HttpsError("internal", "Order subtotal calculation resulted in an arithmetic overflow.");
+      }
       subtotal += lineTotal;
 
-      const imageUrl =
-        typeof pData.imageUrl === "string" && pData.imageUrl.startsWith("https://")
-          ? pData.imageUrl
-          : Array.isArray(pData.images) && typeof pData.images[0] === "string"
-          ? pData.images[0]
-          : undefined;
+      // Consistent HTTPS image URL validation
+      let imageUrl: string | undefined;
+      if (isValidHttpsUrl(pData.imageUrl)) {
+        imageUrl = pData.imageUrl.trim();
+      } else if (Array.isArray(pData.images) && isValidHttpsUrl(pData.images[0])) {
+        imageUrl = pData.images[0].trim();
+      }
 
       orderItems.push({
         productId: pid,
@@ -347,15 +550,19 @@ export async function executeCreateOrder(
       });
     }
 
-    if (subtotal <= 0) {
+    if (!Number.isSafeInteger(subtotal) || subtotal <= 0) {
       throw new HttpsError("failed-precondition", "Order subtotal must be greater than zero.");
     }
 
     // Shipping fee rule: Free shipping on subtotal >= ₹999 (99,900 paise), else ₹49 (4,900 paise)
-    const shippingFee = subtotal >= 99900 ? 0 : 4900;
+    const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD_PAISE ? 0 : STANDARD_SHIPPING_FEE_PAISE;
     // Cash on Delivery fee: ₹49 (4,900 paise)
-    const codFee = 4900;
+    const codFee = COD_FEE_PAISE;
+
     const total = subtotal + shippingFee + codFee;
+    if (!Number.isSafeInteger(total) || total <= 0) {
+      throw new HttpsError("internal", "Order total calculation resulted in an arithmetic overflow.");
+    }
 
     const orderRef = db.collection("orders").doc();
     const orderId = orderRef.id;
@@ -406,11 +613,14 @@ export async function executeCreateOrder(
       });
     }
 
-    // 3.3 Save idempotency record with cached response
+    // 3.3 Save idempotency record with request fingerprint, address, and response cache
     transaction.set(idempotencyRef, {
       uid,
       idempotencyKey,
       orderId,
+      shippingAddress: normalizedAddress,
+      paymentMethod,
+      requestFingerprint: currentFingerprint,
       response: responsePayload,
       createdAt: now,
     });
@@ -445,13 +655,19 @@ export const createOrder = onCall(
     try {
       return await executeCreateOrder(db, uid, request.data);
     } catch (err: unknown) {
-      // Re-throw existing HttpsErrors directly
+      // Re-throw known intentional HttpsErrors directly to client
       if (err instanceof HttpsError) {
         throw err;
       }
-      // Wrap unexpected runtime errors
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-      throw new HttpsError("internal", `Order placement failed: ${message}`);
+
+      // Log detailed error server-side without leaking sensitive customer PII
+      logger.error("Internal order placement failure", {
+        uid,
+        error: err instanceof Error ? err.stack || err.message : String(err),
+      });
+
+      // Return a clean, generic error to client
+      throw new HttpsError("internal", "An internal error occurred while processing your order. Please try again later.");
     }
   }
 );
