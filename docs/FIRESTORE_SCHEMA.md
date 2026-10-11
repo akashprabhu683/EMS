@@ -51,6 +51,7 @@ Cart prices must be fetched from trusted product documents at checkout.
   - lineTotal: integer, paise
 - subtotal: integer, paise
 - shippingFee: integer, paise
+- codFee: integer, paise, optional (for Cash on Delivery)
 - total: integer, paise
 - shippingAddress: map
   - name: string
@@ -60,14 +61,25 @@ Cart prices must be fetched from trusted product documents at checkout.
   - city: string
   - state: string
   - postalCode: string
+  - country: string
 - orderStatus: string
   - pending, confirmed, processing, shipped, delivered, cancelled
 - paymentStatus: string
   - pending, paid, failed, cod_pending, refunded
 - paymentMethod: string
   - razorpay, cod
+- idempotencyKey: string, required
 - createdAt: timestamp, server-generated
 - updatedAt: timestamp, server-generated
+
+## 6. idempotency_records/{uid}_{idempotencyKey}
+- uid: string, required, customer Firebase Auth UID
+- idempotencyKey: string, required, client-provided deduplication token
+- orderId: string, required, references created order
+- response: map, cached typed response returned to duplicate client calls
+- createdAt: timestamp, server-generated
+
+Server-side only: Direct client reads and writes are forbidden by default.
 
 ## Security requirements
 - Customers can access only their own profiles, carts and orders.

@@ -54,8 +54,8 @@ Each system component was inspected in source code and classified according to a
 | **Cart Persistence (`carts/{uid}`)** | Implemented and runtime-tested | Authenticated carts persist to Firestore `carts/{uid}` with `items` and `updatedAt`. Zero client price trust. Stock validation and invalid item filtering active. |
 | **Guest Cart & Login Merge** | Implemented and runtime-tested | Guest items stored in `localStorage`. Merges into remote cart upon customer sign-in without duplicate rows; stock caps applied; guest storage cleaned. |
 | **Storefront Checkout Wizard** | Partially implemented | 4-step responsive UI (Review, Shipping, Payment, Confirmation). Validates inputs and shows payment tabs (UPI, Card, NetBanking, COD). |
-| **Order Creation (`orders/{orderId}`)** | Insecure client creation blocked; backend pending | Direct client writes blocked via `allow create: if false;` in `firestore.rules`. Storefront checkout currently simulates order placement (`setTimeout`); pending Cloud Functions transactional creation. |
-| **Payment Gateway Integration** | Missing | Simulated UPI QR SVG and dummy card forms. No Razorpay / Stripe / Cashfree SDK or webhook integration exists. |
+| **Order Creation (`orders/{orderId}`)** | Implemented & Transactionally Tested (Backend) | Transactional `createOrder` Cloud Function implemented in `functions/src/orders.ts`. Atomically decrements stock, enforces idempotency, computes trusted prices in paise, supports COD, and cleared cart. Frontend wiring scheduled for Phase 4. |
+| **Payment Gateway Integration** | Missing (Scheduled Phase 3) | Simulated UPI QR SVG and dummy card forms. No Razorpay / Stripe / Cashfree SDK or webhook integration exists. |
 | **Order History & Tracking (`/orders`)** | Partially implemented | UI is complete, but displays hardcoded fixture data (`getMockOrders()`). Does not query Firestore `orders` collection. |
 | **Admin Authentication & RBAC** | Implemented and runtime-tested | Gates access via `getIdTokenResult(true).claims.admin`. Non-admin accounts routed to `AccessDeniedPage`. Tested with real UID `istsDWxYgNNRdLYmsrOq2U6KJwz1`. |
 | **Admin Product Management** | Implemented and runtime-tested | Full CRUD via `adminProductService.ts`. Validates paise conversion, non-negative stock, HTTPS URLs, and soft-delete (`isActive: false`). |
@@ -130,11 +130,16 @@ All three project subtrees were verified via CLI build commands:
 | :--- | :--- | :--- | :--- |
 | **Storefront (`Ecommerce/`)** | `npm run build` | **PASSED (Exit 0)** | Compiled 1,943 modules with Vite v8.3.3 and TypeScript in 955ms. |
 | **Admin Panel (`admin-panel/`)** | `npm run build` | **PASSED (Exit 0)** | Compiled 1,946 modules with Vite v8.3.4 and TypeScript in 4.31s. |
-| **Backend Functions (`functions/`)** | `npm run build` | **PASSED (Exit 0)** | Compiled with TypeScript `tsc` in 1.4s (no active functions exported). |
+| **Backend Functions (`functions/`)** | `npm run build` | **PASSED (Exit 0)** | Compiled TypeScript `tsc` in 1.2s; exports `createOrder` Cloud Function with Firebase Admin SDK. |
+| **Orders Transaction Engine Suite** | `npm test` | **PASSED (10/10 tests)** | Verified: unauthenticated rejection, empty/malformed cart rejection, inactive/missing product rejection, insufficient stock rejection, server paise calculation (₹999 free shipping threshold + ₹49 COD fee), atomic stock decrement & cart clearing, idempotency deduplication with cached response, concurrent contending purchases of the final stock unit, atomic rollback on error, and safe rejection of online methods. |
 | **Cart Integration Suite** | `node test-cart.mjs` | **PASSED (Exit 0)** | Verified trusted price derivation, stock capping, inactive item pruning, and guest cart merging. |
 | **Admin Privilege Script** | `node set-admin-claim.mjs` | **PASSED (Exit 0)** | Successfully granted `admin: true` to user `akashprabhu0302@gmail.com` via Firebase Admin Identity API. |
 
-*Note: Runtime payment processing, server-side order transactions, and webhook execution remain unverified as backend Cloud Functions have not yet been implemented.*
+### Verification Level Classification:
+- **Implemented & Runtime Tested (Isolated Engine):** Storefront catalog/cart/auth merge, admin product/category CRUD, transactional order placement (`executeCreateOrder`), atomic stock decrements, idempotency deduplication, and error rollbacks.
+- **Implemented & Build-Verified:** Cloud Function packaging (`functions/lib/index.js`), TypeScript export of `createOrder` callable.
+- **Requires Firebase Emulator / Cloud Deployment Testing:** Live network HTTP round-trip from storefront browser (`httpsCallable`) to Cloud Functions runtime; live Firebase emulator port binding (`firebase emulators:start`).
+- **Pending Implementation:** Phase 3 online payment gateway integration (Razorpay/Stripe), webhook HMAC verification, and stock hold expiry scheduler.
 
 ---
 
