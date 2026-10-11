@@ -37,6 +37,7 @@ ui-debug.log*
 .runtimeconfig.json
 serviceAccountKey.json
 *serviceAccount*.json
+emulator-data/
 
 # TypeScript cache
 *.tsbuildinfo
