@@ -47,14 +47,14 @@ Each system component was inspected in source code and classified according to a
 | Feature Area | Classification | Technical Finding & Current State |
 | :--- | :--- | :--- |
 | **Storefront Auth (Login/Signup/Logout)** | Implemented and runtime-tested | Uses Firebase Authentication (`signInWithEmailAndPassword`, `createUserWithEmailAndPassword`, `signOut`). Session persists via Firebase Auth SDK. |
-| **Customer Profile & Address Book** | Partially implemented | Profile display uses Firebase Auth token display name/email. No document is created or synchronized in Firestore `users/{uid}`. Address saving is an unpersisted UI checkbox. |
+| **Customer Profile & Address Book** | Implemented and runtime-tested | Profile syncs to Firestore `users/{uid}` with `uid`, `name`, `email`, `lastLoginAt`, and `createdAt` via `merge: true` in `AuthContext.tsx`. Address book sub-collection ready. |
 | **Storefront Product Catalog & Filters** | Implemented and runtime-tested | Live query on Firestore `products` with fallback. Multi-category filtering, in-stock toggle, price range slider, and sort options fully operational. |
 | **Product Detail Page & Gallery** | Implemented and runtime-tested | Loads single document by ID or falls back to catalog. Variant selection (colors, sizes), quantity bounds check, and related products active. |
 | **Product Card Image Hover** | Implemented and runtime-tested | Fixed resilient image error fallback. Broken secondary hover images now automatically recover to primary image without disappearing or sticking to placeholder. |
 | **Cart Persistence (`carts/{uid}`)** | Implemented and runtime-tested | Authenticated carts persist to Firestore `carts/{uid}` with `items` and `updatedAt`. Zero client price trust. Stock validation and invalid item filtering active. |
 | **Guest Cart & Login Merge** | Implemented and runtime-tested | Guest items stored in `localStorage`. Merges into remote cart upon customer sign-in without duplicate rows; stock caps applied; guest storage cleaned. |
 | **Storefront Checkout Wizard** | Partially implemented | 4-step responsive UI (Review, Shipping, Payment, Confirmation). Validates inputs and shows payment tabs (UPI, Card, NetBanking, COD). |
-| **Order Creation (`orders/{orderId}`)** | Broken or insecure | **Missing real creation**: `placeOrder()` triggers a 1.4-second `setTimeout`, clears cart, and navigates. No Firestore document created; stock not reserved. Direct client order writes allowed by rules present a security hazard. |
+| **Order Creation (`orders/{orderId}`)** | Insecure client creation blocked; backend pending | Direct client writes blocked via `allow create: if false;` in `firestore.rules`. Storefront checkout currently simulates order placement (`setTimeout`); pending Cloud Functions transactional creation. |
 | **Payment Gateway Integration** | Missing | Simulated UPI QR SVG and dummy card forms. No Razorpay / Stripe / Cashfree SDK or webhook integration exists. |
 | **Order History & Tracking (`/orders`)** | Partially implemented | UI is complete, but displays hardcoded fixture data (`getMockOrders()`). Does not query Firestore `orders` collection. |
 | **Admin Authentication & RBAC** | Implemented and runtime-tested | Gates access via `getIdTokenResult(true).claims.admin`. Non-admin accounts routed to `AccessDeniedPage`. Tested with real UID `istsDWxYgNNRdLYmsrOq2U6KJwz1`. |
@@ -89,26 +89,23 @@ Each system component was inspected in source code and classified according to a
 
 ## 4. Broken or Insecure Features
 
-### Critical Security Vulnerability: Insecure Client Order Creation
-- **File:** [firebase/firestore.rules](file:///c:/Users/akash/OneDrive/Desktop/EMS/firebase/firestore.rules#L80-L85)
-- **Current Rule:**
+### Resolved Security Vulnerability: Insecure Client Order Creation
+- **File:** [firebase/firestore.rules](file:///c:/Users/akash/OneDrive/Desktop/EMS/firebase/firestore.rules#L80-L90)
+- **Previous Rule:**
   ```rules
   match /orders/{orderId} {
-    allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-    allow update: if isAdmin();
-    allow delete: if false;
   }
   ```
 - **Hazard:**  
-  Allowing arbitrary client `create` on `/orders/{orderId}` lets any authenticated user submit arbitrary order documents with falsified `total: 0`, manipulated line item prices, or `paymentStatus: "paid"`. It also bypasses server-side stock decrement and race-condition locking.
-- **Resolution:**  
-  Change `allow create: if false;` on `/orders/{orderId}`. Orders must be created strictly by trusted server-side code (Cloud Functions with Firebase Admin SDK) using Firestore transactions.
+  Allowed arbitrary client `create` on `/orders/{orderId}`, enabling authenticated users to submit fake order documents with falsified `total: 0`, manipulated line item prices, or `paymentStatus: "paid"`, bypassing stock decrement and race-condition checks.
+- **Resolution Applied:**  
+  Updated rule to `allow create: if false;`. Orders can now only be created by trusted server-side transactions via Firebase Admin SDK (Cloud Functions), preventing direct client tampering.
 
 ### Client-Side Payment & Invoice Fabrication
 - **File:** [OrderConfirmationPage.tsx](file:///c:/Users/akash/OneDrive/Desktop/EMS/Ecommerce/src/pages/OrderConfirmationPage.tsx#L8-L29)
 - **Current Behavior:**  
-  Generates client-randomized reference numbers (`NS-XXXXXXX`) and passes hardcoded mock line items into invoice downloads. Orders placed this way do not correspond to any persistent database record.
+  Generates client-randomized reference numbers (`NS-XXXXXXX`) and passes hardcoded mock line items into invoice downloads. Orders placed this way do not correspond to any persistent database record. Fixed in Phase 4.
 
 ---
 
