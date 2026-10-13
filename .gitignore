@@ -12,13 +12,14 @@ lib/
 functions/lib/
 
 # Environment files
-.env.local
-.env.*.local
-*.local
 .env
+.env.*
+*.local
+**/.env
+**/.env.local
+**/.env.*.local
 !.env.example
-admin-panel/.env
-Ecommerce/.env.local
+!**/.env.example
 
 # Logs
 logs/
