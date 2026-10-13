@@ -5,19 +5,21 @@ import { useAuth } from '../context/AuthContext';
 import {
   ArrowLeft, CreditCard, Lock, CheckCircle2, Package,
   ChevronRight, ShieldCheck, Smartphone, QrCode,
-  Building2, Truck, Clock, RefreshCw, Wifi
+  Building2, Truck, Clock, RefreshCw, Wifi, AlertCircle
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { PaymentMethodId, CheckoutPaymentInfo } from '../types';
+import { httpsCallable } from 'firebase/functions';
+import { auth, functions } from '../firebase';
 
 const STEPS = ['Cart Review', 'Shipping Info', 'Payment', 'Confirmation'];
 
 /* ────────────────── UPI app logos (SVG inline badges) ────────────────── */
 const UPI_APPS = [
-  { id: 'gpay',    label: 'GPay',    color: '#4285F4', letter: 'G' },
+  { id: 'gpay', label: 'GPay', color: '#4285F4', letter: 'G' },
   { id: 'phonepe', label: 'PhonePe', color: '#5F259F', letter: 'Ph' },
-  { id: 'paytm',   label: 'Paytm',   color: '#00BAF2', letter: 'Py' },
-  { id: 'bhim',    label: 'BHIM',    color: '#004C97', letter: 'B' },
+  { id: 'paytm', label: 'Paytm', color: '#00BAF2', letter: 'Py' },
+  { id: 'bhim', label: 'BHIM', color: '#004C97', letter: 'B' },
 ];
 
 const BANKS = [
@@ -95,10 +97,17 @@ function useCountdown(seconds: number) {
 /* ═══════════════════════════════════════════════════════════════════════ */
 export function CheckoutPage() {
   const { items, totalPrice, clearCart } = useCart();
-  const { isAuthenticated }              = useAuth();
-  const navigate                         = useNavigate();
-  const [step, setStep]                  = useState(0);
-  const [placing, setPlacing]            = useState(false);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [step, setStep] = useState(0);
+  const [placing, setPlacing] = useState(false);
+  const [orderError, setOrderError] = useState('');
+  const idempotencyKeyRef = useRef<string | null>(null);
+
+  // Invalidate idempotency key if cart items change
+  useEffect(() => {
+    idempotencyKeyRef.current = null;
+  }, [items]);
 
   // Shipping form
   const [form, setForm] = useState({
@@ -107,29 +116,32 @@ export function CheckoutPage() {
     saveAddress: false,
   });
 
-  // Payment state
-  const [payMethod, setPayMethod]     = useState<PaymentMethodId>('upi');
-  const [upiTab, setUpiTab]           = useState<'qr' | 'id' | 'apps'>('qr');
-  const [upiId, setUpiId]             = useState('');
+  // Payment state - Cash on Delivery is the supported live backend method
+  const [payMethod, setPayMethod] = useState<PaymentMethodId>('cod');
+  const [upiTab, setUpiTab] = useState<'qr' | 'id' | 'apps'>('qr');
+  const [upiId, setUpiId] = useState('');
   const [selectedApp, setSelectedApp] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   // Card fields (masked placeholders, never persisted)
-  const [cardName, setCardName]   = useState('');
-  const [cardNum, setCardNum]     = useState('');
-  const [expiry, setExpiry]       = useState('');
-  const [cvv, setCvv]             = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardNum, setCardNum] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
 
   // Payment info snapshot for confirmation
   const [payInfo, setPayInfo] = useState<CheckoutPaymentInfo | null>(null);
 
   const hasPrepaidOnly = items.some(i => i.product.prepaidOnly);
   const shipping = totalPrice >= 999 ? 0 : 49;
-  const tax      = Math.round(totalPrice * 0.18); // GST 18%
-  const codFee   = 49;
-  const total    = totalPrice + shipping + tax + (payMethod === 'cod' ? codFee : 0);
+  const codFee = 49;
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  // Must match the backend pricing contract; amounts are displayed in rupees.
+  const total = totalPrice + shipping + (payMethod === 'cod' ? codFee : 0);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    idempotencyKeyRef.current = null;
     setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value }));
+  };
 
   const upiCountdown = useCountdown(300); // 5 min UPI QR expiry
 
@@ -142,8 +154,8 @@ export function CheckoutPage() {
       confirmationStatus: 'demo_confirmed',
     };
     if (payMethod === 'upi') {
-      if (upiTab === 'qr')   label = 'UPI — QR Code';
-      if (upiTab === 'id')   label = `UPI — ${upiId || 'yourname@upi'}`;
+      if (upiTab === 'qr') label = 'UPI — QR Code';
+      if (upiTab === 'id') label = `UPI — ${upiId || 'yourname@upi'}`;
       if (upiTab === 'apps') label = `UPI — ${selectedApp || 'App'}`;
       info = { ...info, methodLabel: label, upiOption: upiTab, upiId, upiApp: selectedApp };
     } else if (payMethod === 'card') {
@@ -159,12 +171,224 @@ export function CheckoutPage() {
     setPayInfo(info);
   };
 
-  const placeOrder = async () => {
-    setPlacing(true);
-    await new Promise(r => setTimeout(r, 1400));
-    clearCart();
-    navigate('/order-confirmation');
+  const validateShipping = () => {
+    const name = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    if (!name) {
+      setOrderError('Please enter your full recipient name.');
+      return false;
+    }
+    if (!form.phone.trim() || !/^[0-9+\s\-()]{7,20}$/.test(form.phone.trim())) {
+      setOrderError('Please enter a valid phone number (at least 7 digits).');
+      return false;
+    }
+    if (!form.address.trim() || form.address.trim().length < 3) {
+      setOrderError('Please enter a valid street delivery address.');
+      return false;
+    }
+    if (!form.city.trim()) {
+      setOrderError('Please enter your city.');
+      return false;
+    }
+    if (!form.state.trim()) {
+      setOrderError('Please select your state.');
+      return false;
+    }
+    if (!form.zip.trim() || !/^[0-9]{6}$/.test(form.zip.trim())) {
+      setOrderError('Please enter a valid 6-digit Indian PIN code.');
+      return false;
+    }
+    setOrderError('');
+    return true;
   };
+
+  const placeOrder = async () => {
+    setOrderError('');
+
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: '/checkout' } });
+      return;
+    }
+
+    if (payMethod !== 'cod') {
+      setOrderError(
+        'Online payments are coming soon in Phase 3. Please select Cash on Delivery to place your order.'
+      );
+      return;
+    }
+
+    if (hasPrepaidOnly) {
+      setOrderError(
+        'Cash on Delivery is unavailable for one or more prepaid-only products in your cart.'
+      );
+      return;
+    }
+
+    if (!validateShipping()) {
+      return;
+    }
+
+    const name = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    setPlacing(true);
+
+    // Keep the same key if the request is retried after a network error for identical parameters.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      let order: {
+        orderId: string;
+        subtotal: number;
+        shippingFee: number;
+        codFee: number;
+        total: number;
+        orderStatus: string;
+        paymentStatus: string;
+        paymentMethod: string;
+        itemCount: number;
+      };
+
+      const shippingAddressPayload = {
+        name,
+        phone: form.phone.trim(),
+        line1: form.address.trim(),
+        city: form.city.trim(),
+        state: form.state.trim(),
+        postalCode: form.zip.trim(),
+        country: form.country || 'IN',
+      };
+
+      if (apiUrl) {
+        // Use Render Backend API
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        const apiRes = await fetch(`${apiUrl.replace(/\/$/, '')}/api/orders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            shippingAddress: shippingAddressPayload,
+            idempotencyKey: idempotencyKeyRef.current,
+            paymentMethod: 'cod',
+          }),
+        });
+
+        if (!apiRes.ok) {
+          const errData = await apiRes.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${apiRes.status}: Failed to place order.`);
+        }
+
+        const data = await apiRes.json();
+        order = {
+          orderId: data.orderId,
+          subtotal: data.subtotalPaise || data.subtotal,
+          shippingFee: data.shippingFeePaise || data.shippingFee,
+          codFee: data.codFeePaise || data.codFee,
+          total: data.totalPaise || data.total,
+          orderStatus: data.orderStatus,
+          paymentStatus: data.paymentStatus,
+          paymentMethod: data.paymentMethod,
+          itemCount: data.itemCount,
+        };
+      } else {
+        // Fallback to Firebase Callable Function
+        const createOrderCallable = httpsCallable<
+          {
+            shippingAddress: typeof shippingAddressPayload;
+            idempotencyKey: string;
+            paymentMethod: string;
+          },
+          {
+            orderId: string;
+            subtotal: number;
+            shippingFee: number;
+            codFee: number;
+            total: number;
+            orderStatus: string;
+            paymentStatus: string;
+            paymentMethod: string;
+            itemCount: number;
+            createdAt: string;
+          }
+        >(functions, 'createOrder');
+
+        const response = await createOrderCallable({
+          shippingAddress: shippingAddressPayload,
+          idempotencyKey: idempotencyKeyRef.current,
+          paymentMethod: 'cod',
+        });
+        order = response.data;
+      }
+      const confirmedTotal = order.total / 100;
+
+      setPayInfo({
+        method: 'cod',
+        methodLabel: 'Cash on Delivery',
+        codFee: order.codFee / 100,
+        totalWithCod: confirmedTotal,
+        confirmationStatus: 'confirmed',
+      });
+
+      clearCart();
+
+      navigate('/order-confirmation', {
+        state: {
+          orderId: order.orderId,
+          total: confirmedTotal,
+          subtotal: order.subtotal / 100,
+          shippingFee: order.shippingFee / 100,
+          codFee: order.codFee / 100,
+          paymentMethod: order.paymentMethod,
+          orderStatus: order.orderStatus,
+          paymentStatus: order.paymentStatus,
+          itemCount: order.itemCount,
+          shippingName: name,
+          shippingAddress: `${form.address.trim()}, ${form.city.trim()}, ${form.state.trim()} - ${form.zip.trim()}`,
+        },
+      });
+    } catch (error) {
+      console.error('Order creation failed:', error);
+
+      const firebaseError = error as { code?: string; message?: string };
+
+      if (firebaseError.code === 'functions/unauthenticated') {
+        setOrderError('Your session has expired. Sign in and try again.');
+      } else if (firebaseError.code === 'functions/failed-precondition') {
+        setOrderError(
+          firebaseError.message || 'This order cannot be placed. Check product stock availability and payment method.'
+        );
+      } else if (firebaseError.code === 'functions/not-found') {
+        setOrderError(
+          firebaseError.message || 'One or more products in your cart could not be found in the catalog.'
+        );
+      } else if (firebaseError.code === 'functions/invalid-argument') {
+        setOrderError(
+          firebaseError.message || 'Please check your shipping address details and try again.'
+        );
+      } else if (firebaseError.code === 'functions/already-exists') {
+        setOrderError(
+          'Order session details updated. Please retry placing your order.'
+        );
+      } else {
+        setOrderError(
+          'We could not confirm your order. Check your connection and retry. Retrying is safe and will not create duplicate orders.'
+        );
+      }
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50 pt-28 flex flex-col items-center justify-center px-4 text-center">
+        <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-xs text-slate-500 font-medium">Verifying checkout session…</p>
+      </main>
+    );
+  }
 
   if (items.length === 0 && step < 3) {
     return (
@@ -252,8 +476,8 @@ export function CheckoutPage() {
               <div className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border',
                 i === step ? 'bg-blue-600 text-white border-blue-600 shadow-2xs' :
-                i < step  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                'bg-white text-slate-400 border-slate-200'
+                  i < step ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    'bg-white text-slate-400 border-slate-200'
               )}>
                 {i < step ? (
                   <CheckCircle2 size={13} className="text-emerald-600" />
@@ -343,13 +567,13 @@ export function CheckoutPage() {
                     <label className={labelClass}>State</label>
                     <select id="ship-state" value={form.state} onChange={set('state')} className={inputClass}>
                       <option value="">Select State</option>
-                      {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
-                        'Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
-                        'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
-                        'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
-                        'Tripura','Uttar Pradesh','Uttarakhand','West Bengal'].map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
+                      {['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+                        'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+                        'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+                        'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+                        'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal'].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
                     </select>
                   </div>
                   <div>
@@ -398,10 +622,10 @@ export function CheckoutPage() {
                 <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Choose a payment method</p>
 
-                  <PMTab id="upi"        icon={QrCode}    label="UPI"                sub="GPay, PhonePe, Paytm, BHIM & more" />
-                  <PMTab id="card"       icon={CreditCard} label="Credit / Debit Card" sub="Visa, Mastercard, Rupay" />
-                  <PMTab id="netbanking" icon={Building2}  label="Net Banking"         sub="All major Indian banks" />
-                  <PMTab id="cod"        icon={Truck}      label="Cash on Delivery"    sub={`₹${codFee} handling fee · Pay when delivered`} disabled={hasPrepaidOnly} />
+                  <PMTab id="upi" icon={QrCode} label="UPI" sub="GPay, PhonePe, Paytm, BHIM & more" />
+                  <PMTab id="card" icon={CreditCard} label="Credit / Debit Card" sub="Visa, Mastercard, Rupay" />
+                  <PMTab id="netbanking" icon={Building2} label="Net Banking" sub="All major Indian banks" />
+                  <PMTab id="cod" icon={Truck} label="Cash on Delivery" sub={`₹${codFee} handling fee · Pay when delivered`} disabled={hasPrepaidOnly} />
                 </div>
 
                 {/* ── UPI Panel ── */}
@@ -612,7 +836,7 @@ export function CheckoutPage() {
                           value={expiry}
                           onChange={e => {
                             const v = e.target.value.replace(/\D/g, '');
-                            setExpiry(v.length >= 3 ? v.slice(0,2)+'/'+v.slice(2) : v);
+                            setExpiry(v.length >= 3 ? v.slice(0, 2) + '/' + v.slice(2) : v);
                           }}
                           className={inputClass}
                           autoComplete="off"
@@ -694,7 +918,7 @@ export function CheckoutPage() {
                     <div className="space-y-2 text-xs">
                       <div className="flex justify-between text-slate-600">
                         <span>Order total</span>
-                        <span className="font-semibold">₹{(totalPrice + shipping + tax).toFixed(0)}</span>
+                        <span className="font-semibold">₹{(totalPrice + shipping).toFixed(0)}</span>
                       </div>
                       <div className="flex justify-between text-slate-600">
                         <span>COD handling fee</span>
@@ -759,8 +983,8 @@ export function CheckoutPage() {
                 >
                   <span>
                     {step === 0 ? 'Proceed to Shipping' :
-                     step === 1 ? 'Continue to Payment' :
-                     'Review Summary'}
+                      step === 1 ? 'Continue to Payment' :
+                        'Review Summary'}
                   </span>
                   <ChevronRight size={15} />
                 </button>
@@ -818,7 +1042,7 @@ export function CheckoutPage() {
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>GST (18%)</span>
-                  <span className="font-semibold text-slate-900">₹{tax}</span>
+                  <span className="font-semibold text-slate-900">Included</span>
                 </div>
                 {payMethod === 'cod' && !hasPrepaidOnly && (
                   <div className="flex justify-between text-amber-700">

@@ -1,30 +1,49 @@
-import { Link } from 'react-router-dom';
-import { CheckCircle2, Package, ArrowRight, Download, ShieldCheck, FileText } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { CheckCircle2, Package, ArrowRight, Download, ShieldCheck, FileText, Truck } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '../context/ToastContext';
 import { downloadMockInvoice } from '../data/orders';
 
+interface OrderConfirmationLocationState {
+  orderId?: string;
+  total?: number;
+  subtotal?: number;
+  shippingFee?: number;
+  codFee?: number;
+  paymentMethod?: string;
+  orderStatus?: string;
+  paymentStatus?: string;
+  itemCount?: number;
+  shippingName?: string;
+  shippingAddress?: string;
+}
+
 export function OrderConfirmationPage() {
-  const [orderNumber] = useState(() => `NS-${Math.floor(1000000 + Math.random() * 9000000)}`);
+  const location = useLocation();
+  const state = (location.state as OrderConfirmationLocationState) || {};
   const toast = useToast();
+
+  const [fallbackOrderNumber] = useState(() => `NS-${Math.floor(1000000 + Math.random() * 9000000)}`);
+  const orderNumber = state.orderId || fallbackOrderNumber;
+  const isRealCodOrder = state.paymentMethod === 'cod';
 
   const handleDownloadInvoice = () => {
     downloadMockInvoice({
       id: orderNumber,
       date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-      total: 349,
+      total: state.total || 349,
       items: [
         {
-          product: { name: 'AirPods Pro Max Ultra' },
-          quantity: 1,
-          price: 349,
+          product: { name: isRealCodOrder ? `Order Items (${state.itemCount || 1} units)` : 'AirPods Pro Max Ultra' },
+          quantity: state.itemCount || 1,
+          price: state.total || 349,
         },
       ],
       shippingAddress: {
-        fullName: 'Jane Doe',
-        street: '742 Evergreen Terrace',
-        city: 'Portland',
-        state: 'OR',
+        fullName: state.shippingName || 'Customer',
+        street: state.shippingAddress || 'Address on file',
+        city: 'India',
+        state: 'IN',
       },
     });
     toast.success(`Invoice #${orderNumber} downloaded successfully.`);
@@ -33,20 +52,20 @@ export function OrderConfirmationPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pt-20 pb-16 flex items-center justify-center px-4">
       <div className="max-w-lg w-full bg-white border border-slate-200 rounded-3xl p-8 sm:p-10 text-center shadow-xs space-y-6">
-        {/* Clean Flat 2.0 Success Icon */}
+        {/* Success Icon */}
         <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mx-auto">
           <CheckCircle2 size={36} />
         </div>
 
         <div className="space-y-1">
           <span className="badge-clean bg-emerald-100 text-emerald-800 text-xs font-bold">
-            Payment Successful (Demo)
+            {isRealCodOrder ? 'Order Placed — Cash on Delivery' : 'Payment Successful (Demo)'}
           </span>
           <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-slate-900 tracking-tight">
             Order Confirmed!
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm">
-            Thank you for shopping with NovaShop. An order confirmation receipt and parcel tracking details have been generated.
+            Thank you for shopping with NovaShop. Your order has been registered in the database and is scheduled for dispatch.
           </p>
         </div>
 
@@ -54,24 +73,42 @@ export function OrderConfirmationPage() {
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left text-xs space-y-2.5">
           <div className="flex justify-between items-center">
             <span className="text-slate-500">Order Reference</span>
-            <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+            <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 select-all">
               {orderNumber}
             </span>
           </div>
+          {state.total !== undefined && (
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Authoritative Total</span>
+              <span className="font-bold text-blue-600">₹{state.total.toFixed(0)}</span>
+            </div>
+          )}
           <div className="flex justify-between items-center">
-            <span className="text-slate-500">Courier Delivery</span>
-            <span className="font-semibold text-slate-800">2–4 Business Days (Express)</span>
+            <span className="text-slate-500">Payment Mode</span>
+            <span className="font-semibold text-slate-800 flex items-center gap-1">
+              {isRealCodOrder ? (
+                <>
+                  <Truck size={13} className="text-amber-600" /> Pay upon delivery (Cash / UPI at door)
+                </>
+              ) : (
+                'Credit / Debit Card'
+              )}
+            </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-slate-500">Order Status</span>
             <span className="text-emerald-700 font-bold flex items-center gap-1">
-              <Package size={13} /> Processing in Warehouse
+              <Package size={13} /> {state.orderStatus ? `${state.orderStatus.toUpperCase()} — Processing` : 'Processing in Warehouse'}
             </span>
           </div>
-          <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
-            <span className="text-slate-500">Demo Checkout</span>
-            <span className="text-slate-600 font-medium">No real funds charged</span>
-          </div>
+          {state.shippingAddress && (
+            <div className="flex justify-between items-start pt-1 border-t border-slate-200/60">
+              <span className="text-slate-500 shrink-0">Deliver to</span>
+              <span className="text-slate-700 text-right font-medium truncate max-w-[220px]">
+                {state.shippingName} ({state.shippingAddress})
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}

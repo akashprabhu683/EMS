@@ -1,0 +1,18 @@
+{
+  "name": "ems-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EMS (Ecommerce Management System) workspace with separate frontends (Netlify) and backends (Render)",
+  "scripts": {
+    "dev:ecommerce:frontend": "npm --prefix Ecommerce/frontend run dev",
+    "dev:ecommerce:backend": "npm --prefix Ecommerce/backend run dev",
+    "dev:admin:frontend": "npm --prefix admin-panel/frontend run dev",
+    "dev:admin:backend": "npm --prefix admin-panel/backend run dev",
+    "build:ecommerce:frontend": "npm --prefix Ecommerce/frontend run build",
+    "build:ecommerce:backend": "npm --prefix Ecommerce/backend run build",
+    "build:admin:frontend": "npm --prefix admin-panel/frontend run build",
+    "build:admin:backend": "npm --prefix admin-panel/backend run build",
+    "build:all": "npm run build:ecommerce:backend && npm run build:ecommerce:frontend && npm run build:admin:backend && npm run build:admin:frontend",
+    "deploy:firebase:rules": "firebase deploy --only firestore:rules,firestore:indexes"
+  }
+}

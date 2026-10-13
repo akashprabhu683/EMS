@@ -1,0 +1,36 @@
+services:
+  # ─── Ecommerce Storefront Backend ───
+  - type: web
+    name: ems-ecommerce-backend
+    env: node
+    rootDir: Ecommerce/backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: ems-store-6a342
+      - key: FIREBASE_SERVICE_ACCOUNT_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+  # ─── Admin Panel Backend ───
+  - type: web
+    name: ems-admin-backend
+    env: node
+    rootDir: admin-panel/backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: ems-store-6a342
+      - key: FIREBASE_SERVICE_ACCOUNT_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

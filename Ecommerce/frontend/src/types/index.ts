@@ -122,7 +122,7 @@ export interface CheckoutPaymentInfo {
   bankName?: string;
   codFee: number;
   totalWithCod: number;
-  confirmationStatus: string;
+  confirmationStatus: 'confirmed' | 'demo_confirmed' | string;
 }
 
 
