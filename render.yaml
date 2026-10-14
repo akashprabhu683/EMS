@@ -15,7 +15,7 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT_KEY
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://ecommerce-storefront-client.netlify.app
 
   # ─── Admin Panel Backend ───
   - type: web
@@ -33,4 +33,4 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT_KEY
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://ems-admin-panel-provider.netlify.app

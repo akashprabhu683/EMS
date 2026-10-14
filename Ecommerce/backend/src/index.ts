@@ -11,6 +11,7 @@ const port = process.env.PORT || 5001;
 // CORS configuration (allow Netlify storefront and local development)
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://ecommerce-storefront-client.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ].filter(Boolean) as string[];
