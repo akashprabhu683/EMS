@@ -38,7 +38,7 @@ export function OrdersPage() {
         searchQuery.trim() === '' ||
         order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.items.some(i => i.product.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        order.trackingNumber.toLowerCase().includes(searchQuery.toLowerCase());
+        Boolean(order.trackingNumber && order.trackingNumber.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesStatus && matchesQuery;
     });
   }, [orders, filterStatus, searchQuery]);
@@ -51,11 +51,28 @@ export function OrdersPage() {
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
+      case 'ready_for_pickup':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 size={13} className="text-emerald-600" />
+            <span>Ready for Pickup</span>
+          </span>
+        );
+      case 'collected':
       case 'delivered':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <CheckCircle2 size={13} className="text-emerald-600" />
-            <span>Delivered</span>
+            <span>{status === 'collected' ? 'Collected' : 'Delivered'}</span>
+          </span>
+        );
+      case 'accepted':
+      case 'preparing':
+      case 'processing':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock size={13} className="text-amber-600" />
+            <span>{status === 'preparing' ? 'Preparing' : status === 'accepted' ? 'Accepted' : 'Processing'}</span>
           </span>
         );
       case 'shipped':
@@ -65,11 +82,17 @@ export function OrdersPage() {
             <span>In Transit</span>
           </span>
         );
-      case 'processing':
+      case 'placed':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock size={13} className="text-amber-600" />
-            <span>Processing</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <Clock size={13} className="text-blue-600" />
+            <span>Order Placed</span>
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+            <span>Cancelled</span>
           </span>
         );
       default:

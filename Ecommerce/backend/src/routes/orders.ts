@@ -43,17 +43,22 @@ export async function authenticateFirebaseToken(
  */
 ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const uid = req.user!.uid;
-  const { shippingAddress, idempotencyKey, paymentMethod } = req.body;
+  const { pickupContact, shippingAddress, idempotencyKey } = req.body;
 
-  if (!shippingAddress || typeof shippingAddress !== 'object') {
-    res.status(400).json({ error: 'Invalid shipping address.' });
+  const contactData = pickupContact || shippingAddress;
+  if (!contactData || typeof contactData !== 'object') {
+    res.status(400).json({ error: 'Pickup contact details (name and phone) are required.' });
     return;
   }
 
-  const normalizedMethod = String(paymentMethod || 'cod').toLowerCase();
-  const validMethods = ['cod', 'card', 'upi', 'netbanking'];
-  if (!validMethods.includes(normalizedMethod)) {
-    res.status(400).json({ error: `Invalid payment method: ${normalizedMethod}` });
+  const fullName = String(contactData.fullName || contactData.name || '').trim();
+  const phone = String(contactData.phone || '').trim();
+  if (!fullName || fullName.length < 2) {
+    res.status(400).json({ error: 'Please enter a valid customer full name.' });
+    return;
+  }
+  if (!phone || phone.length < 7) {
+    res.status(400).json({ error: 'Please enter a valid phone number for pickup confirmation.' });
     return;
   }
 
@@ -139,9 +144,10 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         });
       }
 
-      const shippingFeePaise = subtotalPaise >= FREE_SHIPPING_THRESHOLD_PAISE ? 0 : STANDARD_SHIPPING_FEE_PAISE;
-      const codFeePaise = normalizedMethod === 'cod' ? COD_FEE_PAISE : 0;
-      const totalPaise = subtotalPaise + shippingFeePaise + codFeePaise;
+      const shippingFeePaise = 0;
+      const codFeePaise = 0;
+      const totalPaise = subtotalPaise;
+      const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
 
       const orderRef = adminDb.collection('orders').doc();
       const orderRecord = {
@@ -152,19 +158,24 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         shippingFee: shippingFeePaise,
         codFee: codFeePaise,
         total: totalPaise,
-        shippingAddress: {
-          name: shippingAddress.name || `${shippingAddress.firstName || ''} ${shippingAddress.lastName || ''}`.trim(),
-          phone: shippingAddress.phone || '',
-          line1: shippingAddress.address || shippingAddress.line1 || '',
-          city: shippingAddress.city || '',
-          state: shippingAddress.state || '',
-          postalCode: shippingAddress.zip || shippingAddress.postalCode || '',
-          country: shippingAddress.country || 'IN',
+        fulfillmentMethod: 'click_and_collect',
+        pickupContact: {
+          fullName,
+          phone,
+          notes: contactData.notes || '',
         },
-        orderStatus: 'confirmed',
-        paymentStatus: normalizedMethod === 'cod' ? 'pending' : 'paid',
-        paymentMethod: normalizedMethod,
+        pickupLocation: DEFAULT_PICKUP_LOCATION,
+        orderStatus: 'placed',
+        paymentStatus: 'unpaid',
+        paymentMethod: 'click_and_collect',
         itemCount: orderItems.reduce((acc, it) => acc + it.quantity, 0),
+        statusHistory: [
+          {
+            status: 'placed',
+            timestamp: new Date().toISOString(),
+            note: 'Order placed for Click-and-Collect. Awaiting dispensary confirmation.',
+          },
+        ],
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
@@ -196,6 +207,7 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         paymentStatus: orderRecord.paymentStatus,
         paymentMethod: orderRecord.paymentMethod,
         itemCount: orderRecord.itemCount,
+        pickupLocation: DEFAULT_PICKUP_LOCATION,
       };
     });
 

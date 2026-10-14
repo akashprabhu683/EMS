@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardOverviewPage } from './pages/DashboardOverviewPage';
 import { ProductsListPage } from './pages/ProductsListPage';
 import { CategoriesListPage } from './pages/CategoriesListPage';
+import { OrdersListPage } from './pages/OrdersListPage';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route index element={<DashboardOverviewPage />} />
+              <Route path="/orders" element={<OrdersListPage />} />
               <Route path="/products" element={<ProductsListPage />} />
               <Route path="/categories" element={<CategoriesListPage />} />
             </Route>

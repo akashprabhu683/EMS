@@ -14,7 +14,7 @@ export function Footer() {
     e.preventDefault();
     if (email.trim()) {
       setSubscribed(true);
-      toast.success('Thank you! You are now subscribed to NovaShop updates.');
+      toast.success('Thank you! You are now subscribed to EMS Dispensary updates.');
       setEmail('');
     }
   };
@@ -45,7 +45,7 @@ export function Footer() {
           {subscribed ? (
             <div className="flex items-center gap-2.5 px-5 py-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm font-semibold shadow-2xs">
               <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-              <span>You're subscribed! Welcome to NovaShop.</span>
+              <span>You're subscribed! Welcome to EMS Dispensary.</span>
             </div>
           ) : (
             <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
@@ -75,15 +75,15 @@ export function Footer() {
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-1 pr-4">
             <Link to="/" className="flex items-center gap-2.5 mb-4 group inline-flex">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-blue-700 transition-colors">
-                N
+              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-700 transition-colors">
+                🌿
               </div>
               <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
-                Nova<span className="text-blue-600">Shop</span>
+                EMS<span className="text-emerald-600"> Dispensary</span>
               </span>
             </Link>
             <p className="text-slate-500 text-xs sm:text-sm leading-relaxed mb-5">
-              Carefully curated essentials for modern life. Transparent pricing, authentic products, and reliable global shipping.
+              Your trusted source for authentic Ayurvedic and natural medicine. Order online, collect in person.
             </p>
             <div className="flex gap-2.5">
               {[
@@ -109,21 +109,22 @@ export function Footer() {
             {
               title: 'Categories',
               links: [
-                { label: 'Electronics', to: '/products?category=electronics' },
-                { label: 'Fashion & Apparel', to: '/products?category=fashion' },
-                { label: 'Home & Living', to: '/products?category=home' },
-                { label: 'Beauty & Wellness', to: '/products?category=beauty' },
-                { label: 'Sports & Outdoors', to: '/products?category=sports' },
+                { label: 'Ayurvedic Formulations', to: '/products?search=Ayurvedic' },
+                { label: 'Herbal Extracts & Syrups', to: '/products?search=Herbal+Extracts' },
+                { label: 'Vitality & Immunity', to: '/products?search=Vitality' },
+                { label: 'Digestive & Metabolism', to: '/products?search=Digestive' },
+                { label: 'Joint Care & Balms', to: '/products?search=Joint+Care' },
+                { label: 'Natural Wellness & Teas', to: '/products?search=Wellness+Teas' },
               ]
             },
             {
               title: 'Customer Service',
               links: [
-                { label: 'Order Tracking', to: '/orders' },
-                { label: 'Shipping & Delivery', to: '#' },
-                { label: 'Returns & Exchanges', to: '#' },
-                { label: 'Warranty & Care', to: '#' },
-                { label: 'Help & FAQ', to: '#' },
+                { label: 'Track My Orders', to: '/orders' },
+                { label: 'Click & Collect Info', to: '#' },
+                { label: 'Product Quality FAQ', to: '#' },
+                { label: 'Returns & Queries', to: '#' },
+                { label: 'Contact Dispensary', to: '#' },
               ]
             },
             {
@@ -167,10 +168,10 @@ export function Footer() {
 
         {/* 3. Bottom Legal & Trust Bar */}
         <div className="border-t border-slate-200 pt-6 sm:pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {CURRENT_YEAR} NovaShop Technologies Inc. All rights reserved.</p>
+          <p>© {CURRENT_YEAR} EMS Herbal Dispensary. All rights reserved.</p>
           <div className="flex items-center gap-2 text-slate-500">
             <ShieldCheck size={16} className="text-emerald-600" />
-            <span>256-Bit SSL Encrypted &amp; PCI-DSS Compliant Demo</span>
+            <span>Natural &amp; Authentic Herbal Products — Quality Assured</span>
           </div>
           <div className="flex gap-5">
             <button

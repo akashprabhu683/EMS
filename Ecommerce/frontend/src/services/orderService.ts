@@ -74,41 +74,63 @@ export function formatFirestoreOrder(docId: string, data: any): Order {
   const totalRupees = (data.total || 0) / 100;
   const subtotalRupees = (data.subtotal || 0) / 100;
   const shippingRupees = (data.shippingFee || 0) / 100;
+  const pickupLocation = data.pickupLocation || 'EMS Herbal Dispensary, Main Road Health Complex, Pin: 560001';
+  const customerName = data.pickupContact?.fullName || data.shippingAddress?.name || data.shippingAddress?.fullName || 'Valued Customer';
+  const customerPhone = data.pickupContact?.phone || data.shippingAddress?.phone || '';
+
+  const statusTitleMap: Record<string, string> = {
+    placed: 'Order Placed (Awaiting Acceptance)',
+    accepted: 'Order Accepted by Dispensary',
+    preparing: 'Remedies Being Prepared',
+    ready_for_pickup: 'Ready for Collection at Shop',
+    collected: 'Collected & Paid at Shop',
+    cancelled: 'Order Cancelled',
+  };
+
+  const statusLabel = statusTitleMap[data.orderStatus] || String(data.orderStatus || 'Placed').toUpperCase();
 
   return {
     id: docId,
     date: createdDate,
     status: (data.orderStatus as OrderStatus) || 'processing',
-    statusLabel: String(data.orderStatus || 'Processing').toUpperCase(),
+    statusLabel,
     items,
     subtotal: subtotalRupees,
     shipping: shippingRupees,
     tax: 0,
     total: totalRupees,
     paymentMethod: {
-      type: data.paymentMethod || 'cod',
-      last4: 'COD',
-      demoNote: 'Cash on Delivery',
+      type: 'click_and_collect',
+      last4: 'PAY AT SHOP',
+      demoNote: data.paymentStatus === 'paid' ? 'Paid in Person' : 'Pay at Shop upon Collection',
     },
     shippingAddress: {
-      fullName: data.shippingAddress?.name || 'Customer',
-      street: data.shippingAddress?.line1 || '',
-      city: data.shippingAddress?.city || '',
-      state: data.shippingAddress?.state || '',
-      zip: data.shippingAddress?.postalCode || '',
-      country: data.shippingAddress?.country || 'India',
+      fullName: customerName,
+      street: `Pickup at: ${pickupLocation}`,
+      city: 'Dispensary Counter',
+      state: 'Ready upon Notification',
+      zip: 'Collect in Person',
+      country: 'India',
+      phone: customerPhone,
     },
-    trackingNumber: `EMS-${docId.slice(-6).toUpperCase()}`,
-    courier: 'EMS Express Logistics',
-    estimatedDelivery: '3-5 business days',
-    timeline: [
-      {
-        title: 'Order Placed',
-        timestamp: createdDate,
-        completed: true,
-        description: 'Order confirmed and registered in EMS system.',
-      },
-    ],
+    trackingNumber: `EMS-COLLECT-${docId.slice(-6).toUpperCase()}`,
+    courier: 'Self Collection at Dispensary',
+    estimatedDelivery: data.orderStatus === 'ready_for_pickup' ? 'Ready for Collection NOW' : 'Ready within 2-4 hours',
+    timeline: Array.isArray(data.statusHistory) && data.statusHistory.length > 0
+      ? data.statusHistory.map((h: any) => ({
+          title: statusTitleMap[h.status] || h.status,
+          timestamp: h.timestamp ? new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : createdDate,
+          completed: true,
+          description: h.note || `Order status updated to ${h.status}`,
+        }))
+      : [
+          {
+            title: 'Order Placed',
+            timestamp: createdDate,
+            completed: true,
+            description: 'Order registered. The dispensary pharmacist is preparing your herbal remedies.',
+          },
+        ],
   };
 }
 

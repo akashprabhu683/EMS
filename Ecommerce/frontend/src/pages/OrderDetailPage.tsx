@@ -248,13 +248,13 @@ export function OrderDetailPage() {
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Express Shipping</span>
-                  <span className={order.shipping === 0 ? 'text-emerald-700 font-semibold' : 'text-slate-900 font-semibold'}>
-                    {order.shipping === 0 ? 'FREE' : `$${order.shipping.toFixed(2)}`}
+                  <span className={(order.shipping ?? 0) === 0 ? 'text-emerald-700 font-semibold' : 'text-slate-900 font-semibold'}>
+                    {(order.shipping ?? 0) === 0 ? 'FREE' : `$${(order.shipping ?? 0).toFixed(2)}`}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-500">
                   <span>Estimated Tax</span>
-                  <span className="font-semibold text-slate-900">${order.tax.toFixed(2)}</span>
+                  <span className="font-semibold text-slate-900">${(order.tax ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-slate-900 pt-3 border-t border-slate-200">
                   <span>Grand Total</span>
@@ -276,11 +276,18 @@ export function OrderDetailPage() {
                 <span>Delivery Address</span>
               </div>
               <div className="text-xs text-slate-600 space-y-1">
-                <p className="font-bold text-slate-900">{order.shippingAddress.fullName}</p>
-                <p>{order.shippingAddress.street}</p>
-                <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}</p>
-                <p>{order.shippingAddress.country}</p>
-                {order.shippingAddress.phone && <p className="text-slate-500 mt-1">{order.shippingAddress.phone}</p>}
+                <p className="font-bold text-slate-900">{order.shippingAddress?.fullName ?? order.pickupContact?.fullName ?? '—'}</p>
+                <p>{order.shippingAddress?.street ?? 'Pickup at Dispensary'}</p>
+                {order.shippingAddress && (
+                  <>
+                    <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}</p>
+                    <p>{order.shippingAddress.country}</p>
+                    {order.shippingAddress.phone && <p className="text-slate-500 mt-1">{order.shippingAddress.phone}</p>}
+                  </>
+                )}
+                {order.pickupContact && !order.shippingAddress && (
+                  <p className="text-slate-500">{order.pickupContact.phone}</p>
+                )}
               </div>
             </div>
 
@@ -292,10 +299,10 @@ export function OrderDetailPage() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-800 font-medium">
-                  <span className="font-semibold uppercase">{order.paymentMethod.type}</span>
+                  <span className="font-semibold uppercase">{order.paymentMethod?.type ?? (order.paymentStatus === 'paid' ? 'paid' : 'unpaid')}</span>
                 </div>
                 <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
-                  {order.paymentMethod.type === 'cod' ? 'PAY ON DELIVERY' : 'PAID'}
+                  {order.paymentMethod?.type === 'cod' || order.paymentStatus === 'unpaid' ? 'PAY AT PICKUP' : 'PAID'}
                 </span>
               </div>
             </div>

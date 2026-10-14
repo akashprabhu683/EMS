@@ -11,43 +11,31 @@ import * as crypto from "crypto";
 export const MAX_DISTINCT_ITEMS_PER_ORDER = 50;
 export const MAX_QUANTITY_PER_ITEM = 99;
 export const MAX_CATALOG_PRICE_PAISE = 100_000_000; // ₹10,00,000 maximum single item price in paise
-export const FREE_SHIPPING_THRESHOLD_PAISE = 99_900; // Free shipping at or above ₹999
-export const STANDARD_SHIPPING_FEE_PAISE = 4_900; // ₹49 standard shipping fee
-export const COD_FEE_PAISE = 4_900; // ₹49 Cash on Delivery handling fee
+export const FREE_SHIPPING_THRESHOLD_PAISE = 0; // Click & Collect is free pickup at the dispensary
+export const STANDARD_SHIPPING_FEE_PAISE = 0; // No delivery fee for store pickup
+export const COD_FEE_PAISE = 0; // No COD handling fee
 
 /* ═══════════════════════════════════════════════════════════════════════
    TYPES & CONTRACTS
    ═══════════════════════════════════════════════════════════════════════ */
 
-export interface ShippingAddressInput {
+export interface PickupContactInput {
   name?: string;
   fullName?: string;
   phone: string;
-  line1?: string;
-  address?: string;
-  line2?: string;
-  city: string;
-  state: string;
-  postalCode?: string;
-  zip?: string;
-  country?: string;
+  notes?: string;
 }
 
-export interface NormalizedShippingAddress {
-  name: string;
+export interface NormalizedPickupContact {
+  fullName: string;
   phone: string;
-  line1: string;
-  line2?: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  country: string;
+  notes?: string;
 }
 
 export interface CreateOrderRequestData {
-  shippingAddress: ShippingAddressInput;
+  pickupContact: PickupContactInput;
   idempotencyKey: string;
-  paymentMethod: string;
+  paymentMethod?: string;
 }
 
 export interface OrderItemSnapshot {
@@ -67,10 +55,11 @@ export interface CreateOrderResponse {
   shippingFee: number; // in paise
   codFee: number; // in paise
   total: number; // in paise
-  orderStatus: string;
-  paymentStatus: string;
-  paymentMethod: string;
+  orderStatus: string; // placed, accepted, preparing, ready_for_pickup, collected, cancelled
+  paymentStatus: string; // unpaid, paid
+  paymentMethod: string; // click_and_collect
   itemCount: number;
+  pickupLocation: string;
   createdAt: string; // ISO string
 }
 
@@ -110,59 +99,37 @@ export function isValidHttpsUrl(url: unknown): url is string {
 }
 
 /**
- * Validates and normalizes shipping address inputs into a standard schema.
+ * Validates and normalizes customer pickup contact inputs.
  */
-export function validateAndNormalizeAddress(raw: unknown): NormalizedShippingAddress {
+export function validateAndNormalizePickupContact(raw: unknown): NormalizedPickupContact {
   if (typeof raw !== "object" || raw === null) {
-    throw new HttpsError("invalid-argument", "Shipping address is required and must be an object.");
+    throw new HttpsError("invalid-argument", "Pickup contact information is required and must be an object.");
   }
 
-  const addr = raw as Record<string, unknown>;
+  const contact = raw as Record<string, unknown>;
 
-  const name = typeof addr.name === "string" ? addr.name.trim() : (typeof addr.fullName === "string" ? addr.fullName.trim() : "");
-  if (!name || name.length < 2 || name.length > 100) {
-    throw new HttpsError("invalid-argument", "A valid full name (2-100 characters) is required in the shipping address.");
+  const fullName = typeof contact.fullName === "string"
+    ? contact.fullName.trim()
+    : (typeof contact.name === "string" ? contact.name.trim() : "");
+
+  if (!fullName || fullName.length < 2 || fullName.length > 100) {
+    throw new HttpsError("invalid-argument", "A valid customer name (2-100 characters) is required for shop pickup.");
   }
 
-  const phone = typeof addr.phone === "string" ? addr.phone.trim() : "";
+  const phone = typeof contact.phone === "string" ? contact.phone.trim() : "";
   const phoneRegex = /^[0-9+\s\-()]{7,20}$/;
   if (!phone || !phoneRegex.test(phone)) {
-    throw new HttpsError("invalid-argument", "A valid phone number (7-20 digits) is required in the shipping address.");
+    throw new HttpsError("invalid-argument", "A valid contact phone number (7-20 digits) is required for pickup confirmation.");
   }
 
-  const line1 = typeof addr.line1 === "string" ? addr.line1.trim() : (typeof addr.address === "string" ? addr.address.trim() : "");
-  if (!line1 || line1.length < 3 || line1.length > 200) {
-    throw new HttpsError("invalid-argument", "A valid street address line 1 (3-200 characters) is required.");
-  }
-
-  const line2 = typeof addr.line2 === "string" && addr.line2.trim().length > 0 ? addr.line2.trim().slice(0, 200) : undefined;
-
-  const city = typeof addr.city === "string" ? addr.city.trim() : "";
-  if (!city || city.length < 2 || city.length > 100) {
-    throw new HttpsError("invalid-argument", "A valid city name (2-100 characters) is required.");
-  }
-
-  const state = typeof addr.state === "string" ? addr.state.trim() : "";
-  if (!state || state.length < 2 || state.length > 100) {
-    throw new HttpsError("invalid-argument", "A valid state name (2-100 characters) is required.");
-  }
-
-  const postalCode = typeof addr.postalCode === "string" ? addr.postalCode.trim() : (typeof addr.zip === "string" ? addr.zip.trim() : "");
-  if (!postalCode || postalCode.length < 3 || postalCode.length > 20) {
-    throw new HttpsError("invalid-argument", "A valid postal code (3-20 characters) is required.");
-  }
-
-  const country = typeof addr.country === "string" && addr.country.trim().length > 0 ? addr.country.trim().toUpperCase() : "IN";
+  const notes = typeof contact.notes === "string" && contact.notes.trim().length > 0
+    ? contact.notes.trim().slice(0, 300)
+    : undefined;
 
   return {
-    name,
+    fullName,
     phone,
-    line1,
-    line2,
-    city,
-    state,
-    postalCode,
-    country,
+    notes,
   };
 }
 
@@ -188,52 +155,45 @@ export function validateIdempotencyKey(raw: unknown): string {
 }
 
 /**
- * Validates the payment method. For Phase 2, strictly Cash on Delivery (COD) is supported.
- * Online payment methods are safely rejected with actionable guidance until Phase 3.
+ * Validates the payment/fulfillment method. For Click-and-Collect, payment is made in person at the shop upon pickup.
  */
-export function validatePaymentMethod(raw: unknown): "cod" {
-  if (typeof raw !== "string") {
-    throw new HttpsError("invalid-argument", "paymentMethod is required.");
+export function validatePaymentMethod(raw: unknown): "click_and_collect" {
+  if (!raw || typeof raw !== "string") {
+    return "click_and_collect";
   }
 
   const method = raw.trim().toLowerCase();
-  if (method === "cod") {
-    return "cod";
+  if (method === "click_and_collect" || method === "pay_at_store" || method === "cod") {
+    return "click_and_collect";
   }
 
   if (["razorpay", "card", "upi", "netbanking", "stripe"].includes(method)) {
     throw new HttpsError(
       "failed-precondition",
-      `Online payment method "${method}" is not yet supported. Please choose Cash on Delivery (COD) until Phase 3 payment gateway integration is enabled.`
+      `Online payment method "${method}" is not enabled. All orders use Click-and-Collect with in-person payment at our physical dispensary upon pickup.`
     );
   }
 
-  throw new HttpsError("invalid-argument", `Unsupported payment method "${raw}". Valid option: "cod".`);
+  return "click_and_collect";
 }
 
 /**
  * Computes a deterministic SHA-256 fingerprint of the normalized order request.
- * Used to detect when an existing idempotency key is reused with mismatched parameters.
  */
 export function computeRequestFingerprint(
   uid: string,
   items: Array<{ productId: string; quantity: number; selectedColor?: string; selectedSize?: string }>,
-  address: NormalizedShippingAddress,
+  contact: NormalizedPickupContact,
   paymentMethod: string
 ): string {
   const sortedItems = [...items].sort((a, b) => a.productId.localeCompare(b.productId));
   const payload = JSON.stringify({
     uid,
     items: sortedItems,
-    address: {
-      name: address.name,
-      phone: address.phone,
-      line1: address.line1,
-      line2: address.line2 || "",
-      city: address.city,
-      state: address.state,
-      postalCode: address.postalCode,
-      country: address.country,
+    contact: {
+      fullName: contact.fullName,
+      phone: contact.phone,
+      notes: contact.notes || "",
     },
     paymentMethod,
   });
@@ -255,7 +215,7 @@ export async function executeCreateOrder(
   }
 
   const idempotencyKey = validateIdempotencyKey(data?.idempotencyKey);
-  const normalizedAddress = validateAndNormalizeAddress(data?.shippingAddress);
+  const normalizedContact = validateAndNormalizePickupContact(data?.pickupContact);
   const paymentMethod = validatePaymentMethod(data?.paymentMethod);
 
   const idempotencyRef = db.collection("idempotency_records").doc(`${uid}_${idempotencyKey}`);
@@ -292,46 +252,40 @@ export async function executeCreateOrder(
         );
       }
 
-      // Verify shipping address and payment method match the existing idempotency record
-      const existingAddr = existing.shippingAddress;
-      const addressMatches =
-        existingAddr &&
-        existingAddr.name === normalizedAddress.name &&
-        existingAddr.phone === normalizedAddress.phone &&
-        existingAddr.line1 === normalizedAddress.line1 &&
-        (existingAddr.line2 || "") === (normalizedAddress.line2 || "") &&
-        existingAddr.city === normalizedAddress.city &&
-        existingAddr.state === normalizedAddress.state &&
-        existingAddr.postalCode === normalizedAddress.postalCode &&
-        existingAddr.country === normalizedAddress.country;
-
-      if (!addressMatches || existing.paymentMethod !== paymentMethod) {
-        throw new HttpsError(
-          "already-exists",
-          "This idempotency key was previously used with different order details. Please supply a fresh idempotency key."
-        );
-      }
-
-      // If cart still contains items, verify they match the original fingerprinted items
-      if (cartSnap.exists) {
-        const rawItems = cartSnap.data()?.items;
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
-          const currentCartFingerprint = computeRequestFingerprint(
-            uid,
-            rawItems.filter((i) => i && typeof i.productId === "string" && typeof i.quantity === "number"),
-            normalizedAddress,
-            paymentMethod
-          );
-          if (existing.requestFingerprint && existing.requestFingerprint !== currentCartFingerprint) {
-            throw new HttpsError(
-              "already-exists",
-              "This idempotency key was previously used with different order details. Please supply a fresh idempotency key."
-            );
+      // If cart has items, verify fingerprint hasn't changed (protect against key reuse with new cart)
+      const rawCartItems = cartSnap.exists ? cartSnap.data()?.items : [];
+      if (Array.isArray(rawCartItems) && rawCartItems.length > 0) {
+        const pMap = new Map<string, { quantity: number; selectedColor?: string; selectedSize?: string }>();
+        for (const item of rawCartItems) {
+          if (item && typeof item === "object" && item.productId) {
+            pMap.set(String(item.productId), {
+              quantity: Number(item.quantity) || 1,
+              selectedColor: item.selectedColor,
+              selectedSize: item.selectedSize,
+            });
           }
+        }
+        const currentFp = computeRequestFingerprint(
+          uid,
+          Array.from(pMap.entries()).map(([pid, it]) => ({
+            productId: pid,
+            quantity: it.quantity,
+            selectedColor: it.selectedColor,
+            selectedSize: it.selectedSize,
+          })),
+          normalizedContact,
+          paymentMethod
+        );
+
+        if (existing.requestFingerprint && existing.requestFingerprint !== currentFp) {
+          throw new HttpsError(
+            "already-exists",
+            "This idempotency key was previously used with different order details. Please supply a fresh idempotency key."
+          );
         }
       }
 
-      // Valid retry -> return cached response safely
+      // Exact matching request retry (cart cleared upon first successful submission)
       return existing.response as CreateOrderResponse;
     }
 
@@ -414,7 +368,7 @@ export async function executeCreateOrder(
         selectedColor: it.selectedColor,
         selectedSize: it.selectedSize,
       })),
-      normalizedAddress,
+      normalizedContact,
       paymentMethod
     );
 
@@ -507,13 +461,6 @@ export async function executeCreateOrder(
         );
       }
 
-      if (pData.prepaidOnly === true && paymentMethod === "cod") {
-        throw new HttpsError(
-          "failed-precondition",
-          `Product "${pData.name || pid}" is marked as prepaid only and cannot be ordered with Cash on Delivery.`
-        );
-      }
-
       // Safe integer line total and overflow protection
       const lineTotal = price * cartItem.quantity;
       if (!Number.isSafeInteger(lineTotal) || lineTotal <= 0) {
@@ -554,19 +501,15 @@ export async function executeCreateOrder(
       throw new HttpsError("failed-precondition", "Order subtotal must be greater than zero.");
     }
 
-    // Shipping fee rule: Free shipping on subtotal >= ₹999 (99,900 paise), else ₹49 (4,900 paise)
-    const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD_PAISE ? 0 : STANDARD_SHIPPING_FEE_PAISE;
-    // Cash on Delivery fee: ₹49 (4,900 paise)
-    const codFee = COD_FEE_PAISE;
-
-    const total = subtotal + shippingFee + codFee;
-    if (!Number.isSafeInteger(total) || total <= 0) {
-      throw new HttpsError("internal", "Order total calculation resulted in an arithmetic overflow.");
-    }
+    // Click-and-Collect: No shipping fee, no COD fee. Customer collects from dispensary.
+    const shippingFee = 0;
+    const codFee = 0;
+    const total = subtotal;
 
     const orderRef = db.collection("orders").doc();
     const orderId = orderRef.id;
     const now = FieldValue.serverTimestamp();
+    const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
 
     const orderRecord = {
       id: orderId,
@@ -576,11 +519,20 @@ export async function executeCreateOrder(
       shippingFee,
       codFee,
       total,
-      shippingAddress: normalizedAddress,
-      orderStatus: "confirmed",
-      paymentStatus: "cod_pending",
-      paymentMethod: "cod",
+      fulfillmentMethod: "click_and_collect",
+      pickupContact: normalizedContact,
+      pickupLocation: DEFAULT_PICKUP_LOCATION,
+      orderStatus: "placed",
+      paymentStatus: "unpaid",
+      paymentMethod: "click_and_collect",
       idempotencyKey,
+      statusHistory: [
+        {
+          status: "placed",
+          timestamp: new Date().toISOString(),
+          note: "Order placed for Click-and-Collect. Awaiting dispensary confirmation.",
+        },
+      ],
       createdAt: now,
       updatedAt: now,
     };
@@ -591,10 +543,11 @@ export async function executeCreateOrder(
       shippingFee,
       codFee,
       total,
-      orderStatus: "confirmed",
-      paymentStatus: "cod_pending",
-      paymentMethod: "cod",
+      orderStatus: "placed",
+      paymentStatus: "unpaid",
+      paymentMethod: "click_and_collect",
       itemCount: orderItems.reduce((sum, it) => sum + it.quantity, 0),
+      pickupLocation: DEFAULT_PICKUP_LOCATION,
       createdAt: new Date().toISOString(),
     };
 
@@ -613,13 +566,13 @@ export async function executeCreateOrder(
       });
     }
 
-    // 3.3 Save idempotency record with request fingerprint, address, and response cache
+    // 3.3 Save idempotency record with request fingerprint, contact, and response cache
     transaction.set(idempotencyRef, {
       uid,
       idempotencyKey,
       orderId,
-      shippingAddress: normalizedAddress,
-      paymentMethod,
+      pickupContact: normalizedContact,
+      paymentMethod: "click_and_collect",
       requestFingerprint: currentFingerprint,
       response: responsePayload,
       createdAt: now,

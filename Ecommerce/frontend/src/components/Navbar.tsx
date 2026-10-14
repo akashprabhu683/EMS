@@ -74,11 +74,11 @@ export function Navbar() {
   };
 
   const NAV_LINKS = [
-    { to: '/',                              label: 'Home' },
-    { to: '/products',                      label: 'All Products' },
-    { to: '/products?category=electronics', label: 'Electronics' },
-    { to: '/products?category=fashion',     label: 'Fashion' },
-    { to: '/products?category=home',        label: 'Home & Living' },
+    { to: '/',                                    label: 'Home' },
+    { to: '/products',                            label: 'All Products' },
+    { to: '/products?search=Ayurvedic',           label: 'Ayurvedic' },
+    { to: '/products?search=Herbal+Extracts',     label: 'Herbal Extracts' },
+    { to: '/products?search=Vitality',            label: 'Vitality' },
   ];
 
   return (
@@ -98,11 +98,11 @@ export function Navbar() {
             id="nav-logo"
             className="flex items-center gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
           >
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-blue-700 transition-colors">
-              N
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-700 transition-colors">
+              🌿
             </div>
             <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
-              Nova<span className="text-blue-600">Shop</span>
+              EMS<span className="text-emerald-600"> Dispensary</span>
             </span>
           </Link>
 
@@ -164,13 +164,13 @@ export function Navbar() {
             <button
               id="nav-cart-btn"
               onClick={openCart}
-              className="relative flex items-center gap-1.5 sm:gap-2 p-2 sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="relative flex items-center gap-1.5 sm:gap-2 p-2 sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               aria-label={`Shopping Cart with ${totalItems} items`}
             >
               <div className="relative">
                 <ShoppingBag size={19} className="text-slate-700" />
                 {totalItems > 0 && (
-                  <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold px-1 shadow-2xs">
+                  <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold px-1 shadow-2xs">
                     {totalItems > 99 ? '99+' : totalItems}
                   </span>
                 )}
@@ -197,7 +197,7 @@ export function Navbar() {
                 <Link
                   to="/login"
                   id="nav-login-btn"
-                  className="btn-primary py-2 px-2.5 sm:px-3.5 text-xs rounded-xl shadow-2xs flex items-center gap-1.5"
+                  className="inline-flex items-center gap-1.5 py-2 px-2.5 sm:px-3.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-2xs transition-colors"
                   aria-label="Sign in"
                 >
                   <User size={15} />
@@ -341,24 +341,24 @@ export function Navbar() {
                 <span className="text-slate-400 text-[11px]">Popular:</span>
                 <button
                   type="button"
-                  onClick={() => handleSuggestionClick('Headphones')}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-blue-400 hover:text-blue-600 cursor-pointer shadow-2xs transition-colors"
+                  onClick={() => handleSuggestionClick('Ashwagandha')}
+                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 cursor-pointer shadow-2xs transition-colors"
                 >
-                  Headphones
+                  Ashwagandha
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSuggestionClick('Watch')}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-blue-400 hover:text-blue-600 cursor-pointer shadow-2xs transition-colors"
+                  onClick={() => handleSuggestionClick('Triphala')}
+                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 cursor-pointer shadow-2xs transition-colors"
                 >
-                  Watches
+                  Triphala
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSuggestionClick('Jacket')}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-blue-400 hover:text-blue-600 cursor-pointer shadow-2xs transition-colors"
+                  onClick={() => handleSuggestionClick('Tulsi')}
+                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 cursor-pointer shadow-2xs transition-colors"
                 >
-                  Jackets
+                  Tulsi
                 </button>
               </div>
             </div>

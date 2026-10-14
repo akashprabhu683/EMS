@@ -137,11 +137,18 @@ adminRouter.get('/orders', requireAdminAuth, async (req: AdminAuthenticatedReque
  */
 adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
   const { orderId } = req.params;
-  const { status, paymentStatus } = req.body;
+  const { status, paymentStatus, note } = req.body;
+  const adminEmail = req.adminUser?.email || 'admin';
 
-  const validStatuses = ['confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
-  if (!status || !validStatuses.includes(status)) {
+  const validStatuses = ['placed', 'accepted', 'preparing', 'ready_for_pickup', 'collected', 'cancelled', 'confirmed'];
+  if (status && !validStatuses.includes(status)) {
     res.status(400).json({ error: `Invalid order status. Allowed: ${validStatuses.join(', ')}` });
+    return;
+  }
+
+  const validPaymentStatuses = ['unpaid', 'paid', 'refunded'];
+  if (paymentStatus && !validPaymentStatuses.includes(paymentStatus)) {
+    res.status(400).json({ error: `Invalid payment status. Allowed: ${validPaymentStatuses.join(', ')}` });
     return;
   }
 
@@ -154,17 +161,35 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
       return;
     }
 
+    const currentOrder = snap.data() || {};
     const updatePayload: Record<string, any> = {
-      orderStatus: status,
       updatedAt: FieldValue.serverTimestamp(),
     };
 
-    if (paymentStatus) {
-      updatePayload.paymentStatus = paymentStatus;
+    if (status) {
+      updatePayload.orderStatus = status;
     }
 
+    if (paymentStatus) {
+      updatePayload.paymentStatus = paymentStatus;
+      if (paymentStatus === 'paid') {
+        updatePayload.paidAt = FieldValue.serverTimestamp();
+        updatePayload.paidConfirmedBy = adminEmail;
+      }
+    }
+
+    const historyEntry = {
+      status: status || currentOrder.orderStatus || 'updated',
+      paymentStatus: paymentStatus || currentOrder.paymentStatus || 'unpaid',
+      updatedBy: adminEmail,
+      timestamp: new Date().toISOString(),
+      note: note || `Status updated by ${adminEmail}`,
+    };
+
+    updatePayload.statusHistory = FieldValue.arrayUnion(historyEntry);
+
     await orderRef.update(updatePayload);
-    res.json({ success: true, orderId, updatedStatus: status });
+    res.json({ success: true, orderId, updatedStatus: status, updatedPaymentStatus: paymentStatus });
   } catch (err: any) {
     console.error('Failed to update order status:', err);
     res.status(500).json({ error: 'Failed to update order status.' });

@@ -14,6 +14,7 @@ export interface Product {
   featured?: boolean;
   isNew?: boolean;
   discount?: number;
+  // Optional: kept for backward compat with existing data files
   colors?: string[];
   sizes?: string[];
   prepaidOnly?: boolean;
@@ -22,6 +23,7 @@ export interface Product {
 export interface CartItem {
   product: Product;
   quantity: number;
+  // Optional: kept for backward compat with cartService and CartDrawer
   selectedColor?: string;
   selectedSize?: string;
 }
@@ -63,11 +65,25 @@ export interface FilterState {
   search: string;
 }
 
-export type OrderStatus = 'processing' | 'shipped' | 'delivered' | 'cancelled';
+// Click-and-Collect order statuses (new statuses + legacy compat)
+export type OrderStatus =
+  | 'placed'
+  | 'accepted'
+  | 'preparing'
+  | 'ready_for_pickup'
+  | 'collected'
+  | 'cancelled'
+  // Legacy statuses (kept for backward compat with existing mock data)
+  | 'processing'
+  | 'shipped'
+  | 'delivered';
+
+export type PaymentStatus = 'unpaid' | 'paid' | 'refunded';
 
 export interface OrderItem {
   product: Product;
   quantity: number;
+  // Optional: kept for backward compat
   selectedColor?: string;
   selectedSize?: string;
   price: number;
@@ -80,17 +96,29 @@ export interface OrderTimelineStep {
   completed: boolean;
 }
 
+export interface PickupContact {
+  fullName: string;
+  phone: string;
+  notes?: string;
+}
+
 export interface Order {
   id: string;
   date: string;
   status: OrderStatus;
   statusLabel: string;
+  paymentStatus?: PaymentStatus;
   items: OrderItem[];
   subtotal: number;
-  shipping: number;
-  tax: number;
   total: number;
-  shippingAddress: {
+  // Click-and-Collect fields
+  pickupContact?: PickupContact;
+  pickupLocation?: string;
+  timeline: OrderTimelineStep[];
+  // Legacy shipping fields (kept for backward compat with existing pages/data)
+  shipping?: number;
+  tax?: number;
+  shippingAddress?: {
     fullName: string;
     street: string;
     city: string;
@@ -100,19 +128,26 @@ export interface Order {
     phone?: string;
     email?: string;
   };
-  paymentMethod: {
+  paymentMethod?: {
     brand?: string;
     last4?: string;
     type?: string;
     demoNote?: string;
   };
-  trackingNumber: string;
-  courier: string;
-  estimatedDelivery: string;
-  timeline: OrderTimelineStep[];
+  trackingNumber?: string;
+  courier?: string;
+  estimatedDelivery?: string;
 }
 
-export type PaymentMethodId = 'upi' | 'card' | 'netbanking' | 'cod';
+// Checkout types for Click-and-Collect
+export interface CheckoutPickupInfo {
+  fullName: string;
+  phone: string;
+  notes: string;
+}
+
+// Legacy checkout payment type (kept for backward compat)
+export type PaymentMethodId = 'upi' | 'card' | 'netbanking' | 'cod' | 'click_and_collect';
 
 export interface CheckoutPaymentInfo {
   method: PaymentMethodId;
@@ -125,5 +160,3 @@ export interface CheckoutPaymentInfo {
   totalWithCod: number;
   confirmationStatus: 'confirmed' | 'demo_confirmed' | string;
 }
-
-

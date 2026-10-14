@@ -9,6 +9,7 @@ import {
   X,
   ShieldCheck,
   ExternalLink,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import clsx from 'clsx';
@@ -25,7 +26,8 @@ export function Layout() {
 
   const navItems = [
     { label: 'Dashboard', to: '/', icon: LayoutDashboard },
-    { label: 'Products', to: '/products', icon: Package },
+    { label: 'Orders',    to: '/orders', icon: ShoppingCart },
+    { label: 'Products',  to: '/products', icon: Package },
     { label: 'Categories', to: '/categories', icon: Layers },
   ];
 

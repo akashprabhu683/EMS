@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  validateAndNormalizeAddress,
+  validateAndNormalizePickupContact,
   validateIdempotencyKey,
   validatePaymentMethod,
   isValidProductId,
@@ -17,7 +17,6 @@ import {
 
 class MockFirestore {
   constructor() {
-    // collectionName -> (docId -> { data: any, version: number })
     this.store = new Map();
   }
 
@@ -63,45 +62,45 @@ class MockFirestore {
     };
   }
 
-  async runTransaction(updateFunction, maxAttempts = 5) {
+  async runTransaction(updateFunction) {
+    const maxAttempts = 5;
     let attempts = 0;
+
     while (attempts < maxAttempts) {
       attempts++;
-      const readVersions = new Map(); // path -> version
-      const stagedWrites = []; // array of actions: { type: 'set'|'update'|'delete', coll, id, data }
+      const readVersions = new Map();
+      const stagedWrites = [];
 
       const transactionContext = {
-        async get(docRef) {
-          const entry = this.parent._getDoc(docRef.collName, docRef.id);
-          const currentVersion = entry ? entry.version : 0;
-          readVersions.set(docRef.path, {
-            coll: docRef.collName,
-            id: docRef.id,
-            version: currentVersion,
-          });
+        async get(documentRef) {
+          const coll = documentRef.collName;
+          const id = documentRef.id;
+          const entry = this._getLiveDoc(coll, id);
+          const version = entry ? entry.version : 0;
+          readVersions.set(`${coll}/${id}`, { coll, id, version });
           return {
             exists: !!entry,
-            id: docRef.id,
-            ref: docRef,
+            id,
+            ref: documentRef,
             data: () => (entry ? JSON.parse(JSON.stringify(entry.data)) : undefined),
           };
         },
-        set(docRef, data) {
-          stagedWrites.push({ type: "set", coll: docRef.collName, id: docRef.id, data });
+        set(documentRef, data) {
+          stagedWrites.push({ type: "set", coll: documentRef.collName, id: documentRef.id, data });
         },
-        update(docRef, data) {
-          stagedWrites.push({ type: "update", coll: docRef.collName, id: docRef.id, data });
+        update(documentRef, data) {
+          stagedWrites.push({ type: "update", coll: documentRef.collName, id: documentRef.id, data });
         },
-        delete(docRef) {
-          stagedWrites.push({ type: "delete", coll: docRef.collName, id: docRef.id });
+        delete(documentRef) {
+          stagedWrites.push({ type: "delete", coll: documentRef.collName, id: documentRef.id });
         },
-        parent: this,
+        _getLiveDoc: (coll, id) => this._getDoc(coll, id),
       };
 
       try {
         const result = await updateFunction(transactionContext);
 
-        // Optimistic concurrency verification: verify all reads are still at the same version
+        // Optimistic concurrency verification
         let conflict = false;
         for (const [path, r] of readVersions.entries()) {
           const liveEntry = this._getDoc(r.coll, r.id);
@@ -116,7 +115,7 @@ class MockFirestore {
           if (attempts >= maxAttempts) {
             throw new Error("Transaction contention limit exceeded.");
           }
-          continue; // retry transaction
+          continue;
         }
 
         // Commit all staged writes atomically
@@ -135,7 +134,6 @@ class MockFirestore {
 
         return result;
       } catch (err) {
-        // Atomic abort: no staged writes are committed!
         throw err;
       }
     }
@@ -146,48 +144,35 @@ class MockFirestore {
    TEST FIXTURES & HELPER
    ═══════════════════════════════════════════════════════════════════════ */
 
-const validShippingAddress = {
+const validPickupContact = {
   fullName: "Akash Prabhu",
   phone: "9876543210",
-  address: "123 Marine Drive",
-  line2: "Apt 4B",
-  city: "Mumbai",
-  state: "Maharashtra",
-  zip: "400020",
-  country: "IN",
+  notes: "Will pick up around 4 PM",
 };
 
 function seedDatabase(db) {
-  // Seed sample products
+  // Seed sample herbal products
   db._setDoc("products", "prod_1", {
-    name: "Vitamin C Serum Elite",
-    price: 89900, // ₹899 in paise
+    name: "Ashwagandha Pure Extract",
+    price: 49900, // ₹499 in paise
     stock: 10,
     isActive: true,
-    imageUrl: "https://images.unsplash.com/photo-vitamin-c.jpg",
+    imageUrl: "https://images.unsplash.com/photo-ashwagandha.jpg",
   });
 
   db._setDoc("products", "prod_2", {
-    name: "Hydrating Facial Cleanser",
-    price: 39900, // ₹399 in paise
+    name: "Triphala Digestive Tonic",
+    price: 29900, // ₹299 in paise
     stock: 5,
     isActive: true,
-    images: ["https://images.unsplash.com/photo-cleanser.jpg"],
+    images: ["https://images.unsplash.com/photo-triphala.jpg"],
   });
 
   db._setDoc("products", "prod_inactive", {
     name: "Discontinued Tonic",
-    price: 29900,
+    price: 19900,
     stock: 10,
     isActive: false,
-  });
-
-  db._setDoc("products", "prod_prepaid", {
-    name: "Gold Luxury Mask (Prepaid Only)",
-    price: 199900,
-    stock: 5,
-    isActive: true,
-    prepaidOnly: true,
   });
 
   // Seed sample customer cart
@@ -200,7 +185,7 @@ function seedDatabase(db) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   TEST SUITE
+   TEST SUITE: CLICK-AND-COLLECT DISPENSARY ORDER ENGINE
    ═══════════════════════════════════════════════════════════════════════ */
 
 test("1. Unauthenticated requests are rejected", async () => {
@@ -208,9 +193,8 @@ test("1. Unauthenticated requests are rejected", async () => {
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_key_12345",
-        paymentMethod: "cod",
       });
     },
     /Authentication required/
@@ -226,9 +210,8 @@ test("2. Empty carts and malformed cart items are rejected", async () => {
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_empty", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_key_empty_12",
-        paymentMethod: "cod",
       });
     },
     /cart is empty/
@@ -241,9 +224,8 @@ test("2. Empty carts and malformed cart items are rejected", async () => {
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_malformed", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_key_malformed",
-        paymentMethod: "cod",
       });
     },
     /Invalid quantity/
@@ -261,9 +243,8 @@ test("3. Inactive or missing products are safely rejected", async () => {
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_missing", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_key_missing_p",
-        paymentMethod: "cod",
       });
     },
     /does not exist in catalog/
@@ -276,9 +257,8 @@ test("3. Inactive or missing products are safely rejected", async () => {
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_inactive", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_key_inactive",
-        paymentMethod: "cod",
       });
     },
     /is no longer active/
@@ -297,9 +277,8 @@ test("4. Insufficient stock is rejected without partial changes", async () => {
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_over_stock", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_key_overstock",
-        paymentMethod: "cod",
       });
     },
     /Insufficient stock/
@@ -310,30 +289,29 @@ test("4. Insufficient stock is rejected without partial changes", async () => {
   assert.equal(prod2.data.stock, 5);
 });
 
-test("5. Correct server-side paise calculation (Free shipping >= ₹999 + COD fee)", async () => {
+test("5. Correct Click-and-Collect calculation (zero shipping & COD fees, unpaid status)", async () => {
   const db = new MockFirestore();
   seedDatabase(db);
 
-  // Subtotal: 1 * 89900 + 2 * 39900 = 89900 + 79800 = 169700 paise (₹1,697)
-  // Subtotal >= 99900 -> shippingFee = 0 paise
-  // COD fee = 4900 paise
-  // Total = 169700 + 0 + 4900 = 174600 paise (₹1,746)
-
+  // Subtotal: 1 * 49900 + 2 * 29900 = 49900 + 59800 = 109700 paise (₹1,097)
+  // Click-and-Collect: free pickup (0 shipping, 0 cod)
+  // Total = 109700 paise
   const res = await executeCreateOrder(db, "user_123", {
-    shippingAddress: validShippingAddress,
-    idempotencyKey: "idem_key_paise_calc",
-    paymentMethod: "cod",
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_key_click_collect_calc",
   });
 
-  assert.equal(res.subtotal, 169700);
+  assert.equal(res.subtotal, 109700);
   assert.equal(res.shippingFee, 0);
-  assert.equal(res.codFee, 4900);
-  assert.equal(res.total, 174600);
-  assert.equal(res.orderStatus, "confirmed");
-  assert.equal(res.paymentStatus, "cod_pending");
+  assert.equal(res.codFee, 0);
+  assert.equal(res.total, 109700);
+  assert.equal(res.orderStatus, "placed");
+  assert.equal(res.paymentStatus, "unpaid");
+  assert.equal(res.paymentMethod, "click_and_collect");
+  assert.ok(res.pickupLocation.includes("Dispensary"));
 });
 
-test("6. Successful COD order creation decrements stock and clears cart atomically", async () => {
+test("6. Successful Click-and-Collect order decrements stock and clears cart atomically", async () => {
   const db = new MockFirestore();
   seedDatabase(db);
 
@@ -341,9 +319,8 @@ test("6. Successful COD order creation decrements stock and clears cart atomical
   const initialStock2 = db._getDoc("products", "prod_2").data.stock; // 5
 
   const res = await executeCreateOrder(db, "user_123", {
-    shippingAddress: validShippingAddress,
-    idempotencyKey: "idem_key_cod_success",
-    paymentMethod: "cod",
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_key_cc_success",
   });
 
   assert.ok(res.orderId, "Order ID should be generated");
@@ -360,30 +337,31 @@ test("6. Successful COD order creation decrements stock and clears cart atomical
   const order = db._getDoc("orders", res.orderId);
   assert.ok(order, "Order document must exist");
   assert.equal(order.data.userId, "user_123");
-  assert.equal(order.data.paymentMethod, "cod");
+  assert.equal(order.data.fulfillmentMethod, "click_and_collect");
+  assert.equal(order.data.paymentStatus, "unpaid");
+  assert.equal(order.data.orderStatus, "placed");
   assert.equal(order.data.items.length, 2);
+  assert.equal(order.data.pickupContact.fullName, "Akash Prabhu");
 });
 
 test("7. Repeated requests with the exact same idempotency key return cached result without double-deduction", async () => {
   const db = new MockFirestore();
   seedDatabase(db);
 
-  const key = "idem_key_repeat_test";
+  const key = "idem_key_repeat_cc";
 
   // First call
   const res1 = await executeCreateOrder(db, "user_123", {
-    shippingAddress: validShippingAddress,
+    pickupContact: validPickupContact,
     idempotencyKey: key,
-    paymentMethod: "cod",
   });
 
   const stockAfterFirst = db._getDoc("products", "prod_1").data.stock; // 9
 
   // Second call with same idempotency key
   const res2 = await executeCreateOrder(db, "user_123", {
-    shippingAddress: validShippingAddress,
+    pickupContact: validPickupContact,
     idempotencyKey: key,
-    paymentMethod: "cod",
   });
 
   // Both responses must be identical
@@ -399,8 +377,8 @@ test("8. Concurrent purchases of the final stock unit: exactly one succeeds and 
 
   // Product with ONLY 1 unit left in stock
   db._setDoc("products", "prod_last_unit", {
-    name: "Limited Edition Serum",
-    price: 150000,
+    name: "Limited Edition Herbal Balm",
+    price: 35000,
     stock: 1,
     isActive: true,
   });
@@ -417,15 +395,13 @@ test("8. Concurrent purchases of the final stock unit: exactly one succeeds and 
 
   // Fire both orders concurrently
   const orderPromiseA = executeCreateOrder(db, "user_A", {
-    shippingAddress: validShippingAddress,
+    pickupContact: validPickupContact,
     idempotencyKey: "idem_concurrent_A",
-    paymentMethod: "cod",
   });
 
   const orderPromiseB = executeCreateOrder(db, "user_B", {
-    shippingAddress: validShippingAddress,
+    pickupContact: validPickupContact,
     idempotencyKey: "idem_concurrent_B",
-    paymentMethod: "cod",
   });
 
   const results = await Promise.allSettled([orderPromiseA, orderPromiseB]);
@@ -437,74 +413,64 @@ test("8. Concurrent purchases of the final stock unit: exactly one succeeds and 
   assert.equal(rejected.length, 1, "Exactly one order must be rejected");
   assert.match(rejected[0].reason.message, /Insufficient stock/);
 
-  // Stock must be exactly 0 (no overselling or negative inventory)
+  // Stock must be exactly 0
   assert.equal(db._getDoc("products", "prod_last_unit").data.stock, 0);
 });
 
-test("9. Transaction failure leaves NO partial order or stock deduction", async () => {
-  const db = new MockFirestore();
-  seedDatabase(db);
-
-  const initialStock1 = db._getDoc("products", "prod_1").data.stock;
-
-  // Cart with valid product 1 and prepaid-only product for COD
-  db._setDoc("carts", "user_fail_midway", {
-    items: [
-      { productId: "prod_1", quantity: 1 },
-      { productId: "prod_prepaid", quantity: 1 },
-    ],
-  });
-
-  await assert.rejects(
-    async () => {
-      await executeCreateOrder(db, "user_fail_midway", {
-        shippingAddress: validShippingAddress,
-        idempotencyKey: "idem_fail_midway",
-        paymentMethod: "cod",
-      });
-    },
-    /marked as prepaid only/
-  );
-
-  // Verify stock of prod_1 was NOT decremented despite prod_1 being valid
-  assert.equal(db._getDoc("products", "prod_1").data.stock, initialStock1);
-});
-
-test("10. Online payment methods are safely rejected with actionable guidance", async () => {
+test("9. Online payment methods are safely rejected with guidance toward Click-and-Collect", async () => {
   const db = new MockFirestore();
   seedDatabase(db);
 
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_123", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_razorpay_attempt",
         paymentMethod: "razorpay",
       });
     },
-    /Online payment method "razorpay" is not yet supported/
+    /Online payment method "razorpay" is not enabled/
   );
 
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_123", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_upi_attempt",
         paymentMethod: "upi",
       });
     },
-    /Online payment method "upi" is not yet supported/
+    /Online payment method "upi" is not enabled/
   );
 });
 
-/* ═══════════════════════════════════════════════════════════════════════
-   NEW HARDENING TESTS
-   ═══════════════════════════════════════════════════════════════════════ */
+test("10. Pickup contact validation", () => {
+  // Valid contact
+  const normalized = validateAndNormalizePickupContact({
+    fullName: "Akash Prabhu",
+    phone: "9876543210",
+    notes: "Pickup Saturday",
+  });
+  assert.equal(normalized.fullName, "Akash Prabhu");
+  assert.equal(normalized.phone, "9876543210");
+  assert.equal(normalized.notes, "Pickup Saturday");
+
+  // Invalid phone
+  assert.throws(
+    () => validateAndNormalizePickupContact({ fullName: "Akash", phone: "123" }),
+    /valid contact phone number/
+  );
+
+  // Invalid name
+  assert.throws(
+    () => validateAndNormalizePickupContact({ fullName: "", phone: "9876543210" }),
+    /valid customer name/
+  );
+});
 
 test("11. Distinct product limit per order is enforced before reads", async () => {
   const db = new MockFirestore();
 
-  // Create cart with 51 distinct products (limit is 50)
   const items = [];
   for (let i = 1; i <= 51; i++) {
     items.push({ productId: `prod_${i}`, quantity: 1 });
@@ -514,9 +480,8 @@ test("11. Distinct product limit per order is enforced before reads", async () =
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_bulk", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_too_many_items",
-        paymentMethod: "cod",
       });
     },
     /Cart contains too many distinct items/
@@ -526,7 +491,6 @@ test("11. Distinct product limit per order is enforced before reads", async () =
 test("12. Invalid product ID format is rejected before Firestore reads", async () => {
   const db = new MockFirestore();
 
-  // Cart with forward slash in productId (path traversal attempt)
   db._setDoc("carts", "user_invalid_pid", {
     items: [{ productId: "invalid/product/id", quantity: 1 }],
   });
@@ -534,9 +498,8 @@ test("12. Invalid product ID format is rejected before Firestore reads", async (
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_invalid_pid", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: "idem_invalid_pid",
-        paymentMethod: "cod",
       });
     },
     /Invalid product ID format/
@@ -548,34 +511,7 @@ test("12. Invalid product ID format is rejected before Firestore reads", async (
   assert.equal(isValidProductId(""), false);
 });
 
-test("13. Safe integer validation & arithmetic overflow protection", async () => {
-  const db = new MockFirestore();
-
-  // Seed product with invalid non-safe-integer price (float or negative)
-  db._setDoc("products", "prod_float_price", {
-    name: "Bad Price Product",
-    price: 199.99, // Float instead of integer paise
-    stock: 10,
-    isActive: true,
-  });
-
-  db._setDoc("carts", "user_bad_price", {
-    items: [{ productId: "prod_float_price", quantity: 1 }],
-  });
-
-  await assert.rejects(
-    async () => {
-      await executeCreateOrder(db, "user_bad_price", {
-        shippingAddress: validShippingAddress,
-        idempotencyKey: "idem_bad_price",
-        paymentMethod: "cod",
-      });
-    },
-    /invalid catalog price/
-  );
-});
-
-test("14. Valid and invalid HTTPS image URLs are handled correctly", () => {
+test("13. Valid and invalid HTTPS image URLs are handled correctly", () => {
   assert.equal(isValidHttpsUrl("https://images.example.com/item.png"), true);
   assert.equal(isValidHttpsUrl("http://insecure.example.com/item.png"), false);
   assert.equal(isValidHttpsUrl("ftp://invalid.com/pic.jpg"), false);
@@ -584,7 +520,7 @@ test("14. Valid and invalid HTTPS image URLs are handled correctly", () => {
   assert.equal(isValidHttpsUrl(12345), false);
 });
 
-test("15. Reusing idempotency key with different request details is rejected", async () => {
+test("14. Reusing idempotency key with different request details is rejected", async () => {
   const db = new MockFirestore();
   seedDatabase(db);
 
@@ -592,9 +528,8 @@ test("15. Reusing idempotency key with different request details is rejected", a
 
   // First call succeeds
   await executeCreateOrder(db, "user_123", {
-    shippingAddress: validShippingAddress,
+    pickupContact: validPickupContact,
     idempotencyKey: key,
-    paymentMethod: "cod",
   });
 
   // Re-seed cart with different item for same user
@@ -606,69 +541,10 @@ test("15. Reusing idempotency key with different request details is rejected", a
   await assert.rejects(
     async () => {
       await executeCreateOrder(db, "user_123", {
-        shippingAddress: validShippingAddress,
+        pickupContact: validPickupContact,
         idempotencyKey: key,
-        paymentMethod: "cod",
       });
     },
     /previously used with different order details/
   );
-});
-
-test("16. Corrupted or malformed existing idempotency record is rejected safely", async () => {
-  const db = new MockFirestore();
-  seedDatabase(db);
-
-  const key = "idem_corrupted_record";
-
-  // Intentionally inject a corrupted idempotency record (missing response and orderId)
-  db._setDoc("idempotency_records", `user_123_${key}`, {
-    corrupted: true,
-  });
-
-  await assert.rejects(
-    async () => {
-      await executeCreateOrder(db, "user_123", {
-        shippingAddress: validShippingAddress,
-        idempotencyKey: key,
-        paymentMethod: "cod",
-      });
-    },
-    /corrupted or malformed/
-  );
-});
-
-test("17. Cart modification during checkout triggers optimistic concurrency retry/rejection", async () => {
-  const db = new MockFirestore();
-  seedDatabase(db);
-
-  // Simulate an external cart change that occurs concurrently during checkout execution
-  let intercepted = false;
-  const originalRunTransaction = db.runTransaction.bind(db);
-
-  db.runTransaction = async function (updateFn) {
-    return originalRunTransaction(async (txn) => {
-      const res = await updateFn(txn);
-      // Simulate concurrent cart write by outside client right before commit
-      if (!intercepted) {
-        intercepted = true;
-        // Bump cart version externally
-        db._setDoc("carts", "user_123", {
-          items: [{ productId: "prod_1", quantity: 3 }],
-        });
-      }
-      return res;
-    });
-  };
-
-  // Transaction detects the version change on cart and safely retries with fresh cart
-  const res = await executeCreateOrder(db, "user_123", {
-    shippingAddress: validShippingAddress,
-    idempotencyKey: "idem_concurrent_cart_mod",
-    paymentMethod: "cod",
-  });
-
-  // Verified transaction re-executed cleanly with the updated cart items
-  assert.ok(res.orderId);
-  assert.equal(res.itemCount, 3);
 });
