@@ -101,9 +101,10 @@ export interface Order {
     email?: string;
   };
   paymentMethod: {
-    brand: string;
-    last4: string;
-    demoNote: string;
+    brand?: string;
+    last4?: string;
+    type?: string;
+    demoNote?: string;
   };
   trackingNumber: string;
   courier: string;

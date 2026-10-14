@@ -14,7 +14,6 @@ import {
   Check,
   Package,
 } from 'lucide-react';
-import { PRODUCTS } from '../data/products';
 import { useCart } from '../context/CartContext';
 import { ProductCard } from '../components/ProductCard';
 import clsx from 'clsx';
@@ -25,7 +24,7 @@ export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addItem, openCart } = useCart();
-  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
 
   useEffect(() => {
@@ -33,7 +32,7 @@ export function ProductDetailPage() {
 
     getActiveProducts()
       .then(remoteProducts => {
-        if (active && remoteProducts.length > 0) {
+        if (active) {
           setProducts(remoteProducts);
         }
       })

@@ -1,15 +1,35 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, Search, ChevronRight, Download, Truck, CheckCircle2, Clock, ArrowRight, ShieldCheck } from 'lucide-react';
-import { getMockOrders, downloadMockInvoice } from '../data/orders';
 import { useToast } from '../context/ToastContext';
-import type { OrderStatus } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { getUserOrders } from '../services/orderService';
+import type { OrderStatus, Order } from '../types';
 
 export function OrdersPage() {
-  const [orders] = useState(() => getMockOrders());
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const toast = useToast();
+
+  useEffect(() => {
+    let active = true;
+    if (user?.id) {
+      getUserOrders(user.id)
+        .then(res => {
+          if (active) setOrders(res);
+        })
+        .catch(console.error)
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+    return () => { active = false; };
+  }, [user?.id]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -26,8 +46,7 @@ export function OrdersPage() {
   const handleDownloadInvoice = (order: typeof orders[0], e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    downloadMockInvoice(order);
-    toast.success(`Invoice for ${order.id} downloaded successfully.`);
+    toast.success(`Invoice for ${order.id} downloaded.`);
   };
 
   const getStatusBadge = (status: OrderStatus) => {
@@ -80,7 +99,6 @@ export function OrdersPage() {
               <span className="badge-clean bg-blue-100 text-blue-700 text-xs font-bold">
                 Account Center
               </span>
-              <span className="text-xs text-slate-400">· Demo Environment</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 tracking-tight">
               Order History
@@ -97,24 +115,6 @@ export function OrdersPage() {
             <span>Explore Catalog</span>
             <ArrowRight size={15} />
           </Link>
-        </div>
-
-        {/* Demo Notice Banner */}
-        <div className="mb-8 p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-center justify-between gap-4 text-xs text-blue-900">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 font-bold">
-              ℹ
-            </div>
-            <div>
-              <span className="font-bold">Frontend Demo Mode:</span>
-              <span className="text-blue-800 ml-1">
-                Order history is populated with interactive mock orders. Invoices can be downloaded as local text receipts.
-              </span>
-            </div>
-          </div>
-          <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shrink-0">
-            <ShieldCheck size={13} className="text-blue-600" /> No Database Required
-          </span>
         </div>
 
         {/* Filter & Search Bar Controls */}

@@ -1,14 +1,14 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { SlidersHorizontal, X, ChevronDown, Grid3X3, List, Search, Star, ArrowRight, Package } from 'lucide-react';
-import { PRODUCTS, CATEGORIES } from '../data/products';
 import { ProductCard } from '../components/ProductCard';
-import type { FilterState, SortOption } from '../types';
+import type { FilterState, SortOption, Category, Product } from '../types';
 import clsx from 'clsx';
 import { useCart } from '../context/CartContext';
 import { getActiveProducts } from '../services/productService';
+import { getActiveCategories } from '../services/categoryService';
 
-const PRICE_MAX = 700;
+const PRICE_MAX = 50000;
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'featured', label: 'Featured Picks' },
@@ -24,20 +24,27 @@ export function ProductsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const { addItem, openCart } = useCart();
 
-  const [products, setProducts] = useState(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
 
-    getActiveProducts()
-      .then(remoteProducts => {
-        if (active && remoteProducts.length > 0) {
+    Promise.all([getActiveProducts(), getActiveCategories()])
+      .then(([remoteProducts, remoteCategories]) => {
+        if (active) {
           setProducts(remoteProducts);
+          // calculate counts from remote products
+          const catsWithCounts = remoteCategories.map(cat => ({
+            ...cat,
+            count: remoteProducts.filter(p => p.category === cat.id || p.category === cat.name).length
+          }));
+          setCategories(catsWithCounts);
         }
       })
       .catch(error => {
-        console.error('Failed to load Firestore products:', error);
+        console.error('Failed to load Firestore products or categories:', error);
       })
       .finally(() => {
         if (active) setProductsLoading(false);
@@ -117,7 +124,7 @@ export function ProductsPage() {
     (filters.priceRange[1] < PRICE_MAX ? 1 : 0);
 
   const activeCategoryName = filters.categories.length === 1
-    ? CATEGORIES.find(c => c.id === filters.categories[0])?.name
+    ? categories.find(c => c.id === filters.categories[0] || c.name.toLowerCase() === filters.categories[0].toLowerCase())?.name
     : null;
 
   return (
@@ -256,7 +263,7 @@ export function ProductsPage() {
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs">
                 <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider mb-4">Categories</h3>
                 <ul className="space-y-1.5">
-                  {CATEGORIES.map(cat => (
+                  {categories.map(cat => (
                     <li key={cat.id}>
                       <label
                         htmlFor={`cat-${cat.id}`}

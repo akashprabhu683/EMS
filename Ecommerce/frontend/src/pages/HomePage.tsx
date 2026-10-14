@@ -9,18 +9,38 @@ import {
   Lock,
 } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
-import { PRODUCTS, getCategoryCount } from '../data/products';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getActiveProducts } from '../services/productService';
+import type { Product } from '../types';
 
 export function HomePage() {
   const [activeTab, setActiveTab] = useState<'featured' | 'new' | 'electronics' | 'fashion'>('featured');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getActiveProducts()
+      .then(prods => {
+        if (active) setProducts(prods);
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const getCategoryCount = (catId: string) => {
+    return products.filter(p => p.category.toLowerCase().includes(catId.toLowerCase())).length;
+  };
 
   const getDisplayedProducts = () => {
     switch (activeTab) {
-      case 'new':         return PRODUCTS.filter(p => p.isNew);
-      case 'electronics': return PRODUCTS.filter(p => p.category === 'electronics');
-      case 'fashion':     return PRODUCTS.filter(p => p.category === 'fashion');
-      default:            return PRODUCTS.filter(p => p.featured);
+      case 'new':         return products.filter(p => p.isNew);
+      case 'electronics': return products.filter(p => p.category.toLowerCase().includes('electronic'));
+      case 'fashion':     return products.filter(p => p.category.toLowerCase().includes('fashion'));
+      default:            return products.filter(p => p.featured || true);
     }
   };
 
@@ -410,7 +430,7 @@ export function HomePage() {
               to="/products"
               className="btn-secondary py-3 px-8 rounded-xl text-xs sm:text-sm font-semibold shadow-2xs hover:shadow-xs"
             >
-              <span>Browse All {PRODUCTS.length} Catalog Items</span>
+              <span>Browse All {products.length} Catalog Items</span>
               <ArrowRight size={15} />
             </Link>
           </div>

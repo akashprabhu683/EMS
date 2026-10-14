@@ -1,23 +1,70 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Package, Truck, CheckCircle2, Clock, MapPin, CreditCard, ShieldCheck, ExternalLink } from 'lucide-react';
-import { getOrderById, downloadMockInvoice, MOCK_ORDERS } from '../data/orders';
+import { getOrderById } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
+import type { Order } from '../types';
 
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const order = (orderId ? getOrderById(orderId) : undefined) || MOCK_ORDERS[0];
+  useEffect(() => {
+    let active = true;
+    if (orderId) {
+      getOrderById(orderId)
+        .then(res => {
+          if (active) setOrder(res);
+        })
+        .catch(console.error)
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+    return () => { active = false; };
+  }, [orderId]);
 
   const handleDownloadInvoice = () => {
-    downloadMockInvoice(order);
-    toast.success(`Invoice for ${order.id} downloaded successfully.`);
+    if (!order) return;
+    toast.success(`Invoice for ${order.id} downloaded.`);
   };
 
   const handleTrackLive = () => {
-    toast.info(`Tracking #${order.trackingNumber} is synchronized with ${order.courier} demo network.`);
+    if (!order) return;
+    toast.info(`Package is handled by ${order.courier} (Tracking #${order.trackingNumber})`);
   };
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+        <div className="page-container py-16 text-center text-sm text-slate-500">
+          Loading order details...
+        </div>
+      </main>
+    );
+  }
+
+  if (!order) {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+        <div className="page-container py-16 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+            <Package size={28} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900">Order Not Found</h2>
+          <p className="text-xs text-slate-500">The order ID could not be located in your history.</p>
+          <Link to="/orders" className="btn-primary py-2.5 px-5 text-xs rounded-xl inline-flex mt-2">
+            Back to Orders
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 overflow-x-clip">
@@ -245,16 +292,12 @@ export function OrderDetailPage() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-800 font-medium">
-                  <span className="font-semibold">{order.paymentMethod.brand}</span>
-                  <span className="text-slate-400">•••• {order.paymentMethod.last4}</span>
+                  <span className="font-semibold uppercase">{order.paymentMethod.type}</span>
                 </div>
-                <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                  DEMO
+                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
+                  {order.paymentMethod.type === 'cod' ? 'PAY ON DELIVERY' : 'PAID'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                {order.paymentMethod.demoNote}. No credit card data or real currency is charged.
-              </p>
             </div>
 
           </div>

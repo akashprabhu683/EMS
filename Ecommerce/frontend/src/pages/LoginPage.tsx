@@ -29,16 +29,6 @@ export function LoginPage({ initialMode }: LoginPageProps) {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
 
-  const fillDemoAccount = () => {
-    setForm({
-      name: 'Marcus Vance',
-      email: 'marcus.vance@example.com',
-      password: 'password123',
-      confirm: 'password123',
-    });
-    setError('');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -104,16 +94,6 @@ export function LoginPage({ initialMode }: LoginPageProps) {
               Register
             </button>
           </div>
-
-          {/* Quick Demo Fill Helper */}
-          <button
-            type="button"
-            onClick={fillDemoAccount}
-            className="w-full py-2 px-3 rounded-xl bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/80 text-blue-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Sparkles size={13} className="text-blue-600" />
-            <span>Fill Demo User Credentials (1-Click)</span>
-          </button>
 
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium">
@@ -215,11 +195,6 @@ export function LoginPage({ initialMode }: LoginPageProps) {
               <ArrowRight size={15} />
             </button>
           </form>
-
-          {/* Demo account hint */}
-          <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl text-[11px] text-slate-500 text-center">
-            Demo credentials: <strong>demo@novashop.com</strong> / <strong>password123</strong>
-          </div>
 
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
             <ShieldCheck size={13} className="text-emerald-600" />

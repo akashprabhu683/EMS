@@ -601,19 +601,19 @@ export function CheckoutPage() {
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="font-display font-bold text-base text-slate-900">Payment Method</h2>
                     <span className="badge-clean bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs flex items-center gap-1">
-                      <Lock size={10} /> Demo Sandbox
+                      <Lock size={10} /> Secure Checkout
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">Demo checkout — no real payment is processed.</p>
+                  <p className="text-[11px] text-slate-500">Select your preferred payment method.</p>
                 </div>
 
-                {/* Demo notice */}
+                {/* Secure Payment notice */}
                 <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-blue-900 text-xs flex items-start gap-2.5">
                   <ShieldCheck size={16} className="text-blue-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="font-semibold block text-blue-950">No real payment is processed in this demo.</strong>
+                    <strong className="font-semibold block text-blue-950">Cash on Delivery Available</strong>
                     <span className="text-[11px] text-blue-800 leading-relaxed block mt-0.5">
-                      UPI, card, and banking fields are for UI demonstration only. No data is stored, logged, or transmitted.
+                      Select Cash on Delivery to pay upon arrival. Digital payment gateways (UPI, Cards) will be activated for automated settlements.
                     </span>
                   </div>
                 </div>
@@ -931,7 +931,7 @@ export function CheckoutPage() {
                     </div>
                     <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
                       <ShieldCheck size={11} className="text-emerald-500" />
-                      COD is not available for prepaid-only products. Demo mode.
+                      COD is not available for prepaid-only products.
                     </p>
                   </div>
                 )}
