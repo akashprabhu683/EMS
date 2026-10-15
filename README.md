@@ -10,6 +10,16 @@ A full-stack ecommerce and dispensary management system tailored for authentic A
 
 ---
 
+## 🛒 Live Storefront
+
+Experience the customer storefront, browse authentic herbal remedies, and try the Click-and-Collect counter pickup checkout:
+
+[![Shop Now](https://img.shields.io/badge/🌿%20Shop%20Now-Visit%20Storefront-059669?style=for-the-badge&logo=leaf&logoColor=white)](https://ecommerce-storefront-client.netlify.app)
+
+👉 **Live URL:** [https://ecommerce-storefront-client.netlify.app](https://ecommerce-storefront-client.netlify.app)
+
+---
+
 ## 🌿 Architecture Overview
 
 EMS is organized as a unified monorepo containing three core packages:
@@ -77,21 +87,22 @@ EMS/
 
 ### Running Locally
 
-Run both frontends simultaneously in separate terminal windows:
+Run both frontends in separate terminal windows:
 
 #### 1. Storefront
 ```bash
 cd Ecommerce/frontend
 npm run dev
 ```
-Accessible at: `http://localhost:5173` (or the port Vite designates).
+- **Local URL:** `http://localhost:5173`
+- **Live Deployed Storefront:** [https://ecommerce-storefront-client.netlify.app](https://ecommerce-storefront-client.netlify.app)
 
 #### 2. Admin Panel
 ```bash
 cd admin-panel/frontend
 npm run dev
 ```
-Accessible at: `http://localhost:5174` (or configured dev port).
+- **Local URL:** `http://localhost:5174`
 
 #### 3. Firebase Emulators (Optional)
 If running local Firestore, Auth, and Functions emulators:
