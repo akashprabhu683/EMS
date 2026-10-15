@@ -46,12 +46,12 @@ export function LoginPage() {
         
         {/* Header Branding */}
         <div className="text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center mx-auto shadow-md">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto shadow-md">
             <ShieldCheck size={26} />
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight font-display">
-              EMS Admin Portal
+              EMS Dispensary Admin
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Sign in with your administrator credentials
@@ -82,7 +82,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@example.com"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
               />
             </div>
           </div>
@@ -102,7 +102,7 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
               />
             </div>
           </div>
@@ -111,7 +111,7 @@ export function LoginPage() {
             id="admin-login-submit"
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 mt-2"
+            className="w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 mt-2"
           >
             <span>{isSubmitting ? 'Authenticating...' : 'Sign In as Administrator'}</span>
             {!isSubmitting && <ArrowRight size={15} />}

@@ -2,16 +2,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
 
   --color-slate-surface: #f8fafc;
   --color-slate-card: #ffffff;
@@ -109,9 +109,9 @@ body {
   min-width: 0;
 }
 .card-flat-interactive:hover {
-  border-color: #93c5fd;
+  border-color: #a7f3d0;
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -6px rgba(37,99,235,0.08), 0 4px 12px -2px rgba(15,23,42,0.04);
+  box-shadow: 0 12px 24px -6px rgba(5,150,105,0.08), 0 4px 12px -2px rgba(15,23,42,0.04);
 }
 
 /* ── Bento Card ─────────────────────────────────────
@@ -210,14 +210,14 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background-color: #2563eb;
+  background-color: #047857;
   color: #ffffff;
   font-weight: 600;
   font-size: 0.875rem;
   padding: 0.625rem 1.25rem;
   border-radius: 0.75rem;
-  border: 1px solid #1d4ed8;
-  box-shadow: 0 1px 2px 0 rgba(37,99,235,0.2);
+  border: 1px solid #065f46;
+  box-shadow: 0 1px 2px 0 rgba(4,120,87,0.2);
   transition: all 0.15s ease;
   cursor: pointer;
   outline: none;
@@ -225,16 +225,16 @@ body {
   white-space: nowrap;
 }
 .btn-primary:hover:not(:disabled) {
-  background-color: #1d4ed8;
-  border-color: #1e40af;
-  box-shadow: 0 4px 12px 0 rgba(37,99,235,0.25);
+  background-color: #065f46;
+  border-color: #064e3b;
+  box-shadow: 0 4px 12px 0 rgba(4,120,87,0.25);
   transform: translateY(-1px);
 }
-.btn-primary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.btn-primary:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; }
 .btn-primary:active:not(:disabled) {
-  background-color: #1e40af;
+  background-color: #064e3b;
   transform: translateY(0);
-  box-shadow: 0 1px 2px 0 rgba(37,99,235,0.2);
+  box-shadow: 0 1px 2px 0 rgba(4,120,87,0.2);
 }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 

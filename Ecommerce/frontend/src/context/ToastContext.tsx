@@ -65,12 +65,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   ? 'bg-white/98 border-amber-300 text-slate-800'
                   : isError
                   ? 'bg-white/98 border-rose-300 text-slate-800'
-                  : 'bg-white/98 border-blue-300 text-slate-800'
+                  : 'bg-white/98 border-emerald-300 text-slate-800'
               }`}
             >
               <div className="shrink-0 mt-0.5">
                 {isSuccess && <CheckCircle2 size={18} className="text-emerald-600" />}
-                {isInfo && <Info size={18} className="text-blue-600" />}
+                {isInfo && <Info size={18} className="text-emerald-700" />}
                 {isWarning && <AlertTriangle size={18} className="text-amber-500" />}
                 {isError && <XCircle size={18} className="text-rose-600" />}
               </div>

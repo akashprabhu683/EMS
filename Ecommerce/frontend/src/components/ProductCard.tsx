@@ -82,7 +82,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           )}
           {product.isNew && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200/90 shadow-2xs">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
               NEW
             </span>
           )}
@@ -97,7 +97,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <button
           id={`wishlist-btn-${product.id}`}
           onClick={(e) => { e.preventDefault(); setWished(v => !v); }}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/95 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-200 transition-colors z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/95 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-200 transition-colors z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           aria-label={wished ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
         >
           <Heart size={14} fill={wished ? '#e11d48' : 'none'} stroke={wished ? '#e11d48' : 'currentColor'} />
@@ -119,7 +119,7 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
 
         {/* Product Title */}
-        <Link to={`/product/${product.id}`} className="group-hover:text-blue-600 transition-colors">
+        <Link to={`/product/${product.id}`} className="group-hover:text-emerald-700 transition-colors">
           <h3 className="text-slate-900 text-sm sm:text-base font-semibold leading-snug line-clamp-2">
             {product.name}
           </h3>
@@ -144,9 +144,9 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Actions row: Price + Add Button */}
         <div className="product-card__actions mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">${product.price}</span>
+            <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">₹{product.price}</span>
             {product.originalPrice && (
-              <span className="text-xs text-slate-400 line-through">${product.originalPrice}</span>
+              <span className="text-xs text-slate-400 line-through">₹{product.originalPrice}</span>
             )}
           </div>
 
@@ -154,12 +154,12 @@ export function ProductCard({ product }: ProductCardProps) {
             id={`add-to-cart-btn-${product.id}`}
             onClick={handleAddToCart}
             disabled={adding || isOutOfStock}
-            className={`px-3.5 py-2 min-h-[36px] min-w-[76px] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 shrink-0 ${
+            className={`px-3.5 py-2 min-h-[36px] min-w-[76px] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 shrink-0 ${
               isOutOfStock
                 ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                 : adding
                 ? 'bg-emerald-600 text-white shadow-2xs'
-                : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-2xs hover:shadow-xs'
+                : 'bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white shadow-2xs hover:shadow-xs'
             }`}
             aria-label={isOutOfStock ? `${product.name} is sold out` : `Add ${product.name} to cart`}
           >

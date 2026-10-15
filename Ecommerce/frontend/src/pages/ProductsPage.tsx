@@ -143,7 +143,7 @@ export function ProductsPage() {
             </div>
             <h1 className="text-2xl sm:text-4xl font-display font-extrabold text-slate-900 tracking-tight">
               {filters.search ? (
-                <>Search: <span className="text-blue-600">"{filters.search}"</span></>
+                <>Search: <span className="text-emerald-700">"{filters.search}"</span></>
               ) : activeCategoryName ? (
                 activeCategoryName
               ) : (
@@ -177,7 +177,7 @@ export function ProductsPage() {
               value={filters.search}
               onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
               placeholder="Filter by keyword, product name, or tag…"
-              className="w-full pl-11 pr-10 py-3 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 shadow-2xs transition-all"
+              className="w-full pl-11 pr-10 py-3 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 shadow-2xs transition-all"
             />
             {filters.search && (
               <button
@@ -198,14 +198,14 @@ export function ProductsPage() {
               className={clsx(
                 'flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-2xs border',
                 filtersOpen
-                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               )}
             >
               <SlidersHorizontal size={15} />
               <span>Filters</span>
               {activeFilterCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="w-5 h-5 rounded-full bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center">
                   {activeFilterCount}
                 </span>
               )}
@@ -217,7 +217,7 @@ export function ProductsPage() {
                 id="products-sort-select"
                 value={filters.sortBy}
                 onChange={e => setFilters(f => ({ ...f, sortBy: e.target.value as SortOption }))}
-                className="appearance-none bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium pl-3.5 pr-9 py-2.5 rounded-xl outline-none cursor-pointer shadow-2xs hover:border-slate-300 focus:border-blue-500 transition-colors"
+                className="appearance-none bg-white border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium pl-3.5 pr-9 py-2.5 rounded-xl outline-none cursor-pointer shadow-2xs hover:border-slate-300 focus:border-emerald-600 transition-colors"
               >
                 {SORT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value} className="text-slate-900">{o.label}</option>
@@ -275,13 +275,13 @@ export function ProductsPage() {
                             type="checkbox"
                             checked={filters.categories.includes(cat.id)}
                             onChange={() => toggleCategory(cat.id)}
-                            className="accent-blue-600 w-4 h-4 rounded cursor-pointer"
+                            className="accent-emerald-700 w-4 h-4 rounded cursor-pointer"
                           />
-                          <span className="font-medium group-hover:text-blue-600 transition-colors truncate">
+                          <span className="font-medium group-hover:text-emerald-700 transition-colors truncate">
                             {cat.name}
                           </span>
                         </div>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors shrink-0">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-emerald-50 group-hover:text-emerald-700 transition-colors shrink-0">
                           {cat.count}
                         </span>
                       </label>
@@ -294,13 +294,13 @@ export function ProductsPage() {
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider">Price Ceiling</h3>
-                  <div className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                    Up to ${filters.priceRange[1]}
+                  <div className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Up to ₹{filters.priceRange[1]}
                   </div>
                 </div>
                 <div className="flex justify-between text-xs text-slate-500 mb-2">
-                  <span>${filters.priceRange[0]}</span>
-                  <span>${PRICE_MAX}</span>
+                  <span>₹{filters.priceRange[0]}</span>
+                  <span>₹{PRICE_MAX}</span>
                 </div>
                 <input
                   id="price-range-slider"
@@ -309,7 +309,7 @@ export function ProductsPage() {
                   max={PRICE_MAX}
                   value={filters.priceRange[1]}
                   onChange={e => setFilters(f => ({ ...f, priceRange: [f.priceRange[0], +e.target.value] }))}
-                  className="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                  className="w-full accent-emerald-700 cursor-pointer h-2 bg-slate-200 rounded-lg"
                 />
               </div>
 
@@ -323,9 +323,9 @@ export function ProductsPage() {
                       id={`rating-filter-${r}`}
                       onClick={() => setFilters(f => ({ ...f, rating: r }))}
                       className={clsx(
-                        'py-2 rounded-xl text-xs font-semibold transition-all border focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
+                        'py-2 rounded-xl text-xs font-semibold transition-all border focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
                         filters.rating === r
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                       )}
                     >
@@ -347,7 +347,7 @@ export function ProductsPage() {
                     type="checkbox"
                     checked={filters.inStock}
                     onChange={e => setFilters(f => ({ ...f, inStock: e.target.checked }))}
-                    className="accent-blue-600 w-4 h-4 rounded cursor-pointer"
+                    className="accent-emerald-700 w-4 h-4 rounded cursor-pointer"
                   />
                 </label>
               </div>
@@ -435,7 +435,7 @@ export function ProductsPage() {
                         )}
                       </div>
 
-                      <Link to={`/product/${p.id}`} className="hover:text-blue-600 transition-colors">
+                      <Link to={`/product/${p.id}`} className="hover:text-emerald-700 transition-colors">
                         <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug">
                           {p.name}
                         </h3>
@@ -463,9 +463,9 @@ export function ProductsPage() {
 
                     <div className="sm:text-right shrink-0 flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div>
-                        <span className="text-xl font-extrabold text-slate-900">${p.price}</span>
+                        <span className="text-xl font-extrabold text-slate-900">₹{p.price}</span>
                         {p.originalPrice && (
-                          <span className="text-xs text-slate-400 line-through ml-2">${p.originalPrice}</span>
+                          <span className="text-xs text-slate-400 line-through ml-2">₹{p.originalPrice}</span>
                         )}
                       </div>
                       <button

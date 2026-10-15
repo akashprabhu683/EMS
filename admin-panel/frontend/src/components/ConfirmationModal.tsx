@@ -29,7 +29,7 @@ export function ConfirmationModal({
       ? 'bg-rose-600 hover:bg-rose-700 text-white'
       : confirmVariant === 'warning'
       ? 'bg-amber-600 hover:bg-amber-700 text-white'
-      : 'bg-blue-600 hover:bg-blue-700 text-white';
+      : 'bg-emerald-700 hover:bg-emerald-800 text-white';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">

@@ -37,26 +37,33 @@ export interface FirestoreOrderRecord {
 }
 
 export function formatFirestoreOrder(docId: string, data: any): Order {
+  const DEFAULT_MED_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
+
   const items = Array.isArray(data.items)
-    ? data.items.map((item: any, idx: number) => ({
-        product: {
-          id: item.productId || `item-${idx}`,
-          name: item.name || 'Product',
-          description: '',
-          price: (item.unitPrice || 0) / 100,
-          images: item.imageUrl ? [item.imageUrl] : [],
-          category: 'general',
-          rating: 5,
-          reviewCount: 1,
-          stock: 10,
-          tags: [],
-          featured: false,
-          isNew: false,
-        },
-        quantity: item.quantity || 1,
-        selectedColor: item.selectedColor,
-        selectedSize: item.selectedSize,
-      }))
+    ? data.items.map((item: any, idx: number) => {
+        const itemPriceRupees = Number((item.unitPrice || item.price || 0) / (item.unitPrice ? 100 : 1)) || 0;
+        const img = item.imageUrl || (Array.isArray(item.images) && item.images[0]) || DEFAULT_MED_IMAGE;
+        return {
+          product: {
+            id: item.productId || `item-${idx}`,
+            name: item.name || 'Herbal Product',
+            description: item.description || 'Natural herbal remedy formulation',
+            price: itemPriceRupees,
+            images: [img],
+            category: item.category || 'general',
+            rating: 5,
+            reviewCount: 1,
+            stock: 10,
+            tags: [],
+            featured: false,
+            isNew: false,
+          },
+          price: itemPriceRupees,
+          quantity: Number(item.quantity) || 1,
+          selectedColor: item.selectedColor,
+          selectedSize: item.selectedSize,
+        };
+      })
     : [];
 
   const createdDate = data.createdAt?.toDate
@@ -99,6 +106,9 @@ export function formatFirestoreOrder(docId: string, data: any): Order {
     shipping: shippingRupees,
     tax: 0,
     total: totalRupees,
+    paymentStatus: (data.paymentStatus as any) || 'unpaid',
+    pickupContact: data.pickupContact || { fullName: customerName, phone: customerPhone },
+    pickupLocation,
     paymentMethod: {
       type: 'click_and_collect',
       last4: 'PAY AT SHOP',

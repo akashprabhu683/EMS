@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Product } from '../types';
+import { PRODUCTS } from '../data/products';
 
 function toProduct(id: string, data: DocumentData): Product {
     const priceInPaise = Number(data.price);
@@ -48,16 +49,25 @@ function toProduct(id: string, data: DocumentData): Product {
 }
 
 export async function getActiveProducts(): Promise<Product[]> {
-    const productsQuery = query(
-        collection(db, 'products'),
-        where('isActive', '==', true),
-    );
+    try {
+        const productsQuery = query(
+            collection(db, 'products'),
+            where('isActive', '==', true),
+        );
 
-    const snapshot = await getDocs(productsQuery);
+        const snapshot = await getDocs(productsQuery);
+        const docs = snapshot.docs.map((document) =>
+            toProduct(document.id, document.data()),
+        );
 
-    return snapshot.docs.map((document) =>
-        toProduct(document.id, document.data()),
-    );
+        if (docs.length > 0) {
+            return docs;
+        }
+    } catch (err) {
+        console.warn('Could not fetch active products from Firestore, using catalog defaults:', err);
+    }
+
+    return PRODUCTS;
 }
 
 export async function getActiveProductById(
@@ -81,20 +91,10 @@ export async function getActiveProductById(
 }
 
 export async function getTrustedProducts(): Promise<Product[]> {
-    try {
-        return await getActiveProducts();
-    } catch (err) {
-        console.error('Error fetching products from Firestore:', err);
-        return [];
-    }
+    return await getActiveProducts();
 }
 
 export async function getTrustedProductById(productId: string): Promise<Product | null> {
-    try {
-        return await getActiveProductById(productId);
-    } catch (err) {
-        console.error('Error fetching product from Firestore:', err);
-        return null;
-    }
+    return await getActiveProductById(productId);
 }
 

@@ -55,7 +55,7 @@ export function DashboardOverviewPage() {
   if (loading) {
     return (
       <div className="py-20 text-center">
-        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
         <p className="text-xs font-semibold text-slate-500">Loading dashboard metrics...</p>
       </div>
     );
@@ -77,7 +77,7 @@ export function DashboardOverviewPage() {
         <div className="flex items-center gap-3">
           <Link
             to="/products"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-2xs transition-colors"
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-2xs transition-colors"
           >
             <Plus size={16} />
             <span>Manage Products</span>
@@ -99,7 +99,7 @@ export function DashboardOverviewPage() {
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Total Products
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
               <Package size={17} />
             </div>
           </div>
@@ -170,21 +170,21 @@ export function DashboardOverviewPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
         <Link
           to="/products"
-          className="group block bg-white rounded-2xl p-6 border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all shadow-2xs"
+          className="group block bg-white rounded-2xl p-6 border border-slate-200 hover:border-emerald-400 hover:shadow-md transition-all shadow-2xs"
         >
           <div className="flex items-start justify-between">
             <div className="space-y-2">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
                 <Package size={22} />
               </div>
-              <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+              <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
                 Product Catalog Management
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
                 Add, edit, and toggle active/inactive status of products. Set stock and pricing in rupees.
               </p>
             </div>
-            <ArrowRight size={18} className="text-slate-400 group-hover:text-blue-600 transition-colors" />
+            <ArrowRight size={18} className="text-slate-400 group-hover:text-emerald-700 transition-colors" />
           </div>
         </Link>
 

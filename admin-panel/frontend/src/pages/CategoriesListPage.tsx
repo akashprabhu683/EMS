@@ -193,7 +193,7 @@ export function CategoriesListPage() {
         <button
           id="btn-create-category"
           onClick={handleOpenCreateModal}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 shadow-2xs transition-colors self-start sm:self-auto"
+          className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 shadow-2xs transition-colors self-start sm:self-auto"
         >
           <Plus size={16} />
           <span>New Category</span>
@@ -227,7 +227,7 @@ export function CategoriesListPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search categories by name or slug..."
-            className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+            className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
           />
         </div>
 
@@ -237,7 +237,7 @@ export function CategoriesListPage() {
             id="category-status-filter"
             value={statusFilter}
             onChange={(e: any) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 outline-none focus:border-emerald-600"
           >
             <option value="all">All Categories</option>
             <option value="active">Active Only</option>
@@ -250,7 +250,7 @@ export function CategoriesListPage() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         {loading ? (
           <div className="py-20 text-center">
-            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-xs font-semibold text-slate-500">Loading categories from Firestore...</p>
           </div>
         ) : filteredCategories.length === 0 ? (
@@ -290,7 +290,7 @@ export function CategoriesListPage() {
 
                     {/* Slug */}
                     <td className="py-3.5 px-4">
-                      <code className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-blue-700 font-mono text-xs">
+                      <code className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-emerald-800 font-mono text-xs">
                         {c.slug}
                       </code>
                     </td>
@@ -323,7 +323,7 @@ export function CategoriesListPage() {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenEditModal(c)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
                           title="Edit category"
                         >
                           <Edit2 size={16} />
@@ -371,7 +371,7 @@ export function CategoriesListPage() {
                   {editingCategory ? 'Edit Category' : 'Create New Category'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Stored in Firestore <code className="font-mono text-blue-600">categories</code> collection
+                  Stored in Firestore <code className="font-mono text-emerald-700">categories</code> collection
                 </p>
               </div>
               <button
@@ -401,8 +401,8 @@ export function CategoriesListPage() {
                   required
                   value={formData.name}
                   onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="e.g. Smart Watches"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="e.g. Herbal Extracts"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
@@ -417,8 +417,8 @@ export function CategoriesListPage() {
                   required
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().trim() })}
-                  placeholder="e.g. smart-watches"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-mono"
+                  placeholder="e.g. herbal-extracts"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 font-mono"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">
                   Lowercase alphanumeric and hyphens only. Used for routing and URLs.
@@ -436,7 +436,7 @@ export function CategoriesListPage() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Brief description of this collection..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 resize-none"
                 />
               </div>
 
@@ -447,7 +447,7 @@ export function CategoriesListPage() {
                   type="checkbox"
                   checked={formData.isActive}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                  className="w-4 h-4 rounded text-emerald-700 focus:ring-emerald-600 border-slate-300"
                 />
                 <label htmlFor="modal-category-active" className="text-xs font-bold text-slate-700 cursor-pointer">
                   Active (Available in storefront)
@@ -468,7 +468,7 @@ export function CategoriesListPage() {
                   id="modal-category-save"
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs transition-colors disabled:opacity-50"
                 >
                   {isSaving ? 'Saving...' : editingCategory ? 'Save Changes' : 'Create Category'}
                 </button>

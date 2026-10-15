@@ -151,7 +151,7 @@ export function LoginPage({ initialMode }: LoginPageProps) {
                     value={form.name}
                     onChange={set('name')}
                     placeholder="Marcus Vance"
-                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                   />
                 </div>
               </div>
@@ -170,7 +170,7 @@ export function LoginPage({ initialMode }: LoginPageProps) {
                   value={form.email}
                   onChange={set('email')}
                   placeholder="name@example.com"
-                  className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
             </div>
@@ -188,7 +188,7 @@ export function LoginPage({ initialMode }: LoginPageProps) {
                   value={form.password}
                   onChange={set('password')}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                 />
                 <button
                   type="button"
@@ -214,7 +214,7 @@ export function LoginPage({ initialMode }: LoginPageProps) {
                     value={form.confirm}
                     onChange={set('confirm')}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                   />
                 </div>
               </div>

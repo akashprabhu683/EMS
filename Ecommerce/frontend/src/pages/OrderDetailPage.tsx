@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Package, Truck, CheckCircle2, Clock, MapPin, CreditCard, ShieldCheck, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink } from 'lucide-react';
 import { getOrderById } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import type { Order } from '../types';
+
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
 
 export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -31,12 +33,12 @@ export function OrderDetailPage() {
 
   const handleDownloadInvoice = () => {
     if (!order) return;
-    toast.success(`Invoice for ${order.id} downloaded.`);
+    toast.success(`Dispensary receipt for ${order.id} downloaded.`);
   };
 
-  const handleTrackLive = () => {
+  const handleViewLocation = () => {
     if (!order) return;
-    toast.info(`Package is handled by ${order.courier} (Tracking #${order.trackingNumber})`);
+    toast.info(`Pickup Address: ${order.pickupLocation || 'EMS Herbal Dispensary, Main Road Health Complex'}`);
   };
 
   if (loading) {
@@ -53,7 +55,7 @@ export function OrderDetailPage() {
     return (
       <main className="min-h-screen bg-slate-50 text-slate-900 pb-20">
         <div className="page-container py-16 text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mx-auto">
             <Package size={28} />
           </div>
           <h2 className="text-xl font-bold text-slate-900">Order Not Found</h2>
@@ -66,6 +68,11 @@ export function OrderDetailPage() {
     );
   }
 
+  const itemsList = Array.isArray(order.items) ? order.items : [];
+  const totalFormatted = (Number(order.total) || 0).toFixed(2);
+  const subtotalFormatted = (Number(order.subtotal) || Number(order.total) || 0).toFixed(2);
+  const isPaid = order.paymentStatus === 'paid';
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 overflow-x-clip">
       <div className="page-container py-8 sm:py-12">
@@ -74,15 +81,15 @@ export function OrderDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <button
             onClick={() => navigate('/orders')}
-            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 text-xs font-semibold transition-colors"
+            className="flex items-center gap-1.5 text-slate-500 hover:text-emerald-700 text-xs font-semibold transition-colors"
           >
             <ArrowLeft size={14} /> Back to all orders
           </button>
 
           <nav className="flex items-center gap-2 text-xs text-slate-500" aria-label="Breadcrumb">
-            <Link to="/" className="hover:text-slate-900 transition-colors">Home</Link>
+            <Link to="/" className="hover:text-emerald-700 transition-colors">Home</Link>
             <span>/</span>
-            <Link to="/orders" className="hover:text-slate-900 transition-colors">Orders</Link>
+            <Link to="/orders" className="hover:text-emerald-700 transition-colors">Orders</Link>
             <span>/</span>
             <span className="text-slate-900 font-semibold">{order.id}</span>
           </nav>
@@ -95,16 +102,23 @@ export function OrderDetailPage() {
               <span className="font-mono font-bold text-sm text-slate-900 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200">
                 {order.id}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
                 <CheckCircle2 size={13} className="text-emerald-600" />
-                <span>{order.statusLabel}</span>
+                <span>{order.statusLabel || 'Order Registered'}</span>
+              </span>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                isPaid
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}>
+                {isPaid ? '✓ Paid in Person' : '⏳ Unpaid · Pay at Shop'}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 tracking-tight">
-              Order Details
+              Order Details & Collection
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Order placed on <span className="font-medium text-slate-700">{order.date}</span> · {order.items.length} unique item{order.items.length !== 1 ? 's' : ''}
+              Order registered on <span className="font-medium text-slate-700">{order.date}</span> · {itemsList.length} item{itemsList.length !== 1 ? 's' : ''}
             </p>
           </div>
 
@@ -113,17 +127,17 @@ export function OrderDetailPage() {
             <button
               id="download-order-invoice-btn"
               onClick={handleDownloadInvoice}
-              className="btn-secondary py-2.5 px-4 text-xs sm:text-sm rounded-xl gap-2 shadow-2xs"
+              className="btn-secondary py-2.5 px-4 text-xs sm:text-sm rounded-xl gap-2 shadow-2xs hover:border-emerald-600 hover:text-emerald-700"
             >
               <Download size={15} />
-              <span>Download Invoice</span>
+              <span>Download Receipt</span>
             </button>
             <button
-              onClick={handleTrackLive}
+              onClick={handleViewLocation}
               className="btn-primary py-2.5 px-4 text-xs sm:text-sm rounded-xl gap-2 shadow-2xs"
             >
-              <Truck size={15} />
-              <span>Live Tracking</span>
+              <Store size={15} />
+              <span>Dispensary Directions</span>
             </button>
           </div>
         </div>
@@ -134,25 +148,25 @@ export function OrderDetailPage() {
           {/* Left Column (8 cols): Items & Timeline */}
           <div className="lg:col-span-8 space-y-6">
 
-            {/* Tracking Progress Timeline */}
+            {/* Preparation & Pickup Progress Timeline */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
                 <div>
-                  <h2 className="font-display font-bold text-base text-slate-900">Shipment Timeline</h2>
-                  <p className="text-xs text-slate-500">{order.courier} · Tracking: <span className="font-mono font-medium text-slate-700">{order.trackingNumber}</span></p>
+                  <h2 className="font-display font-bold text-base text-slate-900">Dispensary Order Timeline</h2>
+                  <p className="text-xs text-slate-500">Fulfillment: Click-and-Collect · Pickup Counter</p>
                 </div>
-                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg self-start sm:self-auto">
-                  {order.estimatedDelivery}
+                <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg self-start sm:self-auto">
+                  {order.estimatedDelivery || 'Ready for Collection within 2-4 hours'}
                 </span>
               </div>
 
               <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                {order.timeline.map((step, idx) => (
+                {(Array.isArray(order.timeline) ? order.timeline : []).map((step, idx) => (
                   <div key={idx} className="relative flex items-start gap-4">
                     <div
                       className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                         step.completed
-                          ? 'bg-blue-600 border-blue-600 text-white'
+                          ? 'bg-emerald-600 border-emerald-600 text-white'
                           : 'bg-white border-slate-300 text-slate-300'
                       }`}
                     >
@@ -180,129 +194,139 @@ export function OrderDetailPage() {
             {/* Items Ordered List */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h2 className="font-display font-bold text-base text-slate-900">Purchased Items</h2>
-                <span className="text-xs text-slate-500 font-medium">{order.items.reduce((acc, i) => acc + i.quantity, 0)} items total</span>
+                <h2 className="font-display font-bold text-base text-slate-900">Remedies Ordered</h2>
+                <span className="text-xs text-slate-500 font-medium">
+                  {itemsList.reduce((acc, i) => acc + (Number(i.quantity) || 1), 0)} items total
+                </span>
               </div>
 
               <div className="divide-y divide-slate-100">
-                {order.items.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-4 py-4 first:pt-1 last:pb-1">
-                    <img
-                      src={item.product.images[0]}
-                      alt={item.product.name}
-                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover bg-slate-100 border border-slate-100 shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        to={`/product/${item.product.id}`}
-                        className="text-xs sm:text-sm font-bold text-slate-900 hover:text-blue-600 transition-colors truncate block"
-                      >
-                        {item.product.name}
-                      </Link>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">
-                        {item.product.description}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 mt-2">
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-medium">Qty: {item.quantity}</span>
-                        {item.selectedSize && <span>Size: {item.selectedSize}</span>}
-                        {item.selectedColor && (
-                          <span className="flex items-center gap-1">
-                            Color:
-                            <span className="w-2.5 h-2.5 rounded-full border border-slate-300 inline-block" style={{ backgroundColor: item.selectedColor }} />
-                          </span>
-                        )}
-                        <span>Price: ${item.price.toFixed(2)}</span>
+                {itemsList.map((item, idx) => {
+                  const pName = item?.product?.name || (item as any)?.name || 'Herbal Formulation';
+                  const pImg = item?.product?.images?.[0] || FALLBACK_IMAGE;
+                  const pPrice = Number(item?.price ?? item?.product?.price ?? 0);
+                  const pQty = Number(item?.quantity) || 1;
+                  const pId = item?.product?.id || `item-${idx}`;
+
+                  return (
+                    <div key={idx} className="flex items-center gap-4 py-4 first:pt-1 last:pb-1">
+                      <img
+                        src={pImg}
+                        alt={pName}
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover bg-emerald-50/50 border border-slate-100 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          to={`/product/${pId}`}
+                          className="text-xs sm:text-sm font-bold text-slate-900 hover:text-emerald-700 transition-colors truncate block"
+                        >
+                          {pName}
+                        </Link>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-1">
+                          {item?.product?.description || 'Authentic herbal preparation'}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 mt-2">
+                          <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-medium">Qty: {pQty}</span>
+                          {item.selectedSize && <span>Size: {item.selectedSize}</span>}
+                          <span>Price: ₹{pPrice.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs sm:text-sm font-bold text-slate-900 font-display block">
+                          ₹{(pPrice * pQty).toFixed(2)}
+                        </span>
+                        <Link
+                          to={`/product/${pId}`}
+                          className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 mt-1 inline-flex items-center gap-0.5"
+                        >
+                          View Remedy <ExternalLink size={10} />
+                        </Link>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-xs sm:text-sm font-bold text-slate-900 font-display block">
-                        ${(item.price * item.quantity).toFixed(2)}
-                      </span>
-                      <Link
-                        to={`/product/${item.product.id}`}
-                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 mt-1 inline-flex items-center gap-0.5"
-                      >
-                        Buy Again <ExternalLink size={10} />
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
           </div>
 
-          {/* Right Column (4 cols): Financials, Shipping & Payment */}
+          {/* Right Column (4 cols): Summary, Pickup & Payment */}
           <div className="lg:col-span-4 space-y-5">
 
             {/* Financial Summary Bento Card */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
               <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
-                Payment Summary
+                Payment Breakdown
               </h3>
 
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Subtotal</span>
-                  <span className="font-semibold text-slate-900">${order.subtotal.toFixed(2)}</span>
+                  <span className="font-semibold text-slate-900">₹{subtotalFormatted}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
-                  <span>Express Shipping</span>
-                  <span className={(order.shipping ?? 0) === 0 ? 'text-emerald-700 font-semibold' : 'text-slate-900 font-semibold'}>
-                    {(order.shipping ?? 0) === 0 ? 'FREE' : `$${(order.shipping ?? 0).toFixed(2)}`}
-                  </span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Estimated Tax</span>
-                  <span className="font-semibold text-slate-900">${(order.tax ?? 0).toFixed(2)}</span>
+                  <span>Dispensary Pickup Fee</span>
+                  <span className="text-emerald-700 font-semibold">FREE</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-slate-900 pt-3 border-t border-slate-200">
-                  <span>Grand Total</span>
-                  <span className="text-blue-600 font-display">${order.total.toFixed(2)}</span>
+                  <span>Total Payable</span>
+                  <span className="text-emerald-700 font-display text-base">₹{totalFormatted}</span>
                 </div>
               </div>
 
-              {/* Security Pill */}
-              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center gap-2 text-[11px] text-emerald-800">
-                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-                <span>Payment Verified · 100% Buyer Protection Guaranteed</span>
+              {/* Status Notice */}
+              <div className={`p-3 rounded-xl flex items-center gap-2 text-[11px] border ${
+                isPaid
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                <ShieldCheck size={16} className={isPaid ? 'text-emerald-600' : 'text-amber-600'} />
+                <span>
+                  {isPaid
+                    ? 'Payment Confirmed · Receipt Recorded'
+                    : 'Payment due in person at dispensary counter upon collection'}
+                </span>
               </div>
             </div>
 
-            {/* Delivery Address Card */}
+            {/* Dispensary Pickup Location Card */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
-                <MapPin size={14} className="text-blue-600" />
-                <span>Delivery Address</span>
+                <Store size={14} className="text-emerald-700" />
+                <span>Dispensary Pickup Details</span>
               </div>
-              <div className="text-xs text-slate-600 space-y-1">
-                <p className="font-bold text-slate-900">{order.shippingAddress?.fullName ?? order.pickupContact?.fullName ?? '—'}</p>
-                <p>{order.shippingAddress?.street ?? 'Pickup at Dispensary'}</p>
-                {order.shippingAddress && (
-                  <>
-                    <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}</p>
-                    <p>{order.shippingAddress.country}</p>
-                    {order.shippingAddress.phone && <p className="text-slate-500 mt-1">{order.shippingAddress.phone}</p>}
-                  </>
-                )}
-                {order.pickupContact && !order.shippingAddress && (
-                  <p className="text-slate-500">{order.pickupContact.phone}</p>
-                )}
+              <div className="text-xs text-slate-600 space-y-1.5">
+                <p className="font-bold text-slate-900">
+                  {order.pickupContact?.fullName || order.shippingAddress?.fullName || 'Valued Customer'}
+                </p>
+                <p className="text-slate-700">
+                  {order.pickupLocation || 'EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center)'}
+                </p>
+                <p className="text-slate-500">
+                  Phone: {order.pickupContact?.phone || order.shippingAddress?.phone || 'On file'}
+                </p>
+                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                  <span className="font-semibold text-slate-700">Counter Hours:</span> Mon–Sat 9:00 AM – 7:00 PM
+                </div>
               </div>
             </div>
 
-            {/* Payment Method Card with Demo Disclaimer */}
+            {/* Payment Method Card */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
-                <CreditCard size={14} className="text-blue-600" />
-                <span>Payment Method</span>
+                <CreditCard size={14} className="text-emerald-700" />
+                <span>Payment Settlement</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-800 font-medium">
-                  <span className="font-semibold uppercase">{order.paymentMethod?.type ?? (order.paymentStatus === 'paid' ? 'paid' : 'unpaid')}</span>
+                  <span>Pay in Person at Dispensary</span>
                 </div>
-                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
-                  {order.paymentMethod?.type === 'cod' || order.paymentStatus === 'unpaid' ? 'PAY AT PICKUP' : 'PAID'}
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                  isPaid
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : 'bg-amber-100 text-amber-800 border-amber-200'
+                }`}>
+                  {isPaid ? 'PAID' : 'PAY AT COUNTER'}
                 </span>
               </div>
             </div>

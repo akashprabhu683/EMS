@@ -13,27 +13,44 @@ import {
   type OrderStatus,
 } from '../services/adminOrderService';
 
-/* ── Status config ──────────────────────────────────────────── */
+/* ── Status config with legacy support ──────────────────────────── */
 const STATUS_CONFIG: Record<
-  OrderStatus,
+  string,
   { label: string; color: string; bg: string; border: string; dot: string }
 > = {
-  placed:          { label: 'Placed',          color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200',   dot: 'bg-blue-500' },
-  accepted:        { label: 'Accepted',         color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200', dot: 'bg-indigo-500' },
-  preparing:       { label: 'Preparing',        color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200',  dot: 'bg-amber-500 animate-pulse' },
-  ready_for_pickup: { label: 'Ready for Pickup', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
-  collected:       { label: 'Collected ✓',     color: 'text-slate-600',  bg: 'bg-slate-100', border: 'border-slate-200',  dot: 'bg-slate-400' },
-  cancelled:       { label: 'Cancelled',        color: 'text-rose-700',   bg: 'bg-rose-50',   border: 'border-rose-200',   dot: 'bg-rose-500' },
+  placed:          { label: 'Placed',          color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-600' },
+  accepted:        { label: 'Accepted',        color: 'text-teal-800',    bg: 'bg-teal-50',    border: 'border-teal-200',    dot: 'bg-teal-600' },
+  preparing:       { label: 'Preparing',       color: 'text-amber-800',   bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-600 animate-pulse' },
+  ready_for_pickup: { label: 'Ready for Pickup', color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300', dot: 'bg-emerald-600 animate-pulse' },
+  collected:       { label: 'Collected ✓',    color: 'text-slate-700',   bg: 'bg-slate-100',  border: 'border-slate-300',   dot: 'bg-slate-500' },
+  cancelled:       { label: 'Cancelled',       color: 'text-rose-700',    bg: 'bg-rose-50',    border: 'border-rose-200',    dot: 'bg-rose-500' },
+  // Legacy status support
+  confirmed:       { label: 'Confirmed',       color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-600' },
+  delivered:       { label: 'Delivered',       color: 'text-slate-700',   bg: 'bg-slate-100',  border: 'border-slate-300',   dot: 'bg-slate-500' },
+  processing:      { label: 'Processing',      color: 'text-amber-800',   bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-600' },
+  shipped:         { label: 'Shipped',         color: 'text-teal-800',    bg: 'bg-teal-50',    border: 'border-teal-200',    dot: 'bg-teal-600' },
+};
+
+const DEFAULT_STATUS_CONFIG = {
+  label: 'Placed',
+  color: 'text-emerald-800',
+  bg: 'bg-emerald-50',
+  border: 'border-emerald-200',
+  dot: 'bg-emerald-600',
 };
 
 /* Next statuses the admin can advance an order to */
-const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
+const NEXT_STATUSES: Record<string, OrderStatus[]> = {
   placed:           ['accepted', 'cancelled'],
   accepted:         ['preparing', 'cancelled'],
   preparing:        ['ready_for_pickup', 'cancelled'],
   ready_for_pickup: ['collected', 'cancelled'],
   collected:        [],
   cancelled:        [],
+  confirmed:        ['preparing', 'ready_for_pickup', 'cancelled'],
+  processing:       ['ready_for_pickup', 'cancelled'],
+  shipped:          ['collected'],
+  delivered:        [],
 };
 
 const ALL_STATUSES: OrderStatus[] = [
@@ -51,18 +68,20 @@ const FILTER_TABS: { key: OrderStatus | 'all'; label: string }[] = [
 ];
 
 /* ── Formatting ──────────────────────────────────────────────── */
-function paiseToRupees(paise: number): string {
-  return (paise / 100).toFixed(2);
+function paiseToRupees(paise?: number): string {
+  const p = Number(paise) || 0;
+  return (p / 100).toFixed(2);
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso?: string): string {
+  if (!iso) return 'Recent';
   try {
     return new Intl.DateTimeFormat('en-IN', {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     }).format(new Date(iso));
   } catch {
-    return iso;
+    return String(iso);
   }
 }
 
@@ -80,11 +99,16 @@ function OrderCard({
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
 
-  const cfg = STATUS_CONFIG[order.orderStatus];
-  const nextStatuses = NEXT_STATUSES[order.orderStatus];
+  const statusKey = String(order?.orderStatus || 'placed').toLowerCase();
+  const cfg = STATUS_CONFIG[statusKey] || DEFAULT_STATUS_CONFIG;
+  const nextStatuses = NEXT_STATUSES[statusKey] || [];
+  const contact = order?.pickupContact || { fullName: 'Valued Customer', phone: '—', notes: '' };
+  const itemsList = Array.isArray(order?.items) ? order.items : [];
+  const totalPaise = Number(order?.totalPaise ?? order?.subtotalPaise ?? 0);
+
   const canMarkPaid =
     order.paymentStatus === 'unpaid' &&
-    (order.orderStatus === 'ready_for_pickup' || order.orderStatus === 'collected');
+    (statusKey === 'ready_for_pickup' || statusKey === 'collected');
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
     setError('');
@@ -131,12 +155,12 @@ function OrderCard({
             <span className={clsx(
               'text-[11px] font-semibold px-2 py-0.5 rounded-full border',
               order.paymentStatus === 'paid'
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : order.paymentStatus === 'refunded'
                 ? 'bg-violet-50 text-violet-700 border-violet-200'
-                : 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-amber-50 text-amber-800 border-amber-200'
             )}>
-              {order.paymentStatus === 'paid' ? '✓ Paid' : order.paymentStatus === 'refunded' ? 'Refunded' : '⏳ Unpaid'}
+              {order.paymentStatus === 'paid' ? '✓ Paid' : order.paymentStatus === 'refunded' ? 'Refunded' : '⏳ Unpaid · Pay at Shop'}
             </span>
           </div>
 
@@ -144,20 +168,20 @@ function OrderCard({
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
             <span className="flex items-center gap-1">
               <User size={11} className="text-slate-400" />
-              <strong className="text-slate-800">{order.pickupContact.fullName}</strong>
+              <strong className="text-slate-800">{contact.fullName}</strong>
             </span>
             <span className="flex items-center gap-1">
               <Phone size={11} className="text-slate-400" />
-              {order.pickupContact.phone}
+              {contact.phone}
             </span>
             <span className="flex items-center gap-1">
               <Clock size={11} className="text-slate-400" />
               {formatDate(order.createdAt)}
             </span>
           </div>
-          {order.pickupContact.notes && (
+          {contact.notes && (
             <p className="text-[11px] text-slate-500 mt-1 italic">
-              Note: {order.pickupContact.notes}
+              Note: {contact.notes}
             </p>
           )}
         </div>
@@ -165,10 +189,10 @@ function OrderCard({
         {/* Total + expand */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right">
-            <div className="text-xs text-slate-500">Total</div>
-            <div className="font-bold text-slate-900 flex items-center gap-0.5">
-              <IndianRupee size={12} />
-              {paiseToRupees(order.totalPaise)}
+            <div className="text-xs text-slate-500">Order Total</div>
+            <div className="font-bold text-slate-900 flex items-center gap-0.5 text-sm sm:text-base text-emerald-700">
+              <IndianRupee size={13} />
+              {paiseToRupees(totalPaise)}
             </div>
           </div>
           <button
@@ -189,14 +213,14 @@ function OrderCard({
           <div>
             <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Package size={11} />
-              Order Items ({order.items.length})
+              Order Items ({itemsList.length})
             </h4>
             <div className="space-y-2">
-              {order.items.length > 0 ? order.items.map((item, i) => (
+              {itemsList.length > 0 ? itemsList.map((item, i) => (
                 <div key={i} className="flex justify-between text-xs text-slate-700 bg-white rounded-xl px-3 py-2 border border-slate-200">
-                  <span className="font-medium">{item.name} × {item.quantity}</span>
+                  <span className="font-medium">{item.name || item.productId || 'Herbal Item'} × {item.quantity || 1}</span>
                   <span className="font-semibold text-slate-900">
-                    ₹{paiseToRupees(item.unitPricePaise * item.quantity)}
+                    ₹{paiseToRupees((item.unitPricePaise || 0) * (item.quantity || 1))}
                   </span>
                 </div>
               )) : (
@@ -206,7 +230,7 @@ function OrderCard({
           </div>
 
           {/* Status History */}
-          {order.statusHistory && order.statusHistory.length > 0 && (
+          {Array.isArray(order.statusHistory) && order.statusHistory.length > 0 && (
             <div>
               <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Status History
@@ -214,7 +238,7 @@ function OrderCard({
               <div className="space-y-1.5">
                 {order.statusHistory.map((entry, i) => (
                   <div key={i} className="flex items-start gap-2 text-[11px] text-slate-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-1.5 shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                     <span>
                       {entry.status && <strong>{entry.status}</strong>}
                       {entry.paymentStatus && ` — Payment: ${entry.paymentStatus}`}
@@ -240,13 +264,13 @@ function OrderCard({
             <div className="flex flex-wrap gap-2 pt-1">
               {updating ? (
                 <div className="flex items-center gap-2 text-xs text-slate-500 px-3 py-2">
-                  <Loader2 size={14} className="animate-spin" />
-                  Updating…
+                  <Loader2 size={14} className="animate-spin text-emerald-600" />
+                  Updating order…
                 </div>
               ) : (
                 <>
                   {nextStatuses.map(s => {
-                    const sc = STATUS_CONFIG[s];
+                    const sc = STATUS_CONFIG[s] || DEFAULT_STATUS_CONFIG;
                     const isPrimary = s !== 'cancelled';
                     return (
                       <button
@@ -260,7 +284,7 @@ function OrderCard({
                             : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                         )}
                       >
-                        → {sc.label}
+                        → Advance to {sc.label}
                       </button>
                     );
                   })}
@@ -268,10 +292,10 @@ function OrderCard({
                     <button
                       onClick={handleMarkPaid}
                       id={`order-${order.id}-mark-paid`}
-                      className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white border border-emerald-700 hover:bg-emerald-700 transition-colors flex items-center gap-1.5"
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white border border-emerald-800 hover:bg-emerald-800 transition-colors flex items-center gap-1.5 shadow-xs"
                     >
                       <IndianRupee size={12} />
-                      Confirm Payment Received
+                      Confirm In-Person Payment Received
                     </button>
                   )}
                 </>
@@ -284,7 +308,7 @@ function OrderCard({
   );
 }
 
-/* ── Main Page ────────────────────────────────────────────────── */
+/* ── Main Orders List Page ────────────────────────────────────── */
 export function OrdersListPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -297,8 +321,9 @@ export function OrdersListPage() {
     setError('');
     try {
       const data = await getAdminOrders();
-      setOrders(data);
+      setOrders(Array.isArray(data) ? data : []);
     } catch (e: any) {
+      console.error('Failed to load orders:', e);
       setError(e.message || 'Failed to load orders.');
     } finally {
       setLoading(false);
@@ -339,7 +364,7 @@ export function OrdersListPage() {
             Orders Management
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Click &amp; Collect orders — manage pickup statuses and confirm in-person payments
+            Dispensary Click &amp; Collect orders — track preparation, collection, and in-person payments
           </p>
         </div>
         <button
@@ -347,7 +372,7 @@ export function OrdersListPage() {
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition-colors disabled:opacity-60"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={loading ? 'animate-spin text-emerald-600' : ''} />
           Refresh
         </button>
       </div>
@@ -361,13 +386,13 @@ export function OrdersListPage() {
             className={clsx(
               'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors flex items-center gap-1',
               filterStatus === key
-                ? 'bg-slate-900 text-white border-slate-900'
+                ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
             )}
           >
             <Filter size={10} />
             {label}
-            {counts[key] > 0 && (
+            {(counts[key] || 0) > 0 && (
               <span className={clsx(
                 'ml-0.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full text-[10px] font-bold',
                 filterStatus === key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
@@ -384,7 +409,7 @@ export function OrdersListPage() {
         <div className="flex items-center gap-2.5 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-rose-700 text-xs">
           <AlertCircle size={15} />
           <span>{error}</span>
-          <button onClick={loadOrders} className="ml-auto underline text-rose-600">Retry</button>
+          <button onClick={loadOrders} className="ml-auto underline text-rose-600 font-semibold">Retry</button>
         </div>
       )}
 
@@ -392,14 +417,14 @@ export function OrdersListPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="flex flex-col items-center gap-3 text-slate-400">
-            <Loader2 size={28} className="animate-spin text-blue-500" />
+            <Loader2 size={28} className="animate-spin text-emerald-600" />
             <span className="text-sm">Loading orders…</span>
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20 bg-white border border-slate-200 rounded-2xl">
+        <div className="text-center py-20 bg-white border border-slate-200 rounded-2xl shadow-2xs">
           <Package size={40} className="text-slate-300 mx-auto mb-3" />
-          <p className="font-semibold text-slate-600">No orders found</p>
+          <p className="font-semibold text-slate-700">No orders found</p>
           <p className="text-sm text-slate-400 mt-1">
             {filterStatus === 'all' ? 'No orders have been placed yet.' : `No orders with status "${filterStatus}".`}
           </p>

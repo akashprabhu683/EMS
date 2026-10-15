@@ -9,7 +9,7 @@ export function ProtectedRoute() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+        <div className="w-9 h-9 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mb-3" />
         <p className="text-xs font-semibold text-slate-500">Verifying administrator credentials...</p>
       </div>
     );

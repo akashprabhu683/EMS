@@ -205,7 +205,7 @@ export function ProductsListPage() {
         <button
           id="btn-create-product"
           onClick={handleOpenCreateModal}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 shadow-2xs transition-colors self-start sm:self-auto"
+          className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 shadow-2xs transition-colors self-start sm:self-auto"
         >
           <Plus size={16} />
           <span>New Product</span>
@@ -240,7 +240,7 @@ export function ProductsListPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search products by title..."
-            className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+            className="w-full pl-10 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
           />
         </div>
 
@@ -251,7 +251,7 @@ export function ProductsListPage() {
             id="product-status-filter"
             value={statusFilter}
             onChange={(e: any) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 outline-none focus:border-emerald-600"
           >
             <option value="all">All Products</option>
             <option value="active">Active Only</option>
@@ -266,7 +266,7 @@ export function ProductsListPage() {
             id="product-category-filter"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 outline-none focus:border-emerald-600"
           >
             <option value="all">All Categories</option>
             {categories.map((c) => (
@@ -282,7 +282,7 @@ export function ProductsListPage() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         {loading ? (
           <div className="py-20 text-center">
-            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-xs font-semibold text-slate-500">Loading catalog from Firestore...</p>
           </div>
         ) : filteredProducts.length === 0 ? (
@@ -396,7 +396,7 @@ export function ProductsListPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleOpenEditModal(p)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
                             title="Edit product"
                           >
                             <Edit2 size={16} />
@@ -445,7 +445,7 @@ export function ProductsListPage() {
                   {editingProduct ? 'Edit Product' : 'Create New Product'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Stored directly in Firestore <code className="font-mono text-blue-600">products</code> collection
+                  Stored directly in Firestore <code className="font-mono text-emerald-700">products</code> collection
                 </p>
               </div>
               <button
@@ -475,8 +475,8 @@ export function ProductsListPage() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Wireless ANC Headphones"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="e.g. Ashwagandha Ghanvati"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
@@ -490,7 +490,7 @@ export function ProductsListPage() {
                   required
                   value={formData.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600"
                 >
                   <option value="" disabled>Select category</option>
                   {categories.map((c) => (
@@ -520,7 +520,7 @@ export function ProductsListPage() {
                       value={formData.priceRupees}
                       onChange={(e) => setFormData({ ...formData, priceRupees: e.target.value })}
                       placeholder="299.00"
-                      className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-mono"
+                      className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 font-mono"
                     />
                   </div>
                   {formData.priceRupees && !isNaN(parseFloat(formData.priceRupees)) && (
@@ -543,7 +543,7 @@ export function ProductsListPage() {
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                     placeholder="25"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-mono"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 font-mono"
                   />
                 </div>
               </div>
@@ -559,7 +559,7 @@ export function ProductsListPage() {
                   value={formData.imageUrl}
                   onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                 />
                 {formData.imageUrl && formData.imageUrl.startsWith('https://') && (
                   <div className="mt-2 flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
@@ -587,8 +587,8 @@ export function ProductsListPage() {
                   rows={3}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Detailed specifications, features, and warranty details..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
+                  placeholder="Detailed therapeutic actions, ingredients, and dosage details..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 resize-none"
                 />
               </div>
 
@@ -599,7 +599,7 @@ export function ProductsListPage() {
                   type="checkbox"
                   checked={formData.isActive}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                  className="w-4 h-4 rounded text-emerald-700 focus:ring-emerald-600 border-slate-300"
                 />
                 <label htmlFor="modal-product-active" className="text-xs font-bold text-slate-700 cursor-pointer">
                   Publish to Storefront (Active)
@@ -620,7 +620,7 @@ export function ProductsListPage() {
                   id="modal-product-save"
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs transition-colors disabled:opacity-50"
                 >
                   {isSaving ? 'Saving to Firestore...' : editingProduct ? 'Save Changes' : 'Create Product'}
                 </button>

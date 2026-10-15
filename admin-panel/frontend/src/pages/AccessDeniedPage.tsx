@@ -63,18 +63,18 @@ export function AccessDeniedPage() {
         </div>
 
         {/* Instructions for server administrator */}
-        <div className="bg-blue-50/60 rounded-2xl p-4 border border-blue-200 space-y-2.5">
-          <p className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">
+        <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200 space-y-2.5">
+          <p className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider">
             How to grant admin access:
           </p>
-          <p className="text-xs text-blue-800 leading-relaxed">
+          <p className="text-xs text-emerald-800 leading-relaxed">
             Run the trusted server-side command in your project terminal:
           </p>
-          <div className="flex items-center justify-between bg-white rounded-xl p-2.5 border border-blue-200 font-mono text-[11px] text-slate-800">
+          <div className="flex items-center justify-between bg-white rounded-xl p-2.5 border border-emerald-200 font-mono text-[11px] text-slate-800">
             <span className="truncate pr-2">node scripts/set-admin-claim.mjs {email}</span>
             <button
               onClick={handleCopy}
-              className="text-blue-600 hover:text-blue-800 p-1 flex-shrink-0"
+              className="text-emerald-700 hover:text-emerald-900 p-1 flex-shrink-0"
               title="Copy command"
             >
               {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
@@ -92,7 +92,7 @@ export function AccessDeniedPage() {
           <button
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
-            className="flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 shadow-2xs transition-colors disabled:opacity-50"
+            className="flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-2 shadow-2xs transition-colors disabled:opacity-50"
           >
             <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
             <span>Check Privileges</span>

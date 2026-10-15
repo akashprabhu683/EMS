@@ -75,7 +75,7 @@ export function ProductDetailPage() {
     return (
       <main className="min-h-screen bg-slate-50 pt-28 text-center px-4">
         <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-8 space-y-4 shadow-xs">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-slate-900 font-bold text-lg">Loading Product...</p>
           <p className="text-slate-500 text-xs">Fetching the latest catalog details.</p>
         </div>
@@ -195,7 +195,7 @@ export function ProductDetailPage() {
                       }}
                       className={clsx(
                         'w-16 h-16 rounded-xl overflow-hidden border-2 transition-all bg-slate-100',
-                        imgIdx === i ? 'border-blue-600 ring-2 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
+                        imgIdx === i ? 'border-emerald-600 ring-2 ring-emerald-100' : 'border-slate-200 hover:border-slate-300'
                       )}
                     >
                       <img
@@ -216,7 +216,7 @@ export function ProductDetailPage() {
             <div className="lg:col-span-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
                     {product.category}
                   </span>
                   {product.stock <= 5 && product.stock > 0 && (
@@ -250,11 +250,11 @@ export function ProductDetailPage() {
                 <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl flex items-baseline justify-between mb-6">
                   <div className="flex items-baseline gap-2.5">
                     <span className="text-3xl font-extrabold text-slate-900 tracking-tight font-display">
-                      ${product.price}
+                      ₹{product.price}
                     </span>
                     {product.originalPrice && (
                       <span className="text-sm text-slate-400 line-through">
-                        ${product.originalPrice}
+                        ₹{product.originalPrice}
                       </span>
                     )}
                   </div>
@@ -279,7 +279,7 @@ export function ProductDetailPage() {
                           onClick={() => setColor(c)}
                           className={clsx(
                             'w-7 h-7 rounded-full border-2 transition-all',
-                            selectedColor === c ? 'ring-2 ring-blue-600 ring-offset-2 border-white' : 'border-slate-300 hover:border-slate-400'
+                            selectedColor === c ? 'ring-2 ring-emerald-600 ring-offset-2 border-white' : 'border-slate-300 hover:border-slate-400'
                           )}
                           style={{ background: c }}
                           aria-label={`Color option ${c}`}
@@ -304,7 +304,7 @@ export function ProductDetailPage() {
                           className={clsx(
                             'px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all',
                             selectedSize === s
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
                               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                           )}
                         >
@@ -379,12 +379,12 @@ export function ProductDetailPage() {
                 {/* Trust mini-strip */}
                 <div className="grid grid-cols-3 gap-2 pt-2">
                   {[
-                    { icon: Truck, label: 'Free Delivery', sub: 'Orders over $50' },
-                    { icon: RotateCcw, label: '30-Day Return', sub: 'Hassle-free' },
-                    { icon: Shield, label: '2-Yr Warranty', sub: 'Official cover' },
+                    { icon: Truck, label: 'Dispensary Pickup', sub: 'Collect in 2-4 hrs' },
+                    { icon: RotateCcw, label: 'Authentic Herbs', sub: '100% certified' },
+                    { icon: Shield, label: 'Ayurvedic Standard', sub: 'Lab tested' },
                   ].map(({ icon: Icon, label, sub }, i) => (
                     <div key={i} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                      <Icon size={15} className="text-blue-600 mx-auto mb-1" />
+                      <Icon size={15} className="text-emerald-700 mx-auto mb-1" />
                       <p className="text-[11px] font-bold text-slate-800">{label}</p>
                       <p className="text-[10px] text-slate-400">{sub}</p>
                     </div>
@@ -408,7 +408,7 @@ export function ProductDetailPage() {
                 className={clsx(
                   'px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all',
                   tab === t
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
                     : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
                 )}
               >
@@ -482,12 +482,12 @@ export function ProductDetailPage() {
           <div className="space-y-6">
             <div className="flex items-end justify-between">
               <div>
-                <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Recommendations</span>
+                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Recommendations</span>
                 <h2 className="font-display font-extrabold text-xl sm:text-2xl text-slate-900">
-                  Related Products
+                  Related Formulations
                 </h2>
               </div>
-              <Link to={`/products?category=${product.category}`} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+              <Link to={`/products?category=${product.category}`} className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1">
                 View Category <ChevronRight size={13} />
               </Link>
             </div>

@@ -96,13 +96,13 @@ export function Navbar() {
           <Link
             to="/"
             id="nav-logo"
-            className="flex items-center gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
+            className="flex items-center gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
           >
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-700 transition-colors">
+            <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors">
               🌿
             </div>
             <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
-              EMS<span className="text-emerald-600"> Dispensary</span>
+              EMS<span className="text-emerald-700"> Dispensary</span>
             </span>
           </Link>
 
@@ -117,9 +117,9 @@ export function Navbar() {
                 <li key={to}>
                   <Link
                     to={to}
-                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                       active
-                        ? 'text-blue-600 bg-blue-50/80 font-semibold shadow-2xs'
+                        ? 'text-emerald-800 bg-emerald-50 font-bold shadow-2xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                     }`}
                   >
@@ -134,7 +134,7 @@ export function Navbar() {
           <div className="hidden lg:flex items-center flex-1 min-w-0 max-w-sm mx-2">
             <button
               onClick={() => setSearchOpen(true)}
-              className="w-full h-10 flex items-center justify-between px-3.5 py-2 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-slate-500 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="w-full h-10 flex items-center justify-between px-3.5 py-2 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-slate-500 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               aria-label="Search catalog"
             >
               <div className="flex items-center gap-2.5 min-w-0">
@@ -148,13 +148,12 @@ export function Navbar() {
           </div>
 
           {/* Action Buttons: Search (Mobile), Cart, User Account, Hamburger */}
-          {/* Action Buttons: Search (Mobile), Cart, User Account, Hamburger */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Mobile Search Button */}
             <button
               id="nav-search-btn"
               onClick={() => setSearchOpen(true)}
-              className="p-2 sm:p-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors lg:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="p-2 sm:p-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors lg:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               aria-label="Search products"
             >
               <Search size={18} />
@@ -184,7 +183,7 @@ export function Navbar() {
                 <button
                   id="nav-user-menu-btn"
                   onClick={() => setUserMenuOpen(v => !v)}
-                  className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                   aria-label="User account menu"
                 >
                   <img
@@ -237,7 +236,7 @@ export function Navbar() {
             <button
               id="nav-mobile-menu-btn"
               onClick={() => setMobileOpen(v => !v)}
-              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               aria-label="Toggle navigation menu"
             >
               {mobileOpen ? <X size={20} /> : <Menu size={20} />}
@@ -266,7 +265,7 @@ export function Navbar() {
                     className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
                   >
                     <span>My Orders</span>
-                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
+                    <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md">
                       History
                     </span>
                   </Link>
@@ -322,7 +321,7 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => setSearchOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 aria-label="Close search"
               >
                 <X size={18} />

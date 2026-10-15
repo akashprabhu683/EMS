@@ -36,7 +36,7 @@ export function Layout() {
       {/* Mobile Top Header */}
       <header className="md:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+          <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center shadow-xs">
             <ShieldCheck size={18} />
           </div>
           <span className="font-extrabold text-sm text-slate-900 font-display">EMS Admin</span>
@@ -60,15 +60,15 @@ export function Layout() {
         {/* Brand Banner */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+            <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs">
               <ShieldCheck size={20} />
             </div>
             <div>
               <h2 className="font-extrabold text-base text-slate-900 tracking-tight font-display">
-                EMS Admin
+                EMS Dispensary
               </h2>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                Management System
+                Management Portal
               </p>
             </div>
           </div>
@@ -92,7 +92,7 @@ export function Layout() {
                 clsx(
                   'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all',
                   isActive
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs font-bold'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 )
               }
