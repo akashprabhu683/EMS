@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Search, User, Menu, X, ShieldCheck, ArrowRight } from 'lucide-react';
+import { ShoppingBag, Search, User, Menu, X, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useState, useEffect, useRef } from 'react';
@@ -7,14 +7,14 @@ import { useState, useEffect, useRef } from 'react';
 export function Navbar() {
   const { totalItems, openCart } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
-  const [mobileOpen, setMobileOpen]       = useState(false);
-  const [searchOpen, setSearchOpen]       = useState(false);
-  const [searchQuery, setSearchQuery]     = useState('');
-  const [userMenuOpen, setUserMenuOpen]   = useState(false);
-  const [scrolled, setScrolled]           = useState(false);
-  const searchInputRef                    = useRef<HTMLInputElement>(null);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen]     = useState(false);
+  const [searchOpen, setSearchOpen]     = useState(false);
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [scrolled, setScrolled]         = useState(false);
+  const searchInputRef                  = useRef<HTMLInputElement>(null);
+  const location  = useLocation();
+  const navigate  = useNavigate();
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -22,20 +22,17 @@ export function Navbar() {
     setUserMenuOpen(false);
   }, [location.pathname, location.search]);
 
-  // Track scroll position for header shadow
+  // Track scroll for header shadow
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 8);
-    };
+    const handleScroll = () => setScrolled(window.scrollY > 8);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Keyboard shortcut listener (/ to open, Escape to close)
+  // Keyboard shortcut: / to open, Esc to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '/' && !searchOpen) {
-        // If not focused on an input/textarea
         const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
         if (tag !== 'input' && tag !== 'textarea') {
           e.preventDefault();
@@ -49,13 +46,9 @@ export function Navbar() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchOpen]);
 
-  // Autofocus search input when overlay opens
+  // Autofocus when overlay opens
   useEffect(() => {
-    if (searchOpen) {
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 50);
-    }
+    if (searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50);
   }, [searchOpen]);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -73,18 +66,41 @@ export function Navbar() {
     setSearchQuery('');
   };
 
+  // ── Live search suggestions pool (derived from product catalogue) ─────────
+  const ALL_SUGGESTIONS = [
+    'Ashwagandha', 'Ashwagandha Ghanvati', 'Stress Relief', 'Sleep Support',
+    'Triphala', 'Triphala Churna', 'Digestive Health', 'Detox', 'Colon Cleanse',
+    'Chyawanprash', 'Immunity Booster', 'Amla', 'Wild Herbs',
+    'Brahmi', 'Brahmi Vati', 'Memory', 'Cognitive Focus', 'Mental Clarity',
+    'Tulsi', 'Panch Tulsi', 'Holy Basil', 'Respiratory Care', 'Tulsi Drops',
+    'Giloy', 'Giloy Ghanvati', 'Guduchi', 'Blood Purifier', 'Immunity',
+    'Mahanarayan Oil', 'Joint Care', 'Pain Relief', 'Muscle Soreness',
+    'Kumkumadi', 'Kumkumadi Tailam', 'Saffron', 'Skin Glow', 'Beauty Oil',
+    'Shatavari', 'Women Health', 'Hormonal Balance', 'Lactation Support',
+    'Herbal Tea', 'Sleep Tea', 'Chamomile', 'Serenity', 'Relaxation',
+    'Liver Tonic', 'Liv-Care', 'Liver Syrup', 'Bhumi Amla', 'Hepatic Support',
+    'Neem', 'Turmeric', 'Wild Turmeric', 'Skin Health', 'Acne Care',
+    'Ayurvedic', 'Herbal Extracts', 'Vitality', 'Wellness', 'Natural',
+  ];
+
+  const liveSuggestions =
+    searchQuery.trim().length > 0
+      ? ALL_SUGGESTIONS.filter(s =>
+          s.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        ).slice(0, 7)
+      : [];
+
   const NAV_LINKS = [
-    { to: '/',                                    label: 'Home' },
-    { to: '/products',                            label: 'All Products' },
-    { to: '/products?search=Ayurvedic',           label: 'Ayurvedic' },
-    { to: '/products?search=Herbal+Extracts',     label: 'Herbal Extracts' },
-    { to: '/products?search=Vitality',            label: 'Vitality' },
+    { to: '/',                                label: 'Home' },
+    { to: '/products',                        label: 'All Products' },
+    { to: '/products?search=Ayurvedic',       label: 'Ayurvedic' },
+    { to: '/products?search=Herbal+Extracts', label: 'Herbal Extracts' },
+    { to: '/products?search=Vitality',        label: 'Vitality' },
   ];
 
   return (
     <>
-
-      {/* 2. Main Header — solid sticky header with subtle scroll shadow */}
+      {/* Main Header */}
       <header
         className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b transition-all duration-200 ${
           scrolled ? 'border-slate-200/90 shadow-sm' : 'border-slate-200/80 shadow-none'
@@ -106,7 +122,7 @@ export function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Nav Links with proper hit targets and padding */}
+          {/* Desktop Nav Links */}
           <ul className="hidden md:flex items-center gap-1 lg:gap-1.5 shrink-0">
             {NAV_LINKS.map(({ to, label }) => {
               const active =
@@ -130,16 +146,16 @@ export function Navbar() {
             })}
           </ul>
 
-          {/* Desktop Search Field with fixed height and comfortable padding */}
+          {/* Desktop Search Trigger */}
           <div className="hidden lg:flex items-center flex-1 min-w-0 max-w-sm mx-2">
             <button
               onClick={() => setSearchOpen(true)}
               className="w-full h-10 flex items-center justify-between px-3.5 py-2 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-slate-500 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label="Search catalog"
+              aria-label="Search products"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <Search size={15} className="text-slate-400 shrink-0" />
-                <span className="truncate">Search catalog…</span>
+                <span className="truncate">search products</span>
               </div>
               <kbd className="px-2 py-0.5 text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-md shadow-2xs shrink-0 ml-2">
                 /
@@ -147,9 +163,8 @@ export function Navbar() {
             </button>
           </div>
 
-          {/* Action Buttons: Search (Mobile), Cart, User Account, Hamburger */}
+          {/* Actions: Search (mobile), Cart, User, Hamburger */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Mobile Search Button */}
             <button
               id="nav-search-btn"
               onClick={() => setSearchOpen(true)}
@@ -159,7 +174,6 @@ export function Navbar() {
               <Search size={18} />
             </button>
 
-            {/* Cart Button with Count Badge */}
             <button
               id="nav-cart-btn"
               onClick={openCart}
@@ -177,7 +191,6 @@ export function Navbar() {
               <span className="text-xs font-semibold hidden sm:inline text-slate-700">Cart</span>
             </button>
 
-            {/* User Account Control */}
             <div className="relative">
               {isAuthenticated ? (
                 <button
@@ -232,7 +245,6 @@ export function Navbar() {
               )}
             </div>
 
-            {/* Mobile Menu Toggle Button */}
             <button
               id="nav-mobile-menu-btn"
               onClick={() => setMobileOpen(v => !v)}
@@ -298,7 +310,7 @@ export function Navbar() {
         )}
       </header>
 
-      {/* 3. Centered Command-Palette Style Search Modal */}
+      {/* Search Modal */}
       {searchOpen && (
         <div
           className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-start justify-center pt-20 sm:pt-28 px-4 animate-fade-in"
@@ -308,6 +320,7 @@ export function Navbar() {
           aria-label="Search dialog"
         >
           <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-modal-pop">
+            {/* Input row */}
             <form onSubmit={handleSearch} className="relative flex items-center px-4 py-3.5 border-b border-slate-200/80 gap-3">
               <Search size={18} className="text-slate-400 shrink-0 ml-1" />
               <input
@@ -315,7 +328,8 @@ export function Navbar() {
                 id="search-overlay-input"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search products, categories, features…"
+                placeholder="search products"
+                autoComplete="off"
                 className="w-full min-w-0 text-sm sm:text-base text-slate-900 placeholder-slate-400 bg-transparent outline-none"
               />
               <button
@@ -328,39 +342,48 @@ export function Navbar() {
               </button>
             </form>
 
-            <div className="p-4 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
-              <div className="flex items-center gap-1.5">
+            {/* Live suggestions list */}
+            {liveSuggestions.length > 0 ? (
+              <ul className="py-1.5 max-h-72 overflow-y-auto">
+                {liveSuggestions.map((suggestion) => {
+                  const q   = searchQuery.trim().toLowerCase();
+                  const idx = suggestion.toLowerCase().indexOf(q);
+                  return (
+                    <li key={suggestion}>
+                      <button
+                        type="button"
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left group"
+                      >
+                        <Search size={13} className="text-slate-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
+                        <span>
+                          {idx === -1 ? (
+                            suggestion
+                          ) : (
+                            <>
+                              {suggestion.slice(0, idx)}
+                              <strong className="font-semibold text-emerald-700">
+                                {suggestion.slice(idx, idx + q.length)}
+                              </strong>
+                              {suggestion.slice(idx + q.length)}
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              /* Keyboard hint shown when idle or no match */
+              <div className="px-5 py-4 bg-slate-50 flex items-center gap-1.5 text-xs text-slate-500">
                 <span>Press</span>
                 <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-700 font-semibold shadow-2xs">Enter</kbd>
                 <span>to search or</span>
                 <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-700 font-semibold shadow-2xs">Esc</kbd>
                 <span>to close</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-400 text-[11px]">Popular:</span>
-                <button
-                  type="button"
-                  onClick={() => handleSuggestionClick('Ashwagandha')}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 cursor-pointer shadow-2xs transition-colors"
-                >
-                  Ashwagandha
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSuggestionClick('Triphala')}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 cursor-pointer shadow-2xs transition-colors"
-                >
-                  Triphala
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSuggestionClick('Tulsi')}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 hover:text-emerald-600 cursor-pointer shadow-2xs transition-colors"
-                >
-                  Tulsi
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
