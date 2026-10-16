@@ -196,6 +196,41 @@ async function main() {
 
   console.log(`\n\n🎉 Successfully uploaded ${successCount}/${PRODUCTS.length} products to Firestore!`);
   console.log('All categories and product documents are now synced with active status.');
+
+  // 4. Post-seed verification — detect and remove orphan auto-ID docs
+  console.log('\n🔍 Verifying Firestore integrity (checking for orphan auto-ID documents)...');
+  let pageToken: string | undefined;
+  const allDocs: string[] = [];
+
+  do {
+    const pageUrl = `${FIRESTORE_BASE}/products?pageSize=100` + (pageToken ? `&pageToken=${pageToken}` : '');
+    const pageRes = await fetch(pageUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const pageData = await pageRes.json();
+    for (const d of pageData.documents || []) {
+      allDocs.push(d.name.split('/').pop()!);
+    }
+    pageToken = pageData.nextPageToken;
+  } while (pageToken);
+
+  const stableIds = allDocs.filter(id => id.startsWith('prod_'));
+  const orphanIds = allDocs.filter(id => !id.startsWith('prod_'));
+  console.log(`  Stable prod_* documents : ${stableIds.length}`);
+  console.log(`  Orphan auto-ID documents: ${orphanIds.length}`);
+
+  if (orphanIds.length > 0) {
+    console.log('  🧹 Deleting orphan documents...');
+    for (const orphanId of orphanIds) {
+      const delRes = await fetch(`${FIRESTORE_BASE}/products/${orphanId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`  ${delRes.ok ? '✅' : '❌'} Deleted: ${orphanId}`);
+    }
+  } else {
+    console.log('  ✅ No orphan documents found. Image stability guaranteed.');
+  }
 }
 
 main().catch(err => {

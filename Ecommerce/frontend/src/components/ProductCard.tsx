@@ -14,9 +14,10 @@ export function ProductCard({ product }: ProductCardProps) {
   const { addItem, openCart } = useCart();
   const { isFavorite, toggleFavorite } = useWishlist();
   const wished = isFavorite(product.id);
-  const [adding, setAdding]     = useState(false);
-  const [imgIdx, setImgIdx] = useState(0);
-  const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
+  const [adding, setAdding] = useState(false);
+  // Always show the first image — determined by the product's stable ID in Firestore.
+  // No random index, no hover-swap; images[0] is the canonical primary image.
+  const [imgError, setImgError] = useState(false);
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -29,8 +30,9 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   const isOutOfStock = product.stock === 0;
-  const activeImg = product.images[imgIdx] ?? product.images[0];
-  const isImageBroken = imgErrors[imgIdx] || !activeImg;
+  // Primary image is always index 0 — stable, deterministic, matched to product ID
+  const primaryImg = product.images[0] ?? '';
+  const isImageBroken = imgError || !primaryImg;
 
   return (
     <div
@@ -52,17 +54,13 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
           ) : (
             <img
-              src={activeImg}
+              key={`${product.id}-img`}
+              src={primaryImg}
               alt={product.name}
               width={600}
               height={450}
               loading="lazy"
-              onError={() => {
-                setImgErrors(prev => ({ ...prev, [imgIdx]: true }));
-                if (imgIdx !== 0) {
-                  setImgIdx(0);
-                }
-              }}
+              onError={() => setImgError(true)}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           )}
