@@ -7,6 +7,7 @@ interface WishlistContextType {
   favorites: string[];
   isFavorite: (productId: string) => boolean;
   toggleFavorite: (productId: string) => void;
+  clearFavorites: () => void;
   favoritesCount: number;
 }
 
@@ -106,6 +107,19 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     });
   }, [isAuthenticated, user?.id]);
 
+  const clearFavorites = useCallback(() => {
+    setFavorites([]);
+    const key = isAuthenticated && user?.id
+      ? `${STORAGE_KEY_PREFIX}${user.id}`
+      : `${STORAGE_KEY_PREFIX}guest`;
+    localStorage.removeItem(key);
+    if (isAuthenticated && user?.id) {
+      const userDocRef = doc(db, 'users', user.id);
+      setDoc(userDocRef, { favorites: [], updatedAt: new Date().toISOString() }, { merge: true })
+        .catch(console.warn);
+    }
+  }, [isAuthenticated, user?.id]);
+
   const isFavorite = useCallback((productId: string) => {
     return favorites.includes(productId);
   }, [favorites]);
@@ -116,6 +130,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         favorites,
         isFavorite,
         toggleFavorite,
+        clearFavorites,
         favoritesCount: favorites.length,
       }}
     >

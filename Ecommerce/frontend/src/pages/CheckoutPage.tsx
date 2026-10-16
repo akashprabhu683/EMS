@@ -8,8 +8,8 @@ import {
   AlertCircle, Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { httpsCallable } from 'firebase/functions';
-import { auth, functions } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 const STEPS = ['Cart Review', 'Pickup Details', 'Confirm & Place'];
 
@@ -116,54 +116,55 @@ export function CheckoutPage() {
         notes: form.notes.trim() || undefined,
       };
 
-      if (apiUrl) {
-        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-        const res = await fetch(`${apiUrl.replace(/\/$/, '')}/api/orders`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({
-            pickupContact,
-            idempotencyKey: idempotencyKeyRef.current,
-          }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `HTTP ${res.status}: Failed to place order.`);
-        }
-
-        const data = await res.json();
-        orderId = data.orderId;
-        totalPaise = data.totalPaise ?? data.total ?? 0;
-        subtotalPaise = data.subtotalPaise ?? data.subtotal ?? 0;
-        orderStatus = data.orderStatus ?? 'placed';
-        paymentStatus = data.paymentStatus ?? 'unpaid';
-        itemCount = data.itemCount ?? items.length;
-      } else {
-        // Fallback: Firebase Callable Function
-        const createOrderCallable = httpsCallable<
-          { pickupContact: typeof pickupContact; idempotencyKey: string },
-          {
-            orderId: string; subtotalPaise: number; total: number;
-            orderStatus: string; paymentStatus: string; itemCount: number;
-          }
-        >(functions, 'createOrder');
-
-        const response = await createOrderCallable({
-          pickupContact,
-          idempotencyKey: idempotencyKeyRef.current,
-        });
-
-        orderId = response.data.orderId;
-        totalPaise = response.data.total;
-        subtotalPaise = response.data.subtotalPaise;
-        orderStatus = response.data.orderStatus;
-        paymentStatus = response.data.paymentStatus;
-        itemCount = response.data.itemCount;
+      const currentUid = auth.currentUser?.uid || user?.id;
+      if (!currentUid) {
+        throw new Error('Please sign in with Google to place your order.');
       }
+
+      const calculatedTotalPaise = Math.round(totalPrice * 100);
+      const orderItems = items.map(item => ({
+        productId: item.product.id,
+        name: item.product.name,
+        unitPrice: Math.round(item.product.price * 100),
+        quantity: item.quantity,
+        lineTotal: Math.round(item.product.price * item.quantity * 100),
+        imageUrl: item.product.images[0] || '',
+        selectedColor: item.selectedColor || null,
+        selectedSize: item.selectedSize || null,
+      }));
+
+      // Directly create order in live Firestore orders collection
+      const orderDocRef = await addDoc(collection(db, 'orders'), {
+        userId: currentUid,
+        orderStatus: 'placed',
+        paymentStatus: 'unpaid',
+        paymentMethod: 'click_and_collect',
+        fulfillmentMethod: 'click_and_collect',
+        pickupContact,
+        pickupLocation: 'EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001',
+        items: orderItems,
+        subtotal: calculatedTotalPaise,
+        total: calculatedTotalPaise,
+        shippingFee: 0,
+        codFee: 0,
+        itemCount: items.length,
+        statusHistory: [
+          {
+            status: 'placed',
+            timestamp: new Date().toISOString(),
+            note: 'Order placed for Click-and-Collect dispensary pickup. Awaiting dispensary confirmation.',
+          },
+        ],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      orderId = orderDocRef.id;
+      totalPaise = calculatedTotalPaise;
+      subtotalPaise = calculatedTotalPaise;
+      orderStatus = 'placed';
+      paymentStatus = 'unpaid';
+      itemCount = items.length;
 
       clearCart();
 

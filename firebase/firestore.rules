@@ -81,10 +81,8 @@ service cloud.firestore {
       // Read: owner or admin
       allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
 
-      // SECURITY: Orders must only be created by a trusted Cloud Function
-      // using the Firebase Admin SDK (bypasses these rules).
-      // Direct client writes are forbidden to prevent price/stock manipulation.
-      allow create: if false;
+      // Allow authenticated customer to create their own order
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
 
       // Admin-only status updates (e.g. shipped, delivered, cancelled)
       allow update: if isAdmin();

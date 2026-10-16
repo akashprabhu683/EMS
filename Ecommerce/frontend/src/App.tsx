@@ -21,6 +21,7 @@ import { ClickCollectPage }      from './pages/ClickCollectPage';
 import { FaqPage }               from './pages/FaqPage';
 import { ContactPage }           from './pages/ContactPage';
 import { ProfilePage }           from './pages/ProfilePage';
+import { FavoritesPage }         from './pages/FavoritesPage';
 import { WishlistProvider }      from './context/WishlistContext';
 import { useCart } from './context/CartContext';
 import { Home, Package, ShoppingBag, ClipboardList, User } from 'lucide-react';
@@ -140,6 +141,8 @@ function AppLayout() {
           <Route path="/faq"                 element={<FaqPage />} />
           <Route path="/contact"             element={<ContactPage />} />
           <Route path="/profile"             element={<ProfilePage />} />
+          <Route path="/favorites"           element={<FavoritesPage />} />
+          <Route path="/wishlist"            element={<FavoritesPage />} />
           <Route path="*"                    element={<NotFoundPage />} />
         </Routes>
       </div>

@@ -1,12 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, User, Menu, X, ArrowRight, Leaf } from 'lucide-react';
+import { ShoppingBag, User, Menu, X, ArrowRight, Leaf, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useState, useEffect, useRef } from 'react';
 
 export function Navbar() {
   const { totalItems, openCart } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
+  const { favoritesCount } = useWishlist();
   const [mobileOpen, setMobileOpen]     = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled]         = useState(false);
@@ -93,8 +95,26 @@ export function Navbar() {
           })}
         </ul>
 
-        {/* Actions: Cart, User, Hamburger */}
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+        {/* Actions: Wishlist, Cart, User, Hamburger */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Wishlist Button */}
+          <Link
+            to="/favorites"
+            id="nav-wishlist-btn"
+            className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={`My Favourites with ${favoritesCount} items`}
+          >
+            <div className="relative">
+              <Heart size={18} className={favoritesCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-slate-700'} />
+              {favoritesCount > 0 && (
+                <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-600 text-white text-[10px] font-bold px-1 shadow-2xs">
+                  {favoritesCount > 99 ? '99+' : favoritesCount}
+                </span>
+              )}
+            </div>
+            <span className="text-xs font-semibold hidden lg:inline text-slate-700">Favourites</span>
+          </Link>
+
           <button
             id="nav-cart-btn"
             onClick={openCart}
@@ -154,6 +174,23 @@ export function Navbar() {
                     <ArrowRight size={12} className="text-slate-400" />
                   </Link>
                   <Link
+                    to="/favorites"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Heart size={13} className="text-rose-500" />
+                      <span>My Favourites</span>
+                    </div>
+                    {favoritesCount > 0 ? (
+                      <span className="px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200">
+                        {favoritesCount}
+                      </span>
+                    ) : (
+                      <ArrowRight size={12} className="text-slate-400" />
+                    )}
+                  </Link>
+                  <Link
                     to="/orders"
                     onClick={() => setUserMenuOpen(false)}
                     className="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
@@ -200,6 +237,22 @@ export function Navbar() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link
+                  to="/favorites"
+                  className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
+                >
+                  <span className="flex items-center gap-2">
+                    <Heart size={16} className={favoritesCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-slate-500'} />
+                    <span>My Favourites</span>
+                  </span>
+                  {favoritesCount > 0 && (
+                    <span className="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md">
+                      {favoritesCount}
+                    </span>
+                  )}
+                </Link>
+              </li>
               <li>
                 <Link
                   to="/orders"

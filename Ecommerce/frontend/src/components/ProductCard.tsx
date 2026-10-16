@@ -44,14 +44,6 @@ export function ProductCard({ product }: ProductCardProps) {
           id={`product-card-link-${product.id}`}
           className="block w-full h-full"
           tabIndex={-1}
-          onMouseEnter={() => {
-            if (product.images.length > 1 && !imgErrors[1]) {
-              setImgIdx(1);
-            }
-          }}
-          onMouseLeave={() => {
-            setImgIdx(0);
-          }}
         >
           {isImageBroken ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-4 text-center">

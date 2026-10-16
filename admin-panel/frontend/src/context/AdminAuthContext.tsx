@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import {
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   type User,
@@ -8,12 +10,15 @@ import {
 import { auth } from '../firebase';
 import type { AdminUser } from '../types';
 
+const googleProvider = new GoogleAuthProvider();
+
 interface AdminAuthContextType {
   user: AdminUser | null;
   rawUser: User | null;
   isAdmin: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshClaims: () => Promise<boolean>;
 }
@@ -77,6 +82,16 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [verifyAdminClaims]);
 
+  const loginWithGoogle = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      await verifyAdminClaims(cred.user);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [verifyAdminClaims]);
+
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -106,6 +121,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         isAdmin,
         isLoading,
         login,
+        loginWithGoogle,
         logout,
         refreshClaims,
       }}
