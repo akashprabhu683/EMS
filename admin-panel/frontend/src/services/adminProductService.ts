@@ -3,7 +3,7 @@ import {
   doc,
   getDocs,
   getDoc,
-  addDoc,
+  setDoc,
   updateDoc,
   serverTimestamp,
   query,
@@ -35,7 +35,6 @@ export function rupeesToPaise(rupeesInput: string | number): number {
   if (isNaN(num) || num < 0) {
     throw new Error('Price must be a valid non-negative number.');
   }
-  // Avoid floating-point issues by rounding to nearest integer in paise
   return Math.round(num * 100);
 }
 
@@ -72,19 +71,41 @@ export function validateProductForm(form: ProductFormData): string | null {
   return null;
 }
 
+/**
+ * Fetch all products from Firestore for the admin dashboard.
+ *
+ * Strategy: try ordered query first; fall back to unordered collection scan
+ * if the composite index hasn't been built yet (common on fresh projects).
+ * Seeded products from seed-firestore.ts use REST PATCH which stores createdAt
+ * as an ISO string — so we sort client-side by name as the final stable fallback.
+ */
 export async function getAllProducts(): Promise<Product[]> {
-  const productsQuery = query(
-    collection(db, 'products'),
-    orderBy('createdAt', 'desc')
-  );
-
+  // Try ordered query (requires composite index on createdAt)
   try {
-    const snapshot = await getDocs(productsQuery);
-    return snapshot.docs.map(docSnap => docToProduct(docSnap.id, docSnap.data()));
-  } catch (err) {
-    // If orderBy createdAt index is building or missing, fallback to unordered query
-    const fallbackSnap = await getDocs(collection(db, 'products'));
-    return fallbackSnap.docs.map(docSnap => docToProduct(docSnap.id, docSnap.data()));
+    const orderedQuery = query(
+      collection(db, 'products'),
+      orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(orderedQuery);
+    if (snapshot.docs.length > 0) {
+      return snapshot.docs.map(docSnap => docToProduct(docSnap.id, docSnap.data()));
+    }
+  } catch {
+    // Index not ready or createdAt missing — fall through to unordered scan
+  }
+
+  // Unordered scan — works regardless of index state
+  try {
+    const snapshot = await getDocs(collection(db, 'products'));
+    const results = snapshot.docs.map(docSnap => docToProduct(docSnap.id, docSnap.data()));
+    // Sort client-side: active first, then by name A→Z for stable ordering
+    results.sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return results;
+  } catch (err: any) {
+    throw new Error(`Failed to load products: ${err.message ?? err}`);
   }
 }
 
@@ -95,6 +116,11 @@ export async function getProductById(id: string): Promise<Product | null> {
   return docToProduct(snap.id, snap.data());
 }
 
+/**
+ * Create a new product with a stable, human-readable ID.
+ * Uses setDoc() with a slug derived from the product name so the admin panel
+ * never generates auto-IDs (which caused image-flicker in the storefront).
+ */
 export async function createProduct(form: ProductFormData): Promise<string> {
   const validationError = validateProductForm(form);
   if (validationError) {
@@ -104,23 +130,42 @@ export async function createProduct(form: ProductFormData): Promise<string> {
   const priceInPaise = rupeesToPaise(form.priceRupees);
   const stock = parseInt(form.stock, 10);
 
+  // Generate stable slug ID: prod_{slug} — e.g. prod_ashwagandha_capsules
+  const slug = form.name.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 40);
+  // Append short timestamp suffix to avoid collisions with same-named products
+  const stableId = `prod_${slug}_${Date.now().toString(36)}`;
+
   const payload: Record<string, any> = {
     name: form.name.trim(),
     description: form.description.trim(),
     categoryId: form.categoryId.trim(),
+    category: form.categoryId.trim(),
+    categorySlug: form.categoryId.trim(),
     price: priceInPaise,
     stock,
     isActive: Boolean(form.isActive),
+    rating: 4.5,
+    reviewCount: 0,
+    featured: false,
+    isNew: true,
+    tags: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
 
   if (form.imageUrl.trim()) {
     payload.imageUrl = form.imageUrl.trim();
+    payload.images = [form.imageUrl.trim()];
   }
 
-  const docRef = await addDoc(collection(db, 'products'), payload);
-  return docRef.id;
+  // Use setDoc with explicit stable ID instead of addDoc (which creates auto-IDs)
+  const docRef = doc(db, 'products', stableId);
+  await setDoc(docRef, payload);
+  return stableId;
 }
 
 export async function updateProduct(id: string, form: ProductFormData): Promise<void> {
@@ -137,6 +182,8 @@ export async function updateProduct(id: string, form: ProductFormData): Promise<
     name: form.name.trim(),
     description: form.description.trim(),
     categoryId: form.categoryId.trim(),
+    category: form.categoryId.trim(),
+    categorySlug: form.categoryId.trim(),
     price: priceInPaise,
     stock,
     isActive: Boolean(form.isActive),
@@ -145,8 +192,10 @@ export async function updateProduct(id: string, form: ProductFormData): Promise<
 
   if (form.imageUrl.trim()) {
     payload.imageUrl = form.imageUrl.trim();
+    payload.images = [form.imageUrl.trim()];
   } else {
     payload.imageUrl = '';
+    payload.images = [];
   }
 
   await updateDoc(docRef, payload);

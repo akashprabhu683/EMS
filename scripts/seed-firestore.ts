@@ -165,6 +165,7 @@ async function main() {
       tags: toFirestoreValue(prod.tags || []),
       featured: { booleanValue: Boolean(prod.featured) },
       isNew: { booleanValue: Boolean(prod.isNew) },
+      createdAt: { timestampValue: now },
       updatedAt: { timestampValue: now },
     };
 
