@@ -12,81 +12,38 @@ import {
   FlaskConical,
   Percent,
   TrendingUp,
-  Award,
-  Heart,
 } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
 import { useState, useEffect, useRef } from 'react';
 import { getActiveProducts } from '../services/productService';
+import { PRODUCTS } from '../data/products';
 import type { Product } from '../types';
 
 /* ─── Herbal categories aligned with dispensary catalog ─── */
 const HERBAL_CATEGORIES = [
-  {
-    slug: 'ayurvedic',
-    label: 'Ayurvedic Formulations',
-    emoji: '🌿',
-    bg: 'bg-emerald-50 border-emerald-200',
-    text: 'text-emerald-800',
-    desc: 'Time-tested classical preparations',
-  },
-  {
-    slug: 'herbal-extracts',
-    label: 'Herbal Extracts & Syrups',
-    emoji: '🍃',
-    bg: 'bg-emerald-50/70 border-emerald-200',
-    text: 'text-emerald-800',
-    desc: 'Pure plant-based liquid extracts',
-  },
-  {
-    slug: 'vitality',
-    label: 'Vitality & Immunity',
-    emoji: '⚡',
-    bg: 'bg-amber-50 border-amber-200',
-    text: 'text-amber-800',
-    desc: 'Natural energy and immune support',
-  },
-  {
-    slug: 'digestive',
-    label: 'Digestive & Metabolism',
-    emoji: '🫁',
-    bg: 'bg-teal-50 border-teal-200',
-    text: 'text-teal-800',
-    desc: 'Gut health and digestive wellness',
-  },
-  {
-    slug: 'joint-care',
-    label: 'Joint Care & Balms',
-    emoji: '🌱',
-    bg: 'bg-emerald-50 border-emerald-200',
-    text: 'text-emerald-800',
-    desc: 'Topical relief and mobility support',
-  },
-  {
-    slug: 'wellness-teas',
-    label: 'Natural Wellness & Teas',
-    emoji: '🍵',
-    bg: 'bg-rose-50 border-rose-200',
-    text: 'text-rose-800',
-    desc: 'Herbal infusions for daily calm',
-  },
+  { slug: 'ayurvedic',       label: 'Ayurvedic Formulations' },
+  { slug: 'herbal-extracts', label: 'Herbal Extracts & Syrups' },
+  { slug: 'vitality',        label: 'Vitality & Immunity' },
+  { slug: 'digestive',       label: 'Digestive & Metabolism' },
+  { slug: 'joint-care',      label: 'Joint Care & Balms' },
+  { slug: 'wellness-teas',   label: 'Natural Wellness & Teas' },
 ];
 
 const TRUST_BADGES = [
-  { icon: Leaf, text: 'Pure Botanical Herbs', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { icon: ShieldCheck, text: 'Dispensary Verified', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { icon: FlaskConical, text: 'Lab Standardized', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { icon: MapPin, text: 'Click & Collect Counter', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: Leaf,         text: 'Pure Botanical Herbs',    color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: ShieldCheck,  text: 'Dispensary Verified',     color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: FlaskConical, text: 'Lab Standardized',        color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: MapPin,       text: 'Click & Collect Counter', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
 ];
 
 export function HomePage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts]               = useState<Product[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [searchQuery, setSearchQuery]         = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeDealFilter, setActiveDealFilter] = useState<string>('all');
-  const navigate = useNavigate();
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [selectedIdx, setSelectedIdx]         = useState(-1);
+  const navigate      = useNavigate();
+  const searchRef     = useRef<HTMLInputElement>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
 
   // Close suggestions when clicking outside
@@ -94,10 +51,28 @@ export function HomePage() {
     const handler = (e: MouseEvent) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
+        setSelectedIdx(-1);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Open search bar with '/' global shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement !== searchRef.current) {
+        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') {
+          e.preventDefault();
+          searchWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          searchRef.current?.focus();
+          setShowSuggestions(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Live suggestions pool (derived from product catalogue)
@@ -127,21 +102,22 @@ export function HomePage() {
   useEffect(() => {
     let active = true;
     getActiveProducts()
-      .then(prods => {
-        if (active) setProducts(prods);
-      })
+      .then(prods => { if (active) setProducts(prods); })
       .catch(console.error)
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+    const term = selectedIdx >= 0 && liveSuggestions[selectedIdx]
+      ? liveSuggestions[selectedIdx]
+      : searchQuery.trim();
+    if (term) {
+      navigate(`/products?search=${encodeURIComponent(term)}`);
       setShowSuggestions(false);
+      setSearchQuery('');
+      setSelectedIdx(-1);
     }
   };
 
@@ -149,30 +125,70 @@ export function HomePage() {
     navigate(`/products?search=${encodeURIComponent(q)}`);
     setSearchQuery('');
     setShowSuggestions(false);
+    setSelectedIdx(-1);
   };
 
-  // Curated segments for the Amazon-inspired hero showcase
-  const bestSellers = products.filter(p => p.rating >= 4.8).slice(0, 4);
-  const dealsUnder499 = products.filter(p => p.price <= 499).slice(0, 4);
-  const immunityVitality = products.filter(p => p.category === 'vitality' || p.category === 'herbal-extracts').slice(0, 4);
-  const jointAndRelief = products.filter(p => p.category === 'joint-care' || p.category === 'ayurvedic').slice(0, 4);
+  // Keyboard navigation inside the hero search: enter, esc, arrow up, down
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setSelectedIdx(-1);
+      searchRef.current?.blur();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!showSuggestions) {
+        setShowSuggestions(true);
+      }
+      if (liveSuggestions.length > 0) {
+        setSelectedIdx(i => Math.min(i + 1, liveSuggestions.length - 1));
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (liveSuggestions.length > 0) {
+        setSelectedIdx(i => Math.max(i - 1, -1));
+      }
+    } else if (e.key === 'Enter') {
+      if (selectedIdx >= 0 && liveSuggestions[selectedIdx]) {
+        e.preventDefault();
+        handleSuggestionClick(liveSuggestions[selectedIdx]);
+      }
+    }
+  };
 
-  // Filtered list based on quick pill selector
-  const displayedProducts = products.filter(p => {
-    if (activeDealFilter === 'under-299') return p.price <= 299;
-    if (activeDealFilter === 'under-499') return p.price <= 499;
-    if (activeDealFilter === '4-star') return p.rating >= 4.8;
-    if (activeDealFilter === 'ayurvedic') return p.category === 'ayurvedic';
-    if (activeDealFilter === 'vitality') return p.category === 'vitality';
-    return true;
-  });
+  // Guaranteed product selection so hero cards are NEVER empty
+  const catalogPool = products.length > 0 ? products : PRODUCTS;
+  const bestSellerProduct =
+    catalogPool.find(p => p.rating >= 4.8) ||
+    catalogPool.find(p => p.featured) ||
+    catalogPool[0] ||
+    PRODUCTS[0];
+
+  const dealProduct =
+    catalogPool.find(p => p.price <= 499 && p.id !== bestSellerProduct?.id) ||
+    catalogPool.find(p => p.id !== bestSellerProduct?.id) ||
+    catalogPool[1] ||
+    PRODUCTS[1];
+
+  const immunityProduct =
+    catalogPool.find(p =>
+      p.id !== bestSellerProduct?.id &&
+      p.id !== dealProduct?.id &&
+      (p.category?.toLowerCase().includes('vitality') ||
+       p.category?.toLowerCase().includes('extract') ||
+       p.tags?.some(t => t.includes('immunity') || t.includes('vitality')))
+    ) ||
+    catalogPool.find(p => p.id !== bestSellerProduct?.id && p.id !== dealProduct?.id) ||
+    catalogPool[2] ||
+    PRODUCTS[2];
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-8">
-      <div className="page-container pt-3 sm:pt-5 pb-4">
+    <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-12">
+      <div className="page-container pt-8 sm:pt-10 pb-4">
 
-        {/* ── TOP SEARCH BAR ──────────────────────────────────────── */}
-        <div className="mb-4 sm:mb-6">
+        {/* ── TOP HERO SEARCH BAR ─────────────────────────────────── */}
+        <div className="mb-12 sm:mb-16">
           <div ref={searchWrapRef} className="bg-white rounded-2xl border border-slate-200/90 p-3 sm:p-4 shadow-xs relative">
             <form onSubmit={handleSearch} className="flex items-center gap-2" role="search">
               <div className="relative flex-1">
@@ -182,12 +198,19 @@ export function HomePage() {
                   id="top-hero-search-input"
                   type="text"
                   value={searchQuery}
-                  onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+                  onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true); setSelectedIdx(-1); }}
                   onFocus={() => setShowSuggestions(true)}
+                  onKeyDown={handleSearchKeyDown}
                   placeholder="search products"
                   autoComplete="off"
-                  className="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 placeholder-slate-400 text-sm outline-none border border-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  aria-label="Search products"
+                  aria-autocomplete="list"
+                  aria-expanded={showSuggestions && liveSuggestions.length > 0}
+                  className="w-full h-11 pl-10 pr-10 rounded-xl bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 placeholder-slate-400 text-sm outline-none border border-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
+                <kbd className="hidden sm:inline-flex items-center justify-center absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded pointer-events-none shadow-2xs">
+                  /
+                </kbd>
               </div>
               <button
                 type="submit"
@@ -201,18 +224,27 @@ export function HomePage() {
 
             {/* Live suggestions dropdown */}
             {showSuggestions && liveSuggestions.length > 0 && (
-              <ul className="absolute left-3 right-3 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1.5 overflow-hidden">
-                {liveSuggestions.map((suggestion) => {
+              <ul
+                role="listbox"
+                className="absolute left-3 right-3 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1.5 overflow-hidden"
+              >
+                {liveSuggestions.map((suggestion, i) => {
                   const q   = searchQuery.trim().toLowerCase();
                   const idx = suggestion.toLowerCase().indexOf(q);
                   return (
-                    <li key={suggestion}>
+                    <li key={suggestion} role="option" aria-selected={i === selectedIdx}>
                       <button
                         type="button"
                         onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(suggestion); }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left group"
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left group cursor-pointer ${
+                          i === selectedIdx
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
+                        }`}
                       >
-                        <Search size={13} className="text-slate-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
+                        <Search size={13} className={`shrink-0 transition-colors ${
+                          i === selectedIdx ? 'text-emerald-600' : 'text-slate-400 group-hover:text-emerald-600'
+                        }`} />
                         <span>
                           {idx === -1 ? suggestion : (
                             <>
@@ -233,11 +265,11 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* ── 1. AMAZON-INSPIRED MULTI-CARD HERO SHOWCASE ─────────── */}
-        <section aria-label="Featured Herbal Showcase" className="mb-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+        {/* ── 1. HERO SHOWCASE (4 CARDS — NEVER EMPTY, NO EMOJIS) ──── */}
+        <section aria-label="Featured Herbal Showcase" className="mb-16 sm:mb-20">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 
-            {/* Card 1: Main Highlight - Natural Care & Herbal Beauty (Inspired by Beauty showcase) */}
+            {/* Card 1: Apothecary Highlights (No Emojis) */}
             <div className="lg:col-span-2 rounded-2xl bg-gradient-to-br from-amber-50/90 via-rose-50/50 to-emerald-50/60 border border-amber-200/60 p-5 sm:p-6 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow relative overflow-hidden group">
               <div className="relative z-10">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 mb-2.5">
@@ -251,47 +283,23 @@ export function HomePage() {
                 </p>
               </div>
 
-              {/* 4 Quadrants Showcase inside the large card */}
+              {/* 4 Quadrant clean text links */}
               <div className="grid grid-cols-2 gap-2.5 my-4 relative z-10">
-                <Link
-                  to="/products?search=Ayurvedic"
-                  className="bg-white/90 hover:bg-white p-2.5 rounded-xl border border-amber-100 flex items-center gap-2.5 transition-all group/item shadow-2xs"
-                >
-                  <span className="text-2xl shrink-0">🌿</span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate group-hover/item:text-emerald-700">Pure Extracts</p>
-                    <p className="text-[10px] text-slate-500">Root &amp; Leaf Vati</p>
-                  </div>
+                <Link to="/products?search=Ayurvedic" className="bg-white/90 hover:bg-white p-3 rounded-xl border border-amber-100 flex flex-col gap-0.5 transition-all group/item shadow-2xs">
+                  <span className="text-xs font-bold text-slate-800 group-hover/item:text-emerald-700">Pure Extracts</span>
+                  <span className="text-[10px] text-slate-500">Root &amp; Leaf Vati</span>
                 </Link>
-                <Link
-                  to="/products?search=Extracts"
-                  className="bg-white/90 hover:bg-white p-2.5 rounded-xl border border-amber-100 flex items-center gap-2.5 transition-all group/item shadow-2xs"
-                >
-                  <span className="text-2xl shrink-0">🍃</span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate group-hover/item:text-emerald-700">Herbal Syrups</p>
-                    <p className="text-[10px] text-slate-500">Liver &amp; Throat</p>
-                  </div>
+                <Link to="/products?search=Extracts" className="bg-white/90 hover:bg-white p-3 rounded-xl border border-amber-100 flex flex-col gap-0.5 transition-all group/item shadow-2xs">
+                  <span className="text-xs font-bold text-slate-800 group-hover/item:text-emerald-700">Herbal Syrups</span>
+                  <span className="text-[10px] text-slate-500">Liver &amp; Throat</span>
                 </Link>
-                <Link
-                  to="/products?search=Chyawanprash"
-                  className="bg-white/90 hover:bg-white p-2.5 rounded-xl border border-amber-100 flex items-center gap-2.5 transition-all group/item shadow-2xs"
-                >
-                  <span className="text-2xl shrink-0">⚡</span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate group-hover/item:text-emerald-700">Immunity Jams</p>
-                    <p className="text-[10px] text-slate-500">Amla &amp; Saffron</p>
-                  </div>
+                <Link to="/products?search=Chyawanprash" className="bg-white/90 hover:bg-white p-3 rounded-xl border border-amber-100 flex flex-col gap-0.5 transition-all group/item shadow-2xs">
+                  <span className="text-xs font-bold text-slate-800 group-hover/item:text-emerald-700">Immunity Jams</span>
+                  <span className="text-[10px] text-slate-500">Amla &amp; Saffron</span>
                 </Link>
-                <Link
-                  to="/products?search=Kumkumadi"
-                  className="bg-white/90 hover:bg-white p-2.5 rounded-xl border border-amber-100 flex items-center gap-2.5 transition-all group/item shadow-2xs"
-                >
-                  <span className="text-2xl shrink-0">✨</span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate group-hover/item:text-emerald-700">Beauty Oils</p>
-                    <p className="text-[10px] text-slate-500">Saffron Radiance</p>
-                  </div>
+                <Link to="/products?search=Kumkumadi" className="bg-white/90 hover:bg-white p-3 rounded-xl border border-amber-100 flex flex-col gap-0.5 transition-all group/item shadow-2xs">
+                  <span className="text-xs font-bold text-slate-800 group-hover/item:text-emerald-700">Beauty Oils</span>
+                  <span className="text-[10px] text-slate-500">Saffron Radiance</span>
                 </Link>
               </div>
 
@@ -307,7 +315,7 @@ export function HomePage() {
               </div>
             </div>
 
-            {/* Card 2: Best Selling Remedies */}
+            {/* Card 2: Best Selling Remedies — Guaranteed Filled */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -316,47 +324,36 @@ export function HomePage() {
                   </span>
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">Top Rated</span>
                 </div>
-                <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">
-                  Best selling remedies
-                </h3>
+                <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">Best selling remedies</h3>
 
-                {/* Best seller item showcase */}
-                {bestSellers[0] && (
-                  <Link
-                    to={`/products/${bestSellers[0].id}`}
-                    className="mt-3 block group/item"
-                  >
-                    <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100">
-                      <img
-                        src={bestSellers[0].images[0] || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&q=80'}
-                        alt={bestSellers[0].name}
-                        className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 group-hover/item:text-emerald-700 line-clamp-1">
-                      {bestSellers[0].name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="font-display font-extrabold text-sm text-emerald-800">
-                        ₹{bestSellers[0].price}
-                      </span>
-                      {bestSellers[0].originalPrice && (
-                        <span className="text-xs text-slate-400 line-through">
-                          ₹{bestSellers[0].originalPrice}
-                        </span>
-                      )}
-                      <span className="text-[11px] text-amber-600 font-bold ml-auto flex items-center gap-0.5">
-                        <Star size={11} className="fill-amber-400 text-amber-400" />
-                        {bestSellers[0].rating}
-                      </span>
-                    </div>
-                  </Link>
-                )}
+                <Link to={`/products/${bestSellerProduct.id}`} className="mt-3 block group/item">
+                  <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100">
+                    <img
+                      src={bestSellerProduct.images[0] || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&q=80'}
+                      alt={bestSellerProduct.name}
+                      className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="text-xs font-bold text-slate-900 group-hover/item:text-emerald-700 line-clamp-1">
+                    {bestSellerProduct.name}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-display font-extrabold text-sm text-emerald-800">
+                      ₹{bestSellerProduct.price}
+                    </span>
+                    {bestSellerProduct.originalPrice && (
+                      <span className="text-xs text-slate-400 line-through">₹{bestSellerProduct.originalPrice}</span>
+                    )}
+                    <span className="text-[11px] text-amber-600 font-bold ml-auto flex items-center gap-0.5">
+                      <Star size={11} className="fill-amber-400 text-amber-400" />
+                      {bestSellerProduct.rating || '4.9'}
+                    </span>
+                  </div>
+                </Link>
               </div>
-
               <Link
-                to="/products?sort=popularity"
+                to="/products"
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 pt-3 border-t border-slate-100 group/link mt-2"
               >
                 <span>See all top remedies</span>
@@ -364,7 +361,7 @@ export function HomePage() {
               </Link>
             </div>
 
-            {/* Card 3: Special Offers Under ₹499 */}
+            {/* Card 3: Special Offers Available — Guaranteed Filled */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -373,59 +370,43 @@ export function HomePage() {
                   </span>
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800">Under ₹499</span>
                 </div>
-                <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">
-                  Special offers available
-                </h3>
+                <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">Special offers available</h3>
 
-                {/* Offer item showcase */}
-                {dealsUnder499[1] ? (
-                  <Link
-                    to={`/products/${dealsUnder499[1].id}`}
-                    className="mt-3 block group/item"
-                  >
-                    <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100 relative">
-                      <img
-                        src={dealsUnder499[1].images[0] || 'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80'}
-                        alt={dealsUnder499[1].name}
-                        className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-700 text-white text-[10px] font-bold shadow-xs">
-                        Save 20%+
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 group-hover/item:text-emerald-700 line-clamp-1">
-                      {dealsUnder499[1].name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="font-display font-extrabold text-sm text-emerald-800">
-                        ₹{dealsUnder499[1].price}
-                      </span>
-                      {dealsUnder499[1].originalPrice && (
-                        <span className="text-xs text-slate-400 line-through">
-                          ₹{dealsUnder499[1].originalPrice}
-                        </span>
-                      )}
-                    </div>
-                  </Link>
-                ) : (
-                  <div className="w-full aspect-[4/3] rounded-xl bg-slate-50 flex items-center justify-center text-xs text-slate-400 mt-3">
-                    Curating daily offers…
+                <Link to={`/products/${dealProduct.id}`} className="mt-3 block group/item">
+                  <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100 relative">
+                    <img
+                      src={dealProduct.images[0] || 'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80'}
+                      alt={dealProduct.name}
+                      className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                    <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-700 text-white text-[10px] font-bold shadow-xs">
+                      Save 20%+
+                    </span>
                   </div>
-                )}
+                  <p className="text-xs font-bold text-slate-900 group-hover/item:text-emerald-700 line-clamp-1">
+                    {dealProduct.name}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-display font-extrabold text-sm text-emerald-800">
+                      ₹{dealProduct.price}
+                    </span>
+                    {dealProduct.originalPrice && (
+                      <span className="text-xs text-slate-400 line-through">₹{dealProduct.originalPrice}</span>
+                    )}
+                  </div>
+                </Link>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setActiveDealFilter('under-499')}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 pt-3 border-t border-slate-100 group/link mt-2 text-left cursor-pointer"
+              <Link
+                to="/products"
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 pt-3 border-t border-slate-100 group/link mt-2 text-left"
               >
                 <span>View all deals under ₹499</span>
                 <ChevronRight size={13} className="group-hover/link:translate-x-0.5 transition-transform" />
-              </button>
+              </Link>
             </div>
 
-            {/* Card 4: Daily Immunity & Energy */}
+            {/* Card 4: Daily Vitality & Immunity — Guaranteed Filled */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:p-5 flex flex-col justify-between shadow-2xs hover:shadow-md transition-shadow">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -434,36 +415,31 @@ export function HomePage() {
                   </span>
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">Immunity</span>
                 </div>
-                <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">
-                  Immunity must-haves
-                </h3>
+                <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">Immunity must-haves</h3>
 
-                {immunityVitality[0] && (
-                  <Link
-                    to={`/products/${immunityVitality[0].id}`}
-                    className="mt-3 block group/item"
-                  >
-                    <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100">
-                      <img
-                        src={immunityVitality[0].images[0] || 'https://images.unsplash.com/photo-1577937927133-66ef06acdf18?w=600&q=80'}
-                        alt={immunityVitality[0].name}
-                        className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 group-hover/item:text-emerald-700 line-clamp-1">
-                      {immunityVitality[0].name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="font-display font-extrabold text-sm text-emerald-800">
-                        ₹{immunityVitality[0].price}
-                      </span>
-                      <span className="text-[11px] text-slate-500 ml-auto">Classical Amla</span>
-                    </div>
-                  </Link>
-                )}
+                <Link to={`/products/${immunityProduct.id}`} className="mt-3 block group/item">
+                  <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100">
+                    <img
+                      src={immunityProduct.images[0] || 'https://images.unsplash.com/photo-1577937927133-66ef06acdf18?w=600&q=80'}
+                      alt={immunityProduct.name}
+                      className="w-full h-full object-cover group-hover/item:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="text-xs font-bold text-slate-900 group-hover/item:text-emerald-700 line-clamp-1">
+                    {immunityProduct.name}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-display font-extrabold text-sm text-emerald-800">
+                      ₹{immunityProduct.price}
+                    </span>
+                    <span className="text-[11px] text-amber-600 font-bold ml-auto flex items-center gap-0.5">
+                      <Star size={11} className="fill-amber-400 text-amber-400" />
+                      {immunityProduct.rating || '4.9'}
+                    </span>
+                  </div>
+                </Link>
               </div>
-
               <Link
                 to="/products?search=Vitality"
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 pt-3 border-t border-slate-100 group/link mt-2"
@@ -474,77 +450,37 @@ export function HomePage() {
             </div>
 
           </div>
-
-          {/* ── DEAL CATEGORY PILL STRIP (Amazon-style lower shelf) ── */}
-          <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
-            {[
-              { id: 'all', label: 'All Remedies', badge: `${products.length}` },
-              { id: 'under-299', label: 'Deals Under ₹299', badge: 'Budget Friendly' },
-              { id: 'under-499', label: 'Deals Under ₹499', badge: 'Special' },
-              { id: '4-star', label: '4.8+ Stars Rated', badge: 'Top Patient Choice' },
-              { id: 'ayurvedic', label: 'Ayurvedic Formulations', badge: 'Classical' },
-              { id: 'vitality', label: 'Immunity & Energy', badge: 'Wellness' },
-            ].map(tab => {
-              const active = activeDealFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveDealFilter(tab.id)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                    active
-                      ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200'
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-md font-semibold ${
-                      active ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
         </section>
 
         {/* ── TRUST BADGES ─────────────────────────────────────── */}
-        <div className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+        <div className="mb-16 sm:mb-20 flex flex-wrap items-center justify-center gap-2.5 sm:gap-4">
           {TRUST_BADGES.map(({ icon: Icon, text, color, bg, border }) => (
             <span
               key={text}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${bg} ${color} border ${border} shadow-2xs whitespace-nowrap`}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold ${bg} ${color} border ${border} shadow-2xs whitespace-nowrap`}
             >
-              <Icon size={13} className="shrink-0 text-emerald-700" />
+              <Icon size={14} className="shrink-0 text-emerald-700" />
               {text}
             </span>
           ))}
         </div>
 
-        {/* ── 2. FILTERED / FEATURED PRODUCTS SECTION ───────────── */}
-        <section aria-label="Catalog Products" className="mb-12">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-5">
+        {/* ── 2. ALL PRODUCTS SECTION (NO FILTER PILLS) ───────────── */}
+        <section aria-label="Catalog Products" className="mb-16 sm:mb-20">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-6">
             <div>
               <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase flex items-center gap-1">
                 <Sparkles size={12} /> Curated Dispensary Stock
               </span>
               <h2 className="font-display font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight mt-0.5">
-                {activeDealFilter === 'under-299' && 'Affordable Herbal Remedies Under ₹299'}
-                {activeDealFilter === 'under-499' && 'Value Herbal Formulations Under ₹499'}
-                {activeDealFilter === '4-star' && 'Highest Rated Ayurvedic Medicines (4.8+ ★)'}
-                {activeDealFilter === 'ayurvedic' && 'Classical Ayurvedic Tablets & Vati'}
-                {activeDealFilter === 'vitality' && 'Immunity, Rejuvenation & Vitality Tonics'}
-                {activeDealFilter === 'all' && 'Trusted Natural & Ayurvedic Remedies'}
+                Trusted Natural &amp; Ayurvedic Remedies
               </h2>
             </div>
             <Link
               to="/products"
               className="text-xs sm:text-sm font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group shrink-0"
             >
-              <span>View All Products ({products.length})</span>
+              <span>View All Products ({products.length > 0 ? products.length : PRODUCTS.length})</span>
               <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
@@ -560,62 +496,60 @@ export function HomePage() {
                 </div>
               ))}
             </div>
-          ) : displayedProducts.length > 0 ? (
+          ) : catalogPool.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {displayedProducts.slice(0, 8).map(product => (
+              {catalogPool.slice(0, 8).map(product => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
           ) : (
             <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
               <Leaf size={40} className="text-emerald-300 mx-auto mb-3" />
-              <p className="text-slate-700 text-sm font-semibold">No products found in this filter</p>
-              <button
-                type="button"
-                onClick={() => setActiveDealFilter('all')}
-                className="mt-2 text-xs font-bold text-emerald-700 underline cursor-pointer"
-              >
-                Reset filters to view all remedies
-              </button>
+              <p className="text-slate-700 text-sm font-semibold">No products available at the moment</p>
+              <Link to="/products" className="mt-2 text-xs font-bold text-emerald-700 underline">Browse all products</Link>
             </div>
           )}
         </section>
 
-        {/* ── 3. HERBAL CATEGORY COLLECTIONS ────────────────────── */}
-        <section aria-label="Product Categories" className="mb-12 sm:mb-16">
+        {/* ── 3. HERBAL CATEGORIES — CLEAN TEXT LIST (TITLE: Herbal Collections) ── */}
+        <section aria-label="Product Categories" className="mb-16 sm:mb-20">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-5">
             <div>
-              <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">Traditional Branches</span>
+              <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">Browse by Type</span>
               <h2 className="font-display font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight mt-0.5">
-                Our Herbal Collections
+                Herbal Collections
               </h2>
             </div>
             <Link
               to="/products"
               className="text-xs sm:text-sm font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group shrink-0"
             >
-              <span>Explore All Categories</span>
+              <span>Explore All</span>
               <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100">
             {HERBAL_CATEGORIES.map(cat => (
               <Link
                 key={cat.slug}
                 to={`/products?search=${encodeURIComponent(cat.label)}`}
-                className={`flex flex-col items-center text-center p-4 rounded-2xl border ${cat.bg} hover:shadow-md active:scale-95 transition-all cursor-pointer group`}
+                className="flex items-center justify-between px-5 py-4 hover:bg-emerald-50/50 transition-colors group first:rounded-t-2xl last:rounded-b-2xl cursor-pointer"
               >
-                <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">{cat.emoji}</span>
-                <span className={`text-xs font-bold ${cat.text} leading-tight`}>{cat.label}</span>
-                <span className="text-[10px] text-slate-500 mt-1 leading-tight hidden sm:block">{cat.desc}</span>
+                <div className="flex items-center gap-3">
+                  <span className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                  </span>
+                  <span className="text-sm font-medium text-slate-800 group-hover:text-emerald-800 transition-colors">{cat.label}</span>
+                </div>
+                <ChevronRight size={15} className="text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
               </Link>
             ))}
           </div>
         </section>
 
-        {/* ── 4. HOW CLICK AND COLLECT WORKS ────────────────────── */}
-        <section aria-label="How Click and Collect Works" className="mb-12 sm:mb-16">
+        {/* ── 4. CONVENIENT CARE: CLICK & COLLECT IN 3 SIMPLE STEPS ─── */}
+        <section aria-label="How Click and Collect Works" className="mb-16 sm:mb-20">
           <div className="bg-gradient-to-br from-emerald-50 via-teal-50/60 to-emerald-50/80 border border-emerald-200/80 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">Convenient Care</span>
@@ -633,27 +567,24 @@ export function HomePage() {
                   step: '1',
                   title: 'Select Remedies Online',
                   desc: 'Browse our full herbal catalog and add needed formulations to your cart without upfront payment.',
-                  icon: '🛒',
                   color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
                 },
                 {
                   step: '2',
                   title: 'Confirm with Name & Phone',
                   desc: 'Sign in with your Google account. Enter your pickup name and phone number so we can prepare your order.',
-                  icon: '📋',
                   color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
                 },
                 {
                   step: '3',
                   title: 'Collect & Pay at Counter',
                   desc: 'Visit our dispensary counter when ready. Pay in person with cash or UPI upon inspecting your medicines.',
-                  icon: '🏪',
                   color: 'bg-amber-100 text-amber-800 border-amber-200',
                 },
-              ].map(({ step, title, desc, icon, color }) => (
+              ].map(({ step, title, desc, color }) => (
                 <div key={step} className="flex flex-col items-center text-center gap-3 bg-white/70 backdrop-blur-xs p-5 rounded-2xl border border-emerald-100/80 shadow-2xs">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl border ${color} shadow-2xs`}>
-                    {icon}
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-display font-extrabold text-lg border ${color} shadow-2xs`}>
+                    {step}
                   </div>
                   <div>
                     <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-0.5">Step {step}</div>
@@ -664,14 +595,14 @@ export function HomePage() {
               ))}
             </div>
 
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
                 to="/products"
                 id="hero-primary-cta"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-sm font-semibold transition-colors shadow-sm"
               >
                 <Leaf size={15} />
-                <span>Browse Herbal Catalog</span>
+                <span>Browse Herbal Products</span>
                 <ArrowRight size={14} />
               </Link>
               <Link
@@ -685,8 +616,8 @@ export function HomePage() {
           </div>
         </section>
 
-        {/* ── 5. MOVED DOWNWARDS: ORIGINAL HERO DISPENSARY BANNER ── */}
-        <section aria-label="EMS Dispensary Commitment" className="mb-8">
+        {/* ── 5. DISPENSARY COMMITMENT HERO BANNER (AT BOTTOM) ──────── */}
+        <section aria-label="EMS Dispensary Commitment" className="mb-16 sm:mb-20">
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-900 via-teal-950 to-emerald-950 text-white p-6 sm:p-10 shadow-lg">
             {/* Background ambient lighting */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -742,8 +673,8 @@ export function HomePage() {
         </section>
 
         {/* ── 6. STORE INFO STRIP ──────────────────────────────── */}
-        <section aria-label="Store Information" className="mb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <section aria-label="Store Information" className="mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
                 <MapPin size={18} />

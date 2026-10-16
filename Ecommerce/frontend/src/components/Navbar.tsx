@@ -1,20 +1,16 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Search, User, Menu, X, ArrowRight } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { ShoppingBag, User, Menu, X, ArrowRight, Leaf } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 export function Navbar() {
   const { totalItems, openCart } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileOpen, setMobileOpen]     = useState(false);
-  const [searchOpen, setSearchOpen]     = useState(false);
-  const [searchQuery, setSearchQuery]   = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled]         = useState(false);
-  const searchInputRef                  = useRef<HTMLInputElement>(null);
   const location  = useLocation();
-  const navigate  = useNavigate();
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -29,67 +25,6 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Keyboard shortcut: / to open, Esc to close
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '/' && !searchOpen) {
-        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-        if (tag !== 'input' && tag !== 'textarea') {
-          e.preventDefault();
-          setSearchOpen(true);
-        }
-      } else if (e.key === 'Escape' && searchOpen) {
-        setSearchOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchOpen]);
-
-  // Autofocus when overlay opens
-  useEffect(() => {
-    if (searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50);
-  }, [searchOpen]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchOpen(false);
-      setSearchQuery('');
-    }
-  };
-
-  const handleSuggestionClick = (query: string) => {
-    navigate(`/products?search=${encodeURIComponent(query)}`);
-    setSearchOpen(false);
-    setSearchQuery('');
-  };
-
-  // ── Live search suggestions pool (derived from product catalogue) ─────────
-  const ALL_SUGGESTIONS = [
-    'Ashwagandha', 'Ashwagandha Ghanvati', 'Stress Relief', 'Sleep Support',
-    'Triphala', 'Triphala Churna', 'Digestive Health', 'Detox', 'Colon Cleanse',
-    'Chyawanprash', 'Immunity Booster', 'Amla', 'Wild Herbs',
-    'Brahmi', 'Brahmi Vati', 'Memory', 'Cognitive Focus', 'Mental Clarity',
-    'Tulsi', 'Panch Tulsi', 'Holy Basil', 'Respiratory Care', 'Tulsi Drops',
-    'Giloy', 'Giloy Ghanvati', 'Guduchi', 'Blood Purifier', 'Immunity',
-    'Mahanarayan Oil', 'Joint Care', 'Pain Relief', 'Muscle Soreness',
-    'Kumkumadi', 'Kumkumadi Tailam', 'Saffron', 'Skin Glow', 'Beauty Oil',
-    'Shatavari', 'Women Health', 'Hormonal Balance', 'Lactation Support',
-    'Herbal Tea', 'Sleep Tea', 'Chamomile', 'Serenity', 'Relaxation',
-    'Liver Tonic', 'Liv-Care', 'Liver Syrup', 'Bhumi Amla', 'Hepatic Support',
-    'Neem', 'Turmeric', 'Wild Turmeric', 'Skin Health', 'Acne Care',
-    'Ayurvedic', 'Herbal Extracts', 'Vitality', 'Wellness', 'Natural',
-  ];
-
-  const liveSuggestions =
-    searchQuery.trim().length > 0
-      ? ALL_SUGGESTIONS.filter(s =>
-          s.toLowerCase().includes(searchQuery.trim().toLowerCase())
-        ).slice(0, 7)
-      : [];
-
   const NAV_LINKS = [
     { to: '/',                                label: 'Home' },
     { to: '/products',                        label: 'All Products' },
@@ -99,294 +34,187 @@ export function Navbar() {
   ];
 
   return (
-    <>
-      {/* Main Header */}
-      <header
-        className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b transition-all duration-200 ${
-          scrolled ? 'border-slate-200/90 shadow-sm' : 'border-slate-200/80 shadow-none'
-        }`}
-      >
-        <nav className="page-container h-16 flex items-center justify-between gap-2 sm:gap-4">
+    <header
+      className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b transition-all duration-200 ${
+        scrolled ? 'border-slate-200/90 shadow-sm' : 'border-slate-200/80 shadow-none'
+      }`}
+    >
+      <nav className="page-container h-16 flex items-center justify-between gap-6">
 
-          {/* Brand Logo */}
-          <Link
-            to="/"
-            id="nav-logo"
-            className="flex items-center gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+        {/* Brand Logo - clean without emojis */}
+        <Link
+          to="/"
+          id="nav-logo"
+          className="flex items-center gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+        >
+          <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors">
+            <Leaf size={16} className="text-white" />
+          </div>
+          <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
+            EMS<span className="text-emerald-700"> Dispensary</span>
+          </span>
+        </Link>
+
+        {/* Desktop Nav Links - with ample breathing space */}
+        <ul className="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
+          {NAV_LINKS.map(({ to, label }) => {
+            const active =
+              to === '/'
+                ? location.pathname === '/' && !location.search
+                : location.pathname + location.search === to;
+            return (
+              <li key={to}>
+                <Link
+                  to={to}
+                  className={`px-3.5 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    active
+                      ? 'text-emerald-800 bg-emerald-50 font-bold shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                >
+                  {label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Actions: Cart, User, Hamburger */}
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <button
+            id="nav-cart-btn"
+            onClick={openCart}
+            className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label={`Shopping Cart with ${totalItems} items`}
           >
-            <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors">
-              🌿
+            <div className="relative">
+              <ShoppingBag size={18} className="text-slate-700" />
+              {totalItems > 0 && (
+                <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-700 text-white text-[10px] font-bold px-1 shadow-2xs">
+                  {totalItems > 99 ? '99+' : totalItems}
+                </span>
+              )}
             </div>
-            <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
-              EMS<span className="text-emerald-700"> Dispensary</span>
-            </span>
-          </Link>
+            <span className="text-xs font-semibold hidden sm:inline text-slate-700">Cart</span>
+          </button>
 
-          {/* Desktop Nav Links */}
-          <ul className="hidden md:flex items-center gap-1 lg:gap-1.5 shrink-0">
-            {NAV_LINKS.map(({ to, label }) => {
-              const active =
-                to === '/'
-                  ? location.pathname === '/' && !location.search
-                  : location.pathname + location.search === to;
-              return (
+          <div className="relative">
+            {isAuthenticated ? (
+              <button
+                id="nav-user-menu-btn"
+                onClick={() => setUserMenuOpen(v => !v)}
+                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                aria-label="User account menu"
+              >
+                <img
+                  src={user?.avatar}
+                  alt={user?.name}
+                  className="w-8 h-8 rounded-full border border-slate-300"
+                />
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                id="nav-login-btn"
+                className="inline-flex items-center gap-1.5 py-2 px-3 sm:px-4 text-xs rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-semibold shadow-2xs transition-colors"
+                aria-label="Sign in"
+              >
+                <User size={15} />
+                <span className="hidden sm:inline">Sign In</span>
+              </Link>
+            )}
+
+            {userMenuOpen && isAuthenticated && (
+              <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl p-1.5 shadow-lg animate-fade-in z-50">
+                <div className="px-3 py-2 border-b border-slate-100">
+                  <p className="text-xs font-semibold text-slate-900 truncate">{user?.name}</p>
+                  <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                </div>
+                <div className="py-1">
+                  <Link
+                    to="/orders"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                  >
+                    <span>My Orders</span>
+                    <ArrowRight size={12} className="text-slate-400" />
+                  </Link>
+                </div>
+                <div className="pt-1 border-t border-slate-100">
+                  <button
+                    onClick={() => { logout(); setUserMenuOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            id="nav-mobile-menu-btn"
+            onClick={() => setMobileOpen(v => !v)}
+            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            aria-label="Toggle navigation menu"
+          >
+            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </nav>
+
+      {/* Mobile Nav Drawer */}
+      {mobileOpen && (
+        <div className="md:hidden bg-white border-t border-slate-200 animate-fade-in shadow-lg">
+          <div className="page-container py-4 space-y-3">
+            <ul className="space-y-1">
+              {NAV_LINKS.map(({ to, label }) => (
                 <li key={to}>
                   <Link
                     to={to}
-                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                      active
-                        ? 'text-emerald-800 bg-emerald-50 font-bold shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                    }`}
+                    className="block px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
                   >
                     {label}
                   </Link>
                 </li>
-              );
-            })}
-          </ul>
-
-          {/* Desktop Search Trigger */}
-          <div className="hidden lg:flex items-center flex-1 min-w-0 max-w-sm mx-2">
-            <button
-              onClick={() => setSearchOpen(true)}
-              className="w-full h-10 flex items-center justify-between px-3.5 py-2 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-slate-500 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label="Search products"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Search size={15} className="text-slate-400 shrink-0" />
-                <span className="truncate">search products</span>
-              </div>
-              <kbd className="px-2 py-0.5 text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-md shadow-2xs shrink-0 ml-2">
-                /
-              </kbd>
-            </button>
-          </div>
-
-          {/* Actions: Search (mobile), Cart, User, Hamburger */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button
-              id="nav-search-btn"
-              onClick={() => setSearchOpen(true)}
-              className="p-2 sm:p-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors lg:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label="Search products"
-            >
-              <Search size={18} />
-            </button>
-
-            <button
-              id="nav-cart-btn"
-              onClick={openCart}
-              className="relative flex items-center gap-1.5 sm:gap-2 p-2 sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label={`Shopping Cart with ${totalItems} items`}
-            >
-              <div className="relative">
-                <ShoppingBag size={19} className="text-slate-700" />
-                {totalItems > 0 && (
-                  <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-bold px-1 shadow-2xs">
-                    {totalItems > 99 ? '99+' : totalItems}
-                  </span>
-                )}
-              </div>
-              <span className="text-xs font-semibold hidden sm:inline text-slate-700">Cart</span>
-            </button>
-
-            <div className="relative">
-              {isAuthenticated ? (
-                <button
-                  id="nav-user-menu-btn"
-                  onClick={() => setUserMenuOpen(v => !v)}
-                  className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                  aria-label="User account menu"
+              ))}
+              <li>
+                <Link
+                  to="/orders"
+                  className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
                 >
-                  <img
-                    src={user?.avatar}
-                    alt={user?.name}
-                    className="w-8 h-8 rounded-full border border-slate-300"
-                  />
-                </button>
+                  <span>My Orders</span>
+                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md">
+                    History
+                  </span>
+                </Link>
+              </li>
+            </ul>
+            <div className="pt-3 border-t border-slate-100">
+              {isAuthenticated ? (
+                <div className="space-y-2">
+                  <div className="px-3.5 py-1 text-xs text-slate-500">
+                    Signed in as <strong className="text-slate-800">{user?.name}</strong>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="w-full py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl text-left px-3.5"
+                  >
+                    Sign Out
+                  </button>
+                </div>
               ) : (
                 <Link
                   to="/login"
-                  id="nav-login-btn"
-                  className="inline-flex items-center gap-1.5 py-2 px-2.5 sm:px-3.5 text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-2xs transition-colors"
-                  aria-label="Sign in"
+                  className="btn-primary w-full text-xs py-2.5 justify-center rounded-xl"
                 >
-                  <User size={15} />
-                  <span className="hidden sm:inline">Sign In</span>
+                  Sign In to Account
                 </Link>
               )}
-
-              {userMenuOpen && isAuthenticated && (
-                <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl p-1.5 shadow-lg animate-fade-in z-50">
-                  <div className="px-3 py-2 border-b border-slate-100">
-                    <p className="text-xs font-semibold text-slate-900 truncate">{user?.name}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
-                  </div>
-                  <div className="py-1">
-                    <Link
-                      to="/orders"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
-                    >
-                      <span>My Orders</span>
-                      <ArrowRight size={12} className="text-slate-400" />
-                    </Link>
-                  </div>
-                  <div className="pt-1 border-t border-slate-100">
-                    <button
-                      onClick={() => { logout(); setUserMenuOpen(false); }}
-                      className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
-
-            <button
-              id="nav-mobile-menu-btn"
-              onClick={() => setMobileOpen(v => !v)}
-              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-          </div>
-        </nav>
-
-        {/* Mobile Nav Drawer */}
-        {mobileOpen && (
-          <div className="md:hidden bg-white border-t border-slate-200 animate-fade-in shadow-lg">
-            <div className="page-container py-4 space-y-3">
-              <ul className="space-y-1">
-                {NAV_LINKS.map(({ to, label }) => (
-                  <li key={to}>
-                    <Link
-                      to={to}
-                      className="block px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
-                    >
-                      {label}
-                    </Link>
-                  </li>
-                ))}
-                <li>
-                  <Link
-                    to="/orders"
-                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
-                  >
-                    <span>My Orders</span>
-                    <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md">
-                      History
-                    </span>
-                  </Link>
-                </li>
-              </ul>
-              <div className="pt-3 border-t border-slate-100">
-                {isAuthenticated ? (
-                  <div className="space-y-2">
-                    <div className="px-3.5 py-1 text-xs text-slate-500">
-                      Signed in as <strong className="text-slate-800">{user?.name}</strong>
-                    </div>
-                    <button
-                      onClick={logout}
-                      className="w-full py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl text-left px-3.5"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                ) : (
-                  <Link
-                    to="/login"
-                    className="btn-primary w-full text-xs py-2.5 justify-center rounded-xl"
-                  >
-                    Sign In to Account
-                  </Link>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Search Modal */}
-      {searchOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-start justify-center pt-20 sm:pt-28 px-4 animate-fade-in"
-          onClick={(e) => { if (e.target === e.currentTarget) setSearchOpen(false); }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Search dialog"
-        >
-          <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-modal-pop">
-            {/* Input row */}
-            <form onSubmit={handleSearch} className="relative flex items-center px-4 py-3.5 border-b border-slate-200/80 gap-3">
-              <Search size={18} className="text-slate-400 shrink-0 ml-1" />
-              <input
-                ref={searchInputRef}
-                id="search-overlay-input"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="search products"
-                autoComplete="off"
-                className="w-full min-w-0 text-sm sm:text-base text-slate-900 placeholder-slate-400 bg-transparent outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setSearchOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                aria-label="Close search"
-              >
-                <X size={18} />
-              </button>
-            </form>
-
-            {/* Live suggestions list */}
-            {liveSuggestions.length > 0 ? (
-              <ul className="py-1.5 max-h-72 overflow-y-auto">
-                {liveSuggestions.map((suggestion) => {
-                  const q   = searchQuery.trim().toLowerCase();
-                  const idx = suggestion.toLowerCase().indexOf(q);
-                  return (
-                    <li key={suggestion}>
-                      <button
-                        type="button"
-                        onClick={() => handleSuggestionClick(suggestion)}
-                        className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left group"
-                      >
-                        <Search size={13} className="text-slate-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
-                        <span>
-                          {idx === -1 ? (
-                            suggestion
-                          ) : (
-                            <>
-                              {suggestion.slice(0, idx)}
-                              <strong className="font-semibold text-emerald-700">
-                                {suggestion.slice(idx, idx + q.length)}
-                              </strong>
-                              {suggestion.slice(idx + q.length)}
-                            </>
-                          )}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              /* Keyboard hint shown when idle or no match */
-              <div className="px-5 py-4 bg-slate-50 flex items-center gap-1.5 text-xs text-slate-500">
-                <span>Press</span>
-                <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-700 font-semibold shadow-2xs">Enter</kbd>
-                <span>to search or</span>
-                <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-700 font-semibold shadow-2xs">Esc</kbd>
-                <span>to close</span>
-              </div>
-            )}
           </div>
         </div>
       )}
-    </>
+    </header>
   );
 }

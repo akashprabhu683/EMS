@@ -14,6 +14,12 @@ import { CheckoutPage }          from './pages/CheckoutPage';
 import { OrderConfirmationPage } from './pages/OrderConfirmationPage';
 import { OrdersPage }            from './pages/OrdersPage';
 import { OrderDetailPage }       from './pages/OrderDetailPage';
+import { AboutPage }             from './pages/AboutPage';
+import { PrivacyPolicyPage }     from './pages/PrivacyPolicyPage';
+import { TermsPage }             from './pages/TermsPage';
+import { ClickCollectPage }      from './pages/ClickCollectPage';
+import { FaqPage }               from './pages/FaqPage';
+import { ContactPage }           from './pages/ContactPage';
 import { useCart } from './context/CartContext';
 import { Home, Package, ShoppingBag, ClipboardList, User } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
@@ -125,6 +131,12 @@ function AppLayout() {
           <Route path="/orders/:orderId"     element={<OrderDetailPage />} />
           <Route path="/checkout"            element={<CheckoutPage />} />
           <Route path="/order-confirmation"  element={<OrderConfirmationPage />} />
+          <Route path="/about"               element={<AboutPage />} />
+          <Route path="/privacy"             element={<PrivacyPolicyPage />} />
+          <Route path="/terms"               element={<TermsPage />} />
+          <Route path="/click-collect"       element={<ClickCollectPage />} />
+          <Route path="/faq"                 element={<FaqPage />} />
+          <Route path="/contact"             element={<ContactPage />} />
           <Route path="*"                    element={<NotFoundPage />} />
         </Routes>
       </div>

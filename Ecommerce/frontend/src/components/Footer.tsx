@@ -121,20 +121,20 @@ export function Footer() {
               title: 'Customer Service',
               links: [
                 { label: 'Track My Orders', to: '/orders' },
-                { label: 'Click & Collect Info', to: '#' },
-                { label: 'Product Quality FAQ', to: '#' },
-                { label: 'Returns & Queries', to: '#' },
-                { label: 'Contact Dispensary', to: '#' },
+                { label: 'Click & Collect Info', to: '/click-collect' },
+                { label: 'Product Quality FAQ', to: '/faq' },
+                { label: 'Returns & Queries', to: '/contact' },
+                { label: 'Contact Dispensary', to: '/contact' },
               ]
             },
             {
               title: 'Company',
               links: [
-                { label: 'Our Story', to: '#' },
-                { label: 'Sustainability', to: '#' },
-                { label: 'Careers', to: '#' },
-                { label: 'Privacy Policy', to: '#' },
-                { label: 'Terms of Service', to: '#' },
+                { label: 'Our Story', to: '/about' },
+                { label: 'Sustainability', to: '/about' },
+                { label: 'Careers', to: '/contact' },
+                { label: 'Privacy Policy', to: '/privacy' },
+                { label: 'Terms of Service', to: '/terms' },
               ]
             },
           ].map(({ title, links }) => (
@@ -174,20 +174,18 @@ export function Footer() {
             <span>Natural &amp; Authentic Herbal Products — Quality Assured</span>
           </div>
           <div className="flex gap-5">
-            <button
-              type="button"
-              onClick={(e) => handleComingSoon(e, 'Privacy Policy')}
+            <Link
+              to="/privacy"
               className="hover:text-slate-900 transition-colors"
             >
               Privacy Policy
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleComingSoon(e, 'Terms of Service')}
+            </Link>
+            <Link
+              to="/terms"
               className="hover:text-slate-900 transition-colors"
             >
               Terms of Service
-            </button>
+            </Link>
             <button
               type="button"
               onClick={(e) => handleComingSoon(e, 'Cookie Preferences')}
