@@ -83,9 +83,46 @@ export function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeDealFilter, setActiveDealFilter] = useState<string>('all');
   const navigate = useNavigate();
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Live suggestions pool (derived from product catalogue)
+  const ALL_SUGGESTIONS = [
+    'Ashwagandha', 'Ashwagandha Ghanvati', 'Stress Relief', 'Sleep Support',
+    'Triphala', 'Triphala Churna', 'Digestive Health', 'Detox', 'Colon Cleanse',
+    'Chyawanprash', 'Immunity Booster', 'Amla', 'Wild Herbs',
+    'Brahmi', 'Brahmi Vati', 'Memory', 'Cognitive Focus', 'Mental Clarity',
+    'Tulsi', 'Panch Tulsi', 'Holy Basil', 'Respiratory Care', 'Tulsi Drops',
+    'Giloy', 'Giloy Ghanvati', 'Guduchi', 'Blood Purifier', 'Immunity',
+    'Mahanarayan Oil', 'Joint Care', 'Pain Relief', 'Muscle Soreness',
+    'Kumkumadi', 'Kumkumadi Tailam', 'Saffron', 'Skin Glow', 'Beauty Oil',
+    'Shatavari', 'Women Health', 'Hormonal Balance', 'Lactation Support',
+    'Herbal Tea', 'Sleep Tea', 'Chamomile', 'Serenity', 'Relaxation',
+    'Liver Tonic', 'Liv-Care', 'Liver Syrup', 'Bhumi Amla', 'Hepatic Support',
+    'Neem', 'Turmeric', 'Wild Turmeric', 'Skin Health', 'Acne Care',
+    'Ayurvedic', 'Herbal Extracts', 'Vitality', 'Wellness', 'Natural',
+  ];
+
+  const liveSuggestions =
+    searchQuery.trim().length > 0
+      ? ALL_SUGGESTIONS.filter(s =>
+          s.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        ).slice(0, 7)
+      : [];
 
   useEffect(() => {
     let active = true;
@@ -104,7 +141,14 @@ export function HomePage() {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+      setShowSuggestions(false);
     }
+  };
+
+  const handleSuggestionClick = (q: string) => {
+    navigate(`/products?search=${encodeURIComponent(q)}`);
+    setSearchQuery('');
+    setShowSuggestions(false);
   };
 
   // Curated segments for the Amazon-inspired hero showcase
@@ -127,19 +171,21 @@ export function HomePage() {
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-8">
       <div className="page-container pt-3 sm:pt-5 pb-4">
 
-        {/* ── TOP SEARCH & QUICK TAGS ───────────────────────────── */}
+        {/* ── TOP SEARCH BAR ──────────────────────────────────────── */}
         <div className="mb-4 sm:mb-6">
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3 sm:p-4 shadow-xs">
+          <div ref={searchWrapRef} className="bg-white rounded-2xl border border-slate-200/90 p-3 sm:p-4 shadow-xs relative">
             <form onSubmit={handleSearch} className="flex items-center gap-2" role="search">
               <div className="relative flex-1">
                 <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   ref={searchRef}
                   id="top-hero-search-input"
-                  type="search"
+                  type="text"
                   value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search authentic medicines: Ashwagandha, Triphala, Chyawanprash, Brahmi…"
+                  onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+                  onFocus={() => setShowSuggestions(true)}
+                  placeholder="search products"
+                  autoComplete="off"
                   className="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 placeholder-slate-400 text-sm outline-none border border-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
@@ -153,28 +199,37 @@ export function HomePage() {
               </button>
             </form>
 
-            {/* Quick suggestion tags */}
-            <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 text-xs text-slate-500">
-              <span className="font-semibold text-slate-700 shrink-0">Popular:</span>
-              {[
-                { label: 'Ashwagandha', q: 'Ashwagandha' },
-                { label: 'Triphala Detox', q: 'Triphala' },
-                { label: 'Chyawanprash', q: 'Chyawanprash' },
-                { label: 'Brahmi Vati', q: 'Brahmi' },
-                { label: 'Joint Oils', q: 'Mahanarayan' },
-                { label: 'Tulsi Drops', q: 'Tulsi' },
-                { label: 'Kumkumadi Oil', q: 'Kumkumadi' },
-              ].map(tag => (
-                <button
-                  key={tag.label}
-                  type="button"
-                  onClick={() => navigate(`/products?search=${encodeURIComponent(tag.q)}`)}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 text-slate-600 transition-colors shrink-0 cursor-pointer font-medium"
-                >
-                  {tag.label}
-                </button>
-              ))}
-            </div>
+            {/* Live suggestions dropdown */}
+            {showSuggestions && liveSuggestions.length > 0 && (
+              <ul className="absolute left-3 right-3 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1.5 overflow-hidden">
+                {liveSuggestions.map((suggestion) => {
+                  const q   = searchQuery.trim().toLowerCase();
+                  const idx = suggestion.toLowerCase().indexOf(q);
+                  return (
+                    <li key={suggestion}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(suggestion); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left group"
+                      >
+                        <Search size={13} className="text-slate-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
+                        <span>
+                          {idx === -1 ? suggestion : (
+                            <>
+                              {suggestion.slice(0, idx)}
+                              <strong className="font-semibold text-emerald-700">
+                                {suggestion.slice(idx, idx + q.length)}
+                              </strong>
+                              {suggestion.slice(idx + q.length)}
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
 
