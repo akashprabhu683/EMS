@@ -214,8 +214,8 @@ export function CheckoutPage() {
     );
   }
 
-  const total = totalPrice; // No shipping or COD fee — Click-and-Collect
-  const totalDisplay = (total / 100).toFixed(2);
+  const total = totalPrice; // No shipping or COD fee — Click-and-Collect (price already in rupees)
+  const totalDisplay = total.toFixed(0);
 
   /* ══════════════════════════════════════════════════════════════════ */
   return (
@@ -298,7 +298,7 @@ export function CheckoutPage() {
                           <p className="text-xs text-slate-500">Qty: {quantity}</p>
                         </div>
                         <span className="text-sm font-bold text-slate-900 shrink-0">
-                          ₹{((product.price / 100) * quantity).toFixed(0)}
+                          ₹{(product.price * quantity).toFixed(0)}
                         </span>
                       </div>
                     ))}
@@ -525,7 +525,7 @@ export function CheckoutPage() {
                 {items.map(({ product, quantity }) => (
                   <div key={product.id} className="flex justify-between text-slate-700">
                     <span className="truncate max-w-[130px]">{product.name} × {quantity}</span>
-                    <span className="font-semibold shrink-0 ml-2">₹{((product.price / 100) * quantity).toFixed(0)}</span>
+                    <span className="font-semibold shrink-0 ml-2">₹{(product.price * quantity).toFixed(0)}</span>
                   </div>
                 ))}
               </div>
@@ -538,10 +538,6 @@ export function CheckoutPage() {
                 <div className="flex justify-between text-slate-600">
                   <span>Delivery / Shipping</span>
                   <span className="text-emerald-600 font-semibold">Collect in Store</span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>COD Fee</span>
-                  <span className="text-emerald-600 font-semibold">None</span>
                 </div>
               </div>
 

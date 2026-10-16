@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Heart, Star, Check, AlertCircle, Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import type { Product } from '../types';
 import { useState } from 'react';
 
@@ -11,7 +12,8 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const { addItem, openCart } = useCart();
-  const [wished, setWished]     = useState(false);
+  const { isFavorite, toggleFavorite } = useWishlist();
+  const wished = isFavorite(product.id);
   const [adding, setAdding]     = useState(false);
   const [imgIdx, setImgIdx] = useState(0);
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
@@ -96,8 +98,8 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Wishlist button */}
         <button
           id={`wishlist-btn-${product.id}`}
-          onClick={(e) => { e.preventDefault(); setWished(v => !v); }}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/95 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-200 transition-colors z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          onClick={(e) => { e.preventDefault(); toggleFavorite(product.id); }}
+          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/95 border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 hover:text-rose-600 hover:border-rose-200 transition-colors z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 cursor-pointer"
           aria-label={wished ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
         >
           <Heart size={14} fill={wished ? '#e11d48' : 'none'} stroke={wished ? '#e11d48' : 'currentColor'} />

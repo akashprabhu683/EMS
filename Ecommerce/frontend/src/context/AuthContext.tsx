@@ -25,6 +25,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  updateProfile: (data: { name?: string; phone?: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -131,6 +132,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await syncUserDocument(result.user);
   }, []);
 
+  const handleUpdateProfile = useCallback(async (data: { name?: string; phone?: string }) => {
+    if (auth.currentUser) {
+      if (data.name) {
+        await updateProfile(auth.currentUser, { displayName: data.name });
+      }
+      setUser(prev => prev ? {
+        ...prev,
+        name: data.name ?? prev.name,
+        phone: data.phone ?? prev.phone,
+      } : null);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     await signOut(auth);
   }, []);
@@ -144,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         signInWithGoogle,
+        updateProfile: handleUpdateProfile,
         logout,
       }}
     >

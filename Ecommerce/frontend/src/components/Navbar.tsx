@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { ShoppingBag, User, Menu, X, ArrowRight, Leaf } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export function Navbar() {
   const { totalItems, openCart } = useCart();
@@ -11,6 +11,7 @@ export function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled]         = useState(false);
   const location  = useLocation();
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -24,6 +25,19 @@ export function Navbar() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [userMenuOpen]);
 
   const NAV_LINKS = [
     { to: '/',                                label: 'Home' },
@@ -98,7 +112,7 @@ export function Navbar() {
             <span className="text-xs font-semibold hidden sm:inline text-slate-700">Cart</span>
           </button>
 
-          <div className="relative">
+          <div className="relative" ref={userMenuRef}>
             {isAuthenticated ? (
               <button
                 id="nav-user-menu-btn"
@@ -131,6 +145,14 @@ export function Navbar() {
                   <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
                 </div>
                 <div className="py-1">
+                  <Link
+                    to="/profile"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                  >
+                    <span>My Profile</span>
+                    <ArrowRight size={12} className="text-slate-400" />
+                  </Link>
                   <Link
                     to="/orders"
                     onClick={() => setUserMenuOpen(false)}

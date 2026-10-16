@@ -20,6 +20,8 @@ import { TermsPage }             from './pages/TermsPage';
 import { ClickCollectPage }      from './pages/ClickCollectPage';
 import { FaqPage }               from './pages/FaqPage';
 import { ContactPage }           from './pages/ContactPage';
+import { ProfilePage }           from './pages/ProfilePage';
+import { WishlistProvider }      from './context/WishlistContext';
 import { useCart } from './context/CartContext';
 import { Home, Package, ShoppingBag, ClipboardList, User } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
@@ -137,6 +139,7 @@ function AppLayout() {
           <Route path="/click-collect"       element={<ClickCollectPage />} />
           <Route path="/faq"                 element={<FaqPage />} />
           <Route path="/contact"             element={<ContactPage />} />
+          <Route path="/profile"             element={<ProfilePage />} />
           <Route path="*"                    element={<NotFoundPage />} />
         </Routes>
       </div>
@@ -152,9 +155,11 @@ export default function App() {
       <ScrollToTop />
       <ToastProvider>
         <AuthProvider>
-          <CartProvider>
-            <AppLayout />
-          </CartProvider>
+          <WishlistProvider>
+            <CartProvider>
+              <AppLayout />
+            </CartProvider>
+          </WishlistProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

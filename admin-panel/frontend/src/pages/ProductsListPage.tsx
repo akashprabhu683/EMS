@@ -96,7 +96,14 @@ export function ProductsListPage() {
   // Map categoryId to category name
   const categoryMap = useMemo(() => {
     const map = new Map<string, string>();
-    categories.forEach((c) => map.set(c.id, c.name));
+    categories.forEach((c) => {
+      map.set(c.id, c.name);
+      if (c.slug) {
+        map.set(c.slug, c.name);
+        map.set(c.slug.replace(/-/g, ''), c.name);
+        map.set(c.slug.split('-')[0], c.name);
+      }
+    });
     return map;
   }, [categories]);
 

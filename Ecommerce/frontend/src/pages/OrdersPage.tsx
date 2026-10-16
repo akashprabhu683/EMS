@@ -17,6 +17,18 @@ export function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const toast = useToast();
 
+  // Detect overdue orders: ready_for_pickup but not collected after >24 hours
+  const overdueOrders = useMemo(() => {
+    const now = Date.now();
+    const OVERDUE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    return orders.filter(order => {
+      if (order.status !== 'ready_for_pickup') return false;
+      const placedDate = order.date ? new Date(order.date).getTime() : 0;
+      if (!placedDate || isNaN(placedDate)) return false;
+      return now - placedDate > OVERDUE_MS;
+    });
+  }, [orders]);
+
   useEffect(() => {
     let active = true;
     if (user?.id) {
@@ -177,6 +189,39 @@ export function OrdersPage() {
         {/* Authenticated Controls */}
         {isAuthenticated && (
           <>
+            {/* Overdue Order Notification Banner */}
+            {overdueOrders.length > 0 && (
+              <div className="mb-6 bg-amber-50 border border-amber-300 rounded-2xl p-4 sm:p-5 flex items-start gap-4 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+                  <AlertCircle size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-amber-900 text-sm">
+                    {overdueOrders.length === 1
+                      ? 'You have 1 order awaiting collection'
+                      : `You have ${overdueOrders.length} orders awaiting collection`}
+                  </p>
+                  <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
+                    {overdueOrders.length === 1
+                      ? <span>Order <strong className="text-amber-900">{overdueOrders[0].id}</strong> has been ready for pickup for over 24 hours. Please collect it at the dispensary counter as soon as possible.</span>
+                      : <span>The following orders are ready but have not been collected within the expected window. Please visit the dispensary counter: <strong className="text-amber-900">{overdueOrders.map(o => o.id).join(', ')}</strong>.</span>
+                    }
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {overdueOrders.slice(0, 3).map(o => (
+                      <Link
+                        key={o.id}
+                        to={`/orders/${o.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold transition-colors"
+                      >
+                        <Package size={12} />
+                        View Order {o.id}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Filter & Search Bar Controls */}
             <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
               {/* Status Tabs */}

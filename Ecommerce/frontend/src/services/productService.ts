@@ -33,7 +33,7 @@ function toProduct(id: string, data: DocumentData): Product {
                 : data.imageUrl?.startsWith('https://')
                     ? [data.imageUrl]
                     : [],
-        category: String(data.categoryId ?? data.category ?? ''),
+        category: String(data.category ?? data.categorySlug ?? data.categoryId ?? ''),
         rating: Number(data.rating ?? 0),
         reviewCount: Number(data.reviewCount ?? 0),
         stock: Math.max(0, Number(data.stock ?? 0)),

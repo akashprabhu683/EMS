@@ -12,39 +12,68 @@ import {
   FlaskConical,
   Percent,
   TrendingUp,
+  AlertCircle,
+  Package,
 } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
 import { useState, useEffect, useRef } from 'react';
 import { getActiveProducts } from '../services/productService';
+import { getUserOrders } from '../services/orderService';
+import { useAuth } from '../context/AuthContext';
 import { PRODUCTS } from '../data/products';
-import type { Product } from '../types';
+import type { Product, Order } from '../types';
 
 /* ─── Herbal categories aligned with dispensary catalog ─── */
 const HERBAL_CATEGORIES = [
-  { slug: 'ayurvedic',       label: 'Ayurvedic Formulations' },
+  { slug: 'ayurvedic', label: 'Ayurvedic Formulations' },
   { slug: 'herbal-extracts', label: 'Herbal Extracts & Syrups' },
-  { slug: 'vitality',        label: 'Vitality & Immunity' },
-  { slug: 'digestive',       label: 'Digestive & Metabolism' },
-  { slug: 'joint-care',      label: 'Joint Care & Balms' },
-  { slug: 'wellness-teas',   label: 'Natural Wellness & Teas' },
+  { slug: 'vitality', label: 'Vitality & Immunity' },
+  { slug: 'digestive', label: 'Digestive & Metabolism' },
+  { slug: 'joint-care', label: 'Joint Care & Balms' },
+  { slug: 'wellness-teas', label: 'Natural Wellness & Teas' },
 ];
 
 const TRUST_BADGES = [
-  { icon: Leaf,         text: 'Pure Botanical Herbs',    color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { icon: ShieldCheck,  text: 'Dispensary Verified',     color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { icon: FlaskConical, text: 'Lab Standardized',        color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { icon: MapPin,       text: 'Click & Collect Counter', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: Leaf, text: 'Pure Botanical Herbs', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: ShieldCheck, text: 'Dispensary Verified', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: FlaskConical, text: 'Lab Standardized', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { icon: MapPin, text: 'Click & Collect Counter', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
 ];
 
 export function HomePage() {
-  const [products, setProducts]               = useState<Product[]>([]);
-  const [loading, setLoading]                 = useState(true);
-  const [searchQuery, setSearchQuery]         = useState('');
+  const { user, isAuthenticated } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedIdx, setSelectedIdx]         = useState(-1);
-  const navigate      = useNavigate();
-  const searchRef     = useRef<HTMLInputElement>(null);
+  const [selectedIdx, setSelectedIdx] = useState(-1);
+  const [overdueOrders, setOverdueOrders] = useState<Order[]>([]);
+  const navigate = useNavigate();
+  const searchRef = useRef<HTMLInputElement>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
+
+  // Check for uncollected orders ready for pickup > 24h
+  useEffect(() => {
+    let active = true;
+    if (isAuthenticated && user?.id) {
+      getUserOrders(user.id)
+        .then(userOrders => {
+          if (!active) return;
+          const now = Date.now();
+          const OVERDUE_MS = 24 * 60 * 60 * 1000;
+          const overdue = (userOrders || []).filter(order => {
+            if (order.status !== 'ready_for_pickup') return false;
+            const placed = order.date ? new Date(order.date).getTime() : 0;
+            return placed && now - placed > OVERDUE_MS;
+          });
+          setOverdueOrders(overdue);
+        })
+        .catch(console.warn);
+    } else {
+      setOverdueOrders([]);
+    }
+    return () => { active = false; };
+  }, [isAuthenticated, user?.id]);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -95,8 +124,8 @@ export function HomePage() {
   const liveSuggestions =
     searchQuery.trim().length > 0
       ? ALL_SUGGESTIONS.filter(s =>
-          s.toLowerCase().includes(searchQuery.trim().toLowerCase())
-        ).slice(0, 7)
+        s.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      ).slice(0, 7)
       : [];
 
   useEffect(() => {
@@ -176,8 +205,8 @@ export function HomePage() {
       p.id !== bestSellerProduct?.id &&
       p.id !== dealProduct?.id &&
       (p.category?.toLowerCase().includes('vitality') ||
-       p.category?.toLowerCase().includes('extract') ||
-       p.tags?.some(t => t.includes('immunity') || t.includes('vitality')))
+        p.category?.toLowerCase().includes('extract') ||
+        p.tags?.some(t => t.includes('immunity') || t.includes('vitality')))
     ) ||
     catalogPool.find(p => p.id !== bestSellerProduct?.id && p.id !== dealProduct?.id) ||
     catalogPool[2] ||
@@ -186,6 +215,40 @@ export function HomePage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-12">
       <div className="page-container pt-8 sm:pt-10 pb-4">
+
+        {/* ── UNCOLLECTED / OVERDUE ORDER NOTIFICATION BANNER ── */}
+        {overdueOrders.length > 0 && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200/90 shadow-xs flex items-start gap-3.5 animate-fade-in">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+              <AlertCircle size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-amber-900 text-xs sm:text-sm">
+                {overdueOrders.length === 1
+                  ? 'Reminder: You have an order ready for collection at the dispensary counter'
+                  : `Reminder: You have ${overdueOrders.length} orders ready for collection`}
+              </p>
+              <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
+                Order <strong className="font-semibold text-amber-950">{overdueOrders[0].id}</strong> is packed and awaiting collection. Please visit the dispensary counter during opening hours (Mon–Sat 9AM–7PM) to collect and pay for your remedies.
+              </p>
+              <div className="flex items-center gap-3 mt-2.5">
+                <Link
+                  to={`/orders/${overdueOrders[0].id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold transition-colors"
+                >
+                  <Package size={12} />
+                  View Pickup Details
+                </Link>
+                <Link
+                  to="/orders"
+                  className="text-xs font-semibold text-amber-900 hover:text-amber-950 underline underline-offset-2"
+                >
+                  All Orders ({overdueOrders.length})
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── TOP HERO SEARCH BAR ─────────────────────────────────── */}
         <div className="mb-12 sm:mb-16">
@@ -201,7 +264,7 @@ export function HomePage() {
                   onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true); setSelectedIdx(-1); }}
                   onFocus={() => setShowSuggestions(true)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="search products"
+                  placeholder="Search Products"
                   autoComplete="off"
                   aria-label="Search products"
                   aria-autocomplete="list"
@@ -229,22 +292,20 @@ export function HomePage() {
                 className="absolute left-3 right-3 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1.5 overflow-hidden"
               >
                 {liveSuggestions.map((suggestion, i) => {
-                  const q   = searchQuery.trim().toLowerCase();
+                  const q = searchQuery.trim().toLowerCase();
                   const idx = suggestion.toLowerCase().indexOf(q);
                   return (
                     <li key={suggestion} role="option" aria-selected={i === selectedIdx}>
                       <button
                         type="button"
                         onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(suggestion); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left group cursor-pointer ${
-                          i === selectedIdx
-                            ? 'bg-emerald-50 text-emerald-800'
-                            : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
-                        }`}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left group cursor-pointer ${i === selectedIdx
+                          ? 'bg-emerald-50 text-emerald-800'
+                          : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'
+                          }`}
                       >
-                        <Search size={13} className={`shrink-0 transition-colors ${
-                          i === selectedIdx ? 'text-emerald-600' : 'text-slate-400 group-hover:text-emerald-600'
-                        }`} />
+                        <Search size={13} className={`shrink-0 transition-colors ${i === selectedIdx ? 'text-emerald-600' : 'text-slate-400 group-hover:text-emerald-600'
+                          }`} />
                         <span>
                           {idx === -1 ? suggestion : (
                             <>
