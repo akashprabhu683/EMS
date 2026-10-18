@@ -18,6 +18,9 @@ export interface AdminInvitation {
   status: 'pending' | 'accepted';
   invitedBy: string;
   invitedAt: string;
+  expiresAt?: string | null;
+  token?: string | null;
+  acceptUrl?: string | null;
 }
 
 /**
@@ -70,6 +73,9 @@ export async function getAdminsAndInvitations(): Promise<{
       status: data.status || 'pending',
       invitedBy: data.invitedBy || 'Admin',
       invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : String(data.invitedAt || ''),
+      expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,
+      token: data.token || null,
+      acceptUrl: data.acceptUrl || null,
     });
   });
 
@@ -77,17 +83,22 @@ export async function getAdminsAndInvitations(): Promise<{
 }
 
 /**
- * Grants admin role to an email address.
+ * Grants admin role to an email address and dispatches an email via Resend.
  */
-export async function grantAdmin(email: string): Promise<{ success: boolean; status: string; message: string }> {
+export async function grantAdmin(email: string): Promise<{
+  success: boolean;
+  status: string;
+  message: string;
+  acceptUrl?: string;
+}> {
   const cleanEmail = email.trim().toLowerCase();
 
   // 1. Try Cloud Function
   try {
-    const grantFn = httpsCallable<{ email: string }, { success: boolean; status: string; message: string }>(
-      functions,
-      'grantAdminRole'
-    );
+    const grantFn = httpsCallable<
+      { email: string },
+      { success: boolean; status: string; message: string; acceptUrl?: string }
+    >(functions, 'grantAdminRole');
     const result = await grantFn({ email: cleanEmail });
     return result.data;
   } catch (err: any) {
@@ -106,8 +117,48 @@ export async function grantAdmin(email: string): Promise<{ success: boolean; sta
   return {
     success: true,
     status: 'invited',
-    message: `Invitation recorded for ${cleanEmail}. Their admin privileges will be activated upon sign-in.`,
+    message: `Invitation recorded for ${cleanEmail}. An invitation has been queued.`,
   };
+}
+
+/**
+ * Resends an invitation email to a pending administrator.
+ */
+export async function resendInvitation(email: string): Promise<{ success: boolean; message: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const resendFn = httpsCallable<{ email: string }, { success: boolean; message: string }>(
+    functions,
+    'resendAdminInvitation'
+  );
+  const result = await resendFn({ email: cleanEmail });
+  return result.data;
+}
+
+/**
+ * Verifies an invitation token before accepting.
+ */
+export async function verifyInvitation(
+  token: string,
+  email: string
+): Promise<{ valid: boolean; email?: string; invitedBy?: string; reason?: string }> {
+  const verifyFn = httpsCallable<
+    { token: string; email: string },
+    { valid: boolean; email?: string; invitedBy?: string; reason?: string }
+  >(functions, 'verifyInvitationToken');
+  const result = await verifyFn({ token, email });
+  return result.data;
+}
+
+/**
+ * Accepts an invitation token using the current user's Google session.
+ */
+export async function acceptInvitation(token: string): Promise<{ success: boolean; message: string }> {
+  const acceptFn = httpsCallable<{ token: string }, { success: boolean; message: string }>(
+    functions,
+    'acceptAdminInvitation'
+  );
+  const result = await acceptFn({ token });
+  return result.data;
 }
 
 /**

@@ -26,6 +26,9 @@ export {
 export {
   listAdmins,
   grantAdminRole,
+  resendAdminInvitation,
+  verifyInvitationToken,
+  acceptAdminInvitation,
   revokeAdminRole,
   checkAndActivatePendingAdmin,
 } from "./adminRoles.js";

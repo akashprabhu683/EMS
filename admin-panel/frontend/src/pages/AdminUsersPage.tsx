@@ -12,11 +12,14 @@ import {
   Users,
   ShieldAlert,
   Info,
+  Copy,
+  Send,
 } from 'lucide-react';
 import {
   getAdminsAndInvitations,
   grantAdmin,
   revokeAdmin,
+  resendInvitation,
   type AdminUser,
   type AdminInvitation,
 } from '../services/adminRoleService';
@@ -29,11 +32,13 @@ export function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null);
 
   // Revoke confirmation modal state
   const [revokeTarget, setRevokeTarget] = useState<{ uid?: string; email: string } | null>(null);
@@ -93,6 +98,34 @@ export function AdminUsersPage() {
       setError(err.message || 'Failed to revoke admin privileges.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleResendInvite = async (email: string) => {
+    setResendingEmail(email);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await resendInvitation(email);
+      setSuccessMsg(res.message || `Invitation email resent to ${email}!`);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend invitation email.');
+    } finally {
+      setResendingEmail(null);
+    }
+  };
+
+  const handleCopyLink = async (inv: AdminInvitation) => {
+    const url =
+      inv.acceptUrl ||
+      `${window.location.origin}/accept-invite?token=${inv.token || ''}&email=${encodeURIComponent(inv.email)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedEmail(inv.email);
+      setTimeout(() => setCopiedEmail(null), 3000);
+    } catch {
+      setError('Could not access clipboard to copy invitation link.');
     }
   };
 
@@ -306,12 +339,35 @@ export function AdminUsersPage() {
                       {inv.invitedAt ? new Date(inv.invitedAt).toLocaleDateString() : '—'}
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button
-                        onClick={() => setRevokeTarget({ email: inv.email })}
-                        className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 transition-colors"
-                      >
-                        Cancel Invitation
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleCopyLink(inv)}
+                          title="Copy direct invitation link"
+                          className="px-2.5 py-1.5 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 transition-colors inline-flex items-center gap-1.5"
+                        >
+                          <Copy size={13} className="text-slate-500" />
+                          <span>{copiedEmail === inv.email ? 'Copied!' : 'Copy Link'}</span>
+                        </button>
+                        <button
+                          onClick={() => handleResendInvite(inv.email)}
+                          disabled={resendingEmail === inv.email}
+                          title="Resend invitation email via Resend"
+                          className="px-2.5 py-1.5 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {resendingEmail === inv.email ? (
+                            <Loader2 size={13} className="animate-spin text-emerald-700" />
+                          ) : (
+                            <Send size={13} className="text-emerald-700" />
+                          )}
+                          <span>Resend Email</span>
+                        </button>
+                        <button
+                          onClick={() => setRevokeTarget({ email: inv.email })}
+                          className="px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-slate-200 hover:border-rose-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
