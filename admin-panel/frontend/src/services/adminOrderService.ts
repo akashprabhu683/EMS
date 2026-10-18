@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   type DocumentData,
   Timestamp,
+  onSnapshot,
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 
@@ -98,6 +99,48 @@ export async function getAdminOrders(): Promise<AdminOrder[]> {
   } catch {
     const snap = await getDocs(collection(db, 'orders'));
     return snap.docs.map(d => docToAdminOrder(d.id, d.data()));
+  }
+}
+
+/**
+ * Subscribes to real-time order updates from Firestore without requiring page refreshes.
+ */
+export function subscribeAdminOrders(
+  onOrders: (orders: AdminOrder[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  let fallbackUnsub: (() => void) | null = null;
+
+  try {
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => docToAdminOrder(d.id, d.data()));
+        onOrders(list);
+      },
+      (err) => {
+        console.warn('Realtime orders query error, falling back to base collection listener:', err);
+        // Fallback without orderBy if index is building or absent
+        fallbackUnsub = onSnapshot(
+          collection(db, 'orders'),
+          (snap) => {
+            const list = snap.docs.map((d) => docToAdminOrder(d.id, d.data()));
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            onOrders(list);
+          },
+          onError
+        );
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      if (fallbackUnsub) fallbackUnsub();
+    };
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
   }
 }
 

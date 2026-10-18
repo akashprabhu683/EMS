@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ShoppingCart,
   Users,
+  User,
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import clsx from 'clsx';
@@ -27,10 +28,12 @@ export function Layout() {
 
   const navItems = [
     { label: 'Dashboard', to: '/', icon: LayoutDashboard },
-    { label: 'Orders',    to: '/orders', icon: ShoppingCart },
-    { label: 'Products',  to: '/products', icon: Package },
+    { label: 'Orders', to: '/orders', icon: ShoppingCart },
+    { label: 'Customers', to: '/customers', icon: Users },
+    { label: 'Products', to: '/products', icon: Package },
     { label: 'Categories', to: '/categories', icon: Layers },
-    { label: 'Admin Roles', to: '/admins', icon: Users },
+    { label: 'Admin Roles', to: '/admins', icon: ShieldCheck },
+    { label: 'My Profile', to: '/profile', icon: User },
   ];
 
   return (
@@ -107,15 +110,22 @@ export function Layout() {
 
         {/* User Card & Sign Out */}
         <div className="p-4 border-t border-slate-100 space-y-3">
-          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/70">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-              <span className="text-[11px] font-bold text-slate-700">Administrator</span>
+          <NavLink
+            to="/profile"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block bg-slate-50 hover:bg-slate-100 rounded-xl p-3 border border-slate-200/70 transition-colors group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                <span className="text-[11px] font-bold text-slate-700">Administrator</span>
+              </div>
+              <span className="text-[10px] text-slate-400 group-hover:text-emerald-700 font-semibold">Profile →</span>
             </div>
             <p className="text-xs font-medium text-slate-900 truncate" title={user?.email ?? ''}>
               {user?.email ?? 'admin'}
             </p>
-          </div>
+          </NavLink>
 
           <button
             id="admin-logout-btn"

@@ -11,6 +11,8 @@ import { CategoriesListPage } from './pages/CategoriesListPage';
 import { OrdersListPage } from './pages/OrdersListPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
+import { CustomersPage } from './pages/CustomersPage';
+import { AdminProfilePage } from './pages/AdminProfilePage';
 
 export default function App() {
   return (
@@ -27,9 +29,11 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route index element={<DashboardOverviewPage />} />
                 <Route path="/orders" element={<OrdersListPage />} />
+                <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/products" element={<ProductsListPage />} />
                 <Route path="/categories" element={<CategoriesListPage />} />
                 <Route path="/admins" element={<AdminUsersPage />} />
+                <Route path="/profile" element={<AdminProfilePage />} />
               </Route>
             </Route>
 

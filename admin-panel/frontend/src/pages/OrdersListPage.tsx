@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { useToast } from '../context/ToastContext';
 import {
   getAdminOrders,
+  subscribeAdminOrders,
   updateOrderStatus,
   markOrderPaid,
   type AdminOrder,
@@ -307,20 +308,24 @@ export function OrdersListPage() {
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const loadOrders = useCallback(async () => {
+  useEffect(() => {
     setLoading(true);
-    try {
-      const data = await getAdminOrders();
-      setOrders(Array.isArray(data) ? data : []);
-    } catch (e: any) {
-      console.error('Failed to load orders:', e);
-      toast.error(e.message || 'Failed to load orders. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+    const unsubscribe = subscribeAdminOrders(
+      (liveOrders) => {
+        setOrders(Array.isArray(liveOrders) ? liveOrders : []);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Realtime orders error:', err);
+        toast.error('Failed to stream real-time orders.');
+        setLoading(false);
+      }
+    );
 
-  useEffect(() => { loadOrders(); }, [loadOrders, refreshKey]);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     await updateOrderStatus(orderId, newStatus);
@@ -357,14 +362,23 @@ export function OrdersListPage() {
             Dispensary Click &amp; Collect orders — track preparation, collection, and in-person payments
           </p>
         </div>
-        <button
-          onClick={() => setRefreshKey(k => k + 1)}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition-colors disabled:opacity-60"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin text-emerald-600' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live Stream</span>
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              getAdminOrders().then(d => { setOrders(d); setLoading(false); });
+            }}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin text-emerald-600' : ''} />
+            <span>Sync</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter tabs */}
