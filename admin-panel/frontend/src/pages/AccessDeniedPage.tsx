@@ -1,23 +1,14 @@
 import React, { useState } from 'react';
-import { ShieldAlert, RefreshCw, LogOut, Copy, Check } from 'lucide-react';
+import { ShieldAlert, RefreshCw, LogOut } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 
 export function AccessDeniedPage() {
   const { user, rawUser, refreshClaims, logout, isLoading } = useAdminAuth();
-  const [copied, setCopied] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const uid = user?.uid || rawUser?.uid || '';
   const email = user?.email || rawUser?.email || '';
-
-  const handleCopy = () => {
-    if (email) {
-      navigator.clipboard.writeText(`node scripts/set-admin-claim.mjs ${email}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -62,25 +53,10 @@ export function AccessDeniedPage() {
           </div>
         </div>
 
-        {/* Instructions for server administrator */}
-        <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200 space-y-2.5">
-          <p className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider">
-            How to grant admin access:
-          </p>
-          <p className="text-xs text-emerald-800 leading-relaxed">
-            Run the trusted server-side command in your project terminal:
-          </p>
-          <div className="flex items-center justify-between bg-white rounded-xl p-2.5 border border-emerald-200 font-mono text-[11px] text-slate-800">
-            <span className="truncate pr-2">node scripts/set-admin-claim.mjs {email}</span>
-            <button
-              onClick={handleCopy}
-              className="text-emerald-700 hover:text-emerald-900 p-1 flex-shrink-0"
-              title="Copy command"
-            >
-              {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-            </button>
-          </div>
-        </div>
+        {/* Help Notice */}
+        <p className="text-xs text-center text-slate-400 leading-relaxed">
+          If you believe you should have administrative access, please contact an existing EMS administrator to send an invitation to your email.
+        </p>
 
         {message && (
           <p className="text-xs text-center text-rose-600 font-medium bg-rose-50 p-2.5 rounded-xl border border-rose-200">
