@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ExternalLink,
   ShoppingCart,
+  Users,
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import clsx from 'clsx';
@@ -29,6 +30,7 @@ export function Layout() {
     { label: 'Orders',    to: '/orders', icon: ShoppingCart },
     { label: 'Products',  to: '/products', icon: Package },
     { label: 'Categories', to: '/categories', icon: Layers },
+    { label: 'Admin Roles', to: '/admins', icon: Users },
   ];
 
   return (

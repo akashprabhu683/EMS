@@ -8,6 +8,7 @@ import { DashboardOverviewPage } from './pages/DashboardOverviewPage';
 import { ProductsListPage } from './pages/ProductsListPage';
 import { CategoriesListPage } from './pages/CategoriesListPage';
 import { OrdersListPage } from './pages/OrdersListPage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
               <Route path="/orders" element={<OrdersListPage />} />
               <Route path="/products" element={<ProductsListPage />} />
               <Route path="/categories" element={<CategoriesListPage />} />
+              <Route path="/admins" element={<AdminUsersPage />} />
             </Route>
           </Route>
 
