@@ -7,7 +7,8 @@ import {
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 import type { AdminUser } from '../types';
 
 const googleProvider = new GoogleAuthProvider();
@@ -34,8 +35,26 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const verifyAdminClaims = useCallback(async (firebaseUser: User): Promise<boolean> => {
     try {
       // Force refresh token to obtain the latest server-signed custom claims
-      const tokenResult = await firebaseUser.getIdTokenResult(true);
-      const hasAdminClaim = Boolean(tokenResult.claims.admin);
+      let tokenResult = await firebaseUser.getIdTokenResult(true);
+      let hasAdminClaim = Boolean(tokenResult.claims.admin);
+
+      // If user does not yet have admin claim, check if they have a pending admin invite to auto-activate
+      if (!hasAdminClaim && firebaseUser.email) {
+        try {
+          const activateFn = httpsCallable<void, { activated: boolean }>(
+            functions,
+            'checkAndActivatePendingAdmin'
+          );
+          const res = await activateFn();
+          if (res.data?.activated) {
+            tokenResult = await firebaseUser.getIdTokenResult(true);
+            hasAdminClaim = Boolean(tokenResult.claims.admin);
+          }
+        } catch (callErr) {
+          console.warn('Pending admin invite activation check failed:', callErr);
+        }
+      }
+
       setIsAdmin(hasAdminClaim);
       setUser({
         uid: firebaseUser.uid,
