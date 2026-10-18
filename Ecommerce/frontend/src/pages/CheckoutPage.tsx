@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   ArrowLeft, CheckCircle2, MapPin, Phone, Clock,
   ShieldCheck, Leaf, Package, ChevronRight, User,
-  AlertCircle, Loader2,
+  Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -26,7 +27,7 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [placing, setPlacing] = useState(false);
-  const [orderError, setOrderError] = useState('');
+  const toast = useToast();
   const [googleSigningIn, setGoogleSigningIn] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -61,13 +62,12 @@ export function CheckoutPage() {
   }, [isAuthenticated, user?.name]);
 
   const validateContact = (): boolean => {
-    setOrderError('');
     if (!form.fullName.trim() || form.fullName.trim().length < 2) {
-      setOrderError('Please enter your full name.');
+      toast.warning('Please enter your full name.');
       return false;
     }
     if (!form.phone.trim() || !/^[0-9+\s\-()]{7,20}$/.test(form.phone.trim())) {
-      setOrderError('Please enter a valid phone number (at least 7 digits).');
+      toast.warning('Please enter a valid phone number (at least 7 digits).');
       return false;
     }
     return true;
@@ -75,21 +75,18 @@ export function CheckoutPage() {
 
   const handleGoogleSignIn = async () => {
     setGoogleSigningIn(true);
-    setOrderError('');
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      setOrderError(err.message || 'Google sign-in failed. Please try again.');
+      toast.error(err.message || 'Google sign-in failed. Please try again.');
     } finally {
       setGoogleSigningIn(false);
     }
   };
 
   const placeOrder = async () => {
-    setOrderError('');
-
     if (!isAuthenticated) {
-      setOrderError('Please sign in with Google to place your order.');
+      toast.warning('Please sign in with Google to place your order.');
       return;
     }
 
@@ -110,11 +107,13 @@ export function CheckoutPage() {
       let paymentStatus = 'unpaid';
       let itemCount = items.length;
 
-      const pickupContact = {
+      const pickupContact: { fullName: string; phone: string; notes?: string } = {
         fullName: form.fullName.trim(),
         phone: form.phone.trim(),
-        notes: form.notes.trim() || undefined,
       };
+      if (form.notes && form.notes.trim()) {
+        pickupContact.notes = form.notes.trim();
+      }
 
       const currentUid = auth.currentUser?.uid || user?.id;
       if (!currentUid) {
@@ -123,12 +122,12 @@ export function CheckoutPage() {
 
       const calculatedTotalPaise = Math.round(totalPrice * 100);
       const orderItems = items.map(item => ({
-        productId: item.product.id,
-        name: item.product.name,
-        unitPrice: Math.round(item.product.price * 100),
-        quantity: item.quantity,
-        lineTotal: Math.round(item.product.price * item.quantity * 100),
-        imageUrl: item.product.images[0] || '',
+        productId: item.product.id || '',
+        name: item.product.name || 'Herbal Product',
+        unitPrice: Math.round((item.product.price || 0) * 100),
+        quantity: item.quantity || 1,
+        lineTotal: Math.round((item.product.price || 0) * (item.quantity || 1) * 100),
+        imageUrl: (item.product.images && item.product.images[0]) || '',
         selectedColor: item.selectedColor || null,
         selectedSize: item.selectedSize || null,
       }));
@@ -181,7 +180,7 @@ export function CheckoutPage() {
         },
       });
     } catch (err: any) {
-      setOrderError(err.message || 'Failed to place order. Please try again.');
+      toast.error(err.message || 'Failed to place order. Please try again.');
     } finally {
       setPlacing(false);
     }
@@ -189,12 +188,11 @@ export function CheckoutPage() {
 
   /* ── Step navigation ── */
   const nextStep = () => {
-    setOrderError('');
     if (step === 0) { setStep(1); return; }
     if (step === 1) {
       if (!validateContact()) return;
       if (!isAuthenticated) {
-        setOrderError('Please sign in with Google before confirming your order.');
+        toast.error('Please sign in with Google before confirming your order.');
         return;
       }
       setStep(2);
@@ -202,7 +200,6 @@ export function CheckoutPage() {
   };
 
   const prevStep = () => {
-    setOrderError('');
     setStep(s => Math.max(0, s - 1));
   };
 
@@ -220,73 +217,81 @@ export function CheckoutPage() {
 
   /* ══════════════════════════════════════════════════════════════════ */
   return (
-    <main className="min-h-screen bg-slate-50 pb-24 md:pb-8">
-      <div className="page-container pt-4 sm:pt-6 max-w-3xl mx-auto">
+    <main className="min-h-screen bg-slate-50 pb-16 sm:pb-24">
+      <div className="page-container px-3.5 sm:px-6 pt-3 sm:pt-6 max-w-4xl lg:max-w-5xl mx-auto">
 
         {/* ── Back + Title ── */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
           <button
             onClick={() => step > 0 ? prevStep() : navigate(-1)}
-            className="p-2 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors shrink-0"
             aria-label="Go back"
           >
             <ArrowLeft size={18} />
           </button>
-          <div>
-            <h1 className="font-display font-extrabold text-xl sm:text-2xl text-slate-900">Checkout</h1>
-            <p className="text-xs text-slate-500">Click &amp; Collect — Pay at Dispensary</p>
+          <div className="min-w-0">
+            <h1 className="font-display font-extrabold text-lg sm:text-2xl text-slate-900 truncate">Checkout</h1>
+            <p className="text-xs text-slate-500 truncate">Click &amp; Collect — Pay in Person at Dispensary</p>
           </div>
         </div>
 
         {/* ── Stepper ── */}
-        <div className="flex items-center gap-1 mb-8">
-          {STEPS.map((label, i) => (
-            <div key={label} className="flex items-center flex-1">
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={clsx(
-                    'w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors',
-                    i < step
-                      ? 'bg-emerald-500 text-white'
-                      : i === step
-                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-200'
-                      : 'bg-slate-200 text-slate-400'
-                  )}
-                >
-                  {i < step ? <CheckCircle2 size={12} /> : i + 1}
+        <div className="mb-6 sm:mb-8 bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-2xs">
+          {/* Mobile Current Step Tagline */}
+          <div className="sm:hidden flex items-center justify-between text-xs font-semibold text-slate-700 mb-2.5 pb-2 border-b border-slate-100">
+            <span className="text-slate-600">Step {step + 1} of 3: <strong className="text-emerald-700">{STEPS[step]}</strong></span>
+            <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">₹{totalDisplay}</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {STEPS.map((label, i) => (
+              <div key={label} className="flex items-center flex-1">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div
+                    className={clsx(
+                      'w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[11px] sm:text-xs font-bold transition-all shrink-0',
+                      i < step
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : i === step
+                        ? 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-2xs'
+                        : 'bg-slate-200 text-slate-400'
+                    )}
+                  >
+                    {i < step ? <CheckCircle2 size={13} /> : i + 1}
+                  </div>
+                  <span className={clsx(
+                    'text-[11px] sm:text-xs font-semibold hidden sm:inline transition-colors',
+                    i === step ? 'text-emerald-800 font-bold' : i < step ? 'text-slate-600' : 'text-slate-400'
+                  )}>
+                    {label}
+                  </span>
                 </div>
-                <span className={clsx(
-                  'text-[11px] font-semibold hidden sm:inline',
-                  i === step ? 'text-emerald-700' : i < step ? 'text-slate-500' : 'text-slate-400'
-                )}>
-                  {label}
-                </span>
+                {i < STEPS.length - 1 && (
+                  <div className={clsx(
+                    'flex-1 h-0.5 mx-1.5 sm:mx-3 rounded-full transition-colors',
+                    i < step ? 'bg-emerald-500' : 'bg-slate-200'
+                  )} />
+                )}
               </div>
-              {i < STEPS.length - 1 && (
-                <div className={clsx(
-                  'flex-1 h-px mx-2',
-                  i < step ? 'bg-emerald-400' : 'bg-slate-200'
-                )} />
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
 
           {/* ── Main Panel ── */}
           <div className="lg:col-span-3 space-y-4">
 
             {/* STEP 0 — Cart Review */}
             {step === 0 && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4 shadow-2xs">
                 <h2 className="font-display font-bold text-base text-slate-900">Cart Review</h2>
                 {items.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-4 text-center">Your cart is empty.</p>
+                  <p className="text-sm text-slate-500 py-6 text-center">Your cart is empty.</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 divide-y divide-slate-100">
                     {items.map(({ product, quantity }) => (
-                      <div key={product.id} className="flex items-start gap-3">
+                      <div key={product.id} className="pt-3 first:pt-0 flex items-center gap-3">
                         <div className="w-14 h-14 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
                           {product.images?.[0] ? (
                             <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
@@ -295,10 +300,10 @@ export function CheckoutPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">{product.name}</p>
-                          <p className="text-xs text-slate-500">Qty: {quantity}</p>
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate">{product.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">Qty: {quantity} × ₹{product.price.toFixed(0)}</p>
                         </div>
-                        <span className="text-sm font-bold text-slate-900 shrink-0">
+                        <span className="text-xs sm:text-sm font-bold text-slate-900 shrink-0">
                           ₹{(product.price * quantity).toFixed(0)}
                         </span>
                       </div>
@@ -310,30 +315,29 @@ export function CheckoutPage() {
 
             {/* STEP 1 — Pickup Contact */}
             {step === 1 && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xs">
                 <div>
                   <h2 className="font-display font-bold text-base text-slate-900">Your Pickup Details</h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    We'll use this to notify you when your order is ready for collection.
+                    We will notify this contact when your remedies are prepared for collection.
                   </p>
                 </div>
 
                 {/* Auth Wall */}
                 {!isAuthenticated ? (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
-                    <p className="text-sm font-semibold text-emerald-900 flex items-center gap-2">
-                      <ShieldCheck size={15} className="text-emerald-600 shrink-0" />
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs sm:text-sm font-semibold text-emerald-900 flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
                       Sign in to continue
                     </p>
                     <p className="text-xs text-emerald-800 leading-relaxed">
-                      A quick Google sign-in is required to place your order.
-                      Your cart will be preserved.
+                      A quick Google sign-in is required to place your order. Your cart and details will be preserved.
                     </p>
                     <button
                       id="checkout-google-signin-btn"
                       onClick={handleGoogleSignIn}
                       disabled={googleSigningIn}
-                      className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-800 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-60"
+                      className="w-full h-11 flex items-center justify-center gap-2.5 px-4 rounded-xl bg-white border border-slate-200 text-slate-800 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs disabled:opacity-60"
                     >
                       {googleSigningIn ? (
                         <Loader2 size={16} className="animate-spin text-emerald-600" />
@@ -351,18 +355,18 @@ export function CheckoutPage() {
                 ) : (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-3">
                     {user?.avatar && (
-                      <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full border border-emerald-300" />
+                      <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full border border-emerald-300 shrink-0" />
                     )}
-                    <div>
-                      <p className="text-xs font-bold text-emerald-900">{user?.name}</p>
-                      <p className="text-[11px] text-emerald-700">{user?.email}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-emerald-900 truncate">{user?.name}</p>
+                      <p className="text-[11px] text-emerald-700 truncate">{user?.email}</p>
                     </div>
-                    <CheckCircle2 size={16} className="text-emerald-500 ml-auto shrink-0" />
+                    <CheckCircle2 size={16} className="text-emerald-600 ml-auto shrink-0" />
                   </div>
                 )}
 
                 {/* Contact fields — always shown so user can pre-fill */}
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   <div>
                     <label htmlFor="pickup-name" className="block text-xs font-semibold text-slate-700 mb-1">
                       Full Name <span className="text-rose-500">*</span>
@@ -373,7 +377,7 @@ export function CheckoutPage() {
                       value={form.fullName}
                       onChange={set('fullName')}
                       placeholder="Your name for pickup"
-                      className="w-full h-10 px-3.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                      className="w-full h-11 sm:h-10 px-3.5 rounded-xl border border-slate-200 text-base sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
                     />
                   </div>
                   <div>
@@ -386,7 +390,7 @@ export function CheckoutPage() {
                       value={form.phone}
                       onChange={set('phone')}
                       placeholder="+91 98765 43210"
-                      className="w-full h-10 px-3.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                      className="w-full h-11 sm:h-10 px-3.5 rounded-xl border border-slate-200 text-base sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
                     />
                   </div>
                   <div>
@@ -399,7 +403,7 @@ export function CheckoutPage() {
                       onChange={set('notes')}
                       placeholder="Preferred pickup time, special requests…"
                       rows={2}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition resize-none"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-base sm:text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition resize-none"
                     />
                   </div>
                 </div>
@@ -408,11 +412,11 @@ export function CheckoutPage() {
 
             {/* STEP 2 — Confirm & Place */}
             {step === 2 && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xs">
                 <h2 className="font-display font-bold text-base text-slate-900">Confirm Your Order</h2>
 
                 {/* Pickup summary */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-4 space-y-2 text-xs">
                   <div className="flex items-center gap-2 font-semibold text-slate-800 mb-1">
                     <User size={13} className="text-emerald-600" />
                     Pickup Contact
@@ -426,30 +430,30 @@ export function CheckoutPage() {
                     <span className="font-medium text-slate-800">{form.phone}</span>
                   </div>
                   {form.notes && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Notes</span>
-                      <span className="font-medium text-slate-800 text-right max-w-[200px]">{form.notes}</span>
+                    <div className="flex justify-between items-start gap-2 pt-1 border-t border-slate-100">
+                      <span className="text-slate-500 shrink-0">Notes</span>
+                      <span className="font-medium text-slate-800 text-right">{form.notes}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Dispensary info */}
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2 text-xs">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 sm:p-4 space-y-1.5 text-xs">
                   <div className="flex items-center gap-2 font-bold text-emerald-800 mb-1">
                     <MapPin size={13} className="text-emerald-600" />
                     Collection Point
                   </div>
                   <p className="font-semibold text-slate-900">{DISPENSARY.name}</p>
-                  <div className="flex items-center gap-1.5 text-slate-600">
-                    <Clock size={11} className="text-emerald-600 shrink-0" />
-                    {DISPENSARY.hours}
+                  <div className="flex items-center gap-1.5 text-slate-600 text-[11px] sm:text-xs">
+                    <Clock size={12} className="text-emerald-600 shrink-0" />
+                    <span>{DISPENSARY.hours}</span>
                   </div>
                 </div>
 
                 {/* Payment notice */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs">
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">💵</span>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 sm:p-4 text-xs">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl shrink-0">💵</span>
                     <div>
                       <p className="font-bold text-amber-900">Pay In Person at Pickup</p>
                       <p className="text-amber-800 mt-0.5 leading-relaxed">
@@ -462,23 +466,15 @@ export function CheckoutPage() {
               </div>
             )}
 
-            {/* Error */}
-            {orderError && (
-              <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-rose-700 text-xs">
-                <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                <span>{orderError}</span>
-              </div>
-            )}
-
             {/* Navigation Buttons */}
-            <div className="flex gap-3">
+            <div className="flex items-center gap-2.5 sm:gap-3 pt-1">
               {step > 0 && (
                 <button
                   onClick={prevStep}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition-colors"
+                  className="h-11 sm:h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 active:bg-slate-100 transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-2xs"
                 >
-                  <ArrowLeft size={14} />
-                  Back
+                  <ArrowLeft size={15} />
+                  <span>Back</span>
                 </button>
               )}
 
@@ -486,27 +482,30 @@ export function CheckoutPage() {
                 <button
                   id="checkout-next-btn"
                   onClick={nextStep}
-                  className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-semibold transition-colors shadow-sm"
+                  className="h-11 sm:h-12 flex-1 flex items-center justify-center gap-2 px-4 sm:px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs sm:text-sm font-semibold transition-all shadow-sm"
                 >
-                  <span>{step === 0 ? 'Continue to Pickup Details' : 'Review Order'}</span>
-                  <ChevronRight size={15} />
+                  <span>{step === 0 ? 'Continue to Pickup Details' : 'Review & Confirm'}</span>
+                  <ChevronRight size={16} />
                 </button>
               ) : (
                 <button
                   id="checkout-place-order-btn"
                   onClick={placeOrder}
                   disabled={placing || !isAuthenticated}
-                  className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-emerald-300 text-white text-sm font-bold transition-colors shadow-sm"
+                  className="h-11 sm:h-12 flex-1 flex items-center justify-center gap-2 px-3 sm:px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-emerald-300 text-white text-xs sm:text-sm md:text-base font-bold transition-all shadow-sm"
                 >
                   {placing ? (
                     <>
-                      <Loader2 size={16} className="animate-spin" />
+                      <Loader2 size={16} className="animate-spin shrink-0" />
                       <span>Placing Order…</span>
                     </>
                   ) : (
                     <>
-                      <Leaf size={15} />
-                      <span>Place Order — Collect &amp; Pay at Shop</span>
+                      <Leaf size={16} className="shrink-0" />
+                      <span className="truncate">
+                        <span className="sm:hidden">Place Order (₹{totalDisplay})</span>
+                        <span className="hidden sm:inline">Place Order — Collect &amp; Pay at Shop</span>
+                      </span>
                     </>
                   )}
                 </button>
@@ -516,7 +515,7 @@ export function CheckoutPage() {
 
           {/* ── Order Summary Sidebar ── */}
           <aside className="lg:col-span-2">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 sticky top-20 space-y-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 lg:sticky lg:top-20 space-y-4 shadow-2xs">
               <h3 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
                 <Package size={15} className="text-emerald-600" />
                 Order Summary
@@ -524,8 +523,8 @@ export function CheckoutPage() {
 
               <div className="space-y-2.5 text-xs">
                 {items.map(({ product, quantity }) => (
-                  <div key={product.id} className="flex justify-between text-slate-700">
-                    <span className="truncate max-w-[130px]">{product.name} × {quantity}</span>
+                  <div key={product.id} className="flex justify-between items-center text-slate-700">
+                    <span className="truncate max-w-[170px] sm:max-w-[220px]">{product.name} × {quantity}</span>
                     <span className="font-semibold shrink-0 ml-2">₹{(product.price * quantity).toFixed(0)}</span>
                   </div>
                 ))}
@@ -545,13 +544,13 @@ export function CheckoutPage() {
               <div className="border-t border-slate-200 pt-3">
                 <div className="flex justify-between font-bold text-sm text-slate-900">
                   <span>Total</span>
-                  <span className="text-emerald-700">₹{totalDisplay}</span>
+                  <span className="text-emerald-700 text-base">₹{totalDisplay}</span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">Pay in person at pickup — no online payment</p>
               </div>
 
               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-[11px] text-emerald-800 flex items-center gap-2">
-                <ShieldCheck size={13} className="text-emerald-600 shrink-0" />
+                <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
                 <span>All products are quality verified and prepared fresh for your collection.</span>
               </div>
             </div>

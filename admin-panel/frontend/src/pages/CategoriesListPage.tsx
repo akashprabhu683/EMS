@@ -7,8 +7,8 @@ import {
   Power,
   X,
   AlertCircle,
-  CheckCircle2,
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 import {
   getAllCategories,
   createCategory,
@@ -21,10 +21,9 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 import type { Category, CategoryFormData } from '../types';
 
 export function CategoriesListPage() {
+  const toast = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,12 +50,11 @@ export function CategoriesListPage() {
 
   const loadData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const list = await getAllCategories();
       setCategories(list);
     } catch (err: any) {
-      setError(err.message || 'Failed to load categories.');
+      toast.error(err.message || 'Failed to load categories.');
     } finally {
       setLoading(false);
     }
@@ -125,14 +123,13 @@ export function CategoriesListPage() {
     try {
       if (editingCategory) {
         await updateCategory(editingCategory.id, formData);
-        setSuccessMessage(`Category "${formData.name}" successfully updated.`);
+        toast.success(`Category "${formData.name}" successfully updated.`);
       } else {
         await createCategory(formData);
-        setSuccessMessage(`Category "${formData.name}" successfully created.`);
+        toast.success(`Category "${formData.name}" successfully created.`);
       }
       setIsModalOpen(false);
       await loadData();
-      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
       setModalError(err.message || 'Failed to save category.');
     } finally {
@@ -158,13 +155,10 @@ export function CategoriesListPage() {
   const executeStatusChange = async (cat: Category, newStatus: boolean) => {
     try {
       await setCategoryActiveStatus(cat.id, newStatus);
-      setSuccessMessage(
-        `Category "${cat.name}" has been ${newStatus ? 'activated' : 'deactivated'}.`
-      );
+      toast.success(`Category "${cat.name}" has been ${newStatus ? 'activated' : 'deactivated'}.`);
       await loadData();
-      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Failed to update category status.');
+      toast.error(err.message || 'Failed to update category status.');
     } finally {
       setDeactivateCategory(null);
       setIsDeactivating(false);
@@ -200,20 +194,6 @@ export function CategoriesListPage() {
         </button>
       </div>
 
-      {/* Notifications */}
-      {successMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-center gap-2.5 animate-in fade-in duration-150">
-          <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-center gap-2.5">
-          <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
 
       {/* Filter Toolbar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

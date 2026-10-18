@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useToast } from '../context/ToastContext';
 import {
   User, Mail, Phone, MapPin, Heart, Package,
-  Save, CheckCircle2, AlertCircle, Leaf, Shield, Clock,
+  Save, Leaf, Shield, Clock,
 } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -14,13 +15,13 @@ export function ProfilePage() {
   const { favoritesCount } = useWishlist();
   const navigate = useNavigate();
 
+  const toast = useToast();
+
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [pickupCounter, setPickupCounter] = useState('Main Street Dispensary Counter (Health Complex)');
   const [herbalNotes, setHerbalNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Load user data
   useEffect(() => {
@@ -49,22 +50,17 @@ export function ProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) {
-      setError('Full name cannot be empty.');
+      toast.warning('Full name cannot be empty.');
       return;
     }
 
     setSaving(true);
-    setError(null);
-    setSuccess(false);
-
     try {
-      // 1. Update Auth profile
       await updateProfile({
         name: fullName.trim(),
         phone: phone.trim(),
       });
 
-      // 2. Update Firestore user document
       if (user?.id) {
         const userRef = doc(db, 'users', user.id);
         await setDoc(userRef, {
@@ -76,10 +72,9 @@ export function ProfilePage() {
         }, { merge: true });
       }
 
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 4000);
+      toast.success('Profile details updated successfully!');
     } catch (err: any) {
-      setError(err.message || 'Failed to update profile. Please try again.');
+      toast.error(err.message || 'Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -129,19 +124,6 @@ export function ProfilePage() {
           </div>
         </div>
 
-        {/* Status Alerts */}
-        {success && (
-          <div className="mb-6 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-xs font-medium animate-fade-in shadow-2xs">
-            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-            <span>Profile details updated successfully!</span>
-          </div>
-        )}
-        {error && (
-          <div className="mb-6 flex items-center gap-2.5 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl text-xs font-medium animate-fade-in shadow-2xs">
-            <AlertCircle size={16} className="text-rose-600 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 

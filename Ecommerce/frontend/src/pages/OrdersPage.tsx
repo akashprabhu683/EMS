@@ -12,7 +12,6 @@ export function OrdersPage() {
   const { user, isAuthenticated, signInWithGoogle } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const toast = useToast();
@@ -33,14 +32,13 @@ export function OrdersPage() {
     let active = true;
     if (user?.id) {
       setLoading(true);
-      setError(null);
       getUserOrders(user.id)
         .then(res => {
           if (active) setOrders(Array.isArray(res) ? res : []);
         })
         .catch(err => {
           console.error('Failed to load orders:', err);
-          if (active) setError('Could not load orders. Please try again.');
+          if (active) toast.error('Could not load your orders. Please try again.');
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -268,13 +266,6 @@ export function OrdersPage() {
               </div>
             )}
 
-            {/* Error */}
-            {error && !loading && (
-              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-xs text-rose-700 flex items-center gap-2 mb-6">
-                <AlertCircle size={15} />
-                <span>{error}</span>
-              </div>
-            )}
 
             {/* Orders Listing */}
             {!loading && filteredOrders.length === 0 ? (

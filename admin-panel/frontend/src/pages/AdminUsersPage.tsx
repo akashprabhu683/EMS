@@ -5,8 +5,6 @@ import {
   Mail,
   Trash2,
   Clock,
-  AlertCircle,
-  CheckCircle2,
   Loader2,
   RefreshCw,
   Users,
@@ -14,6 +12,7 @@ import {
   Info,
   Copy,
   Send,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   getAdminsAndInvitations,
@@ -24,14 +23,15 @@ import {
   type AdminInvitation,
 } from '../services/adminRoleService';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { useToast } from '../context/ToastContext';
 
 export function AdminUsersPage() {
   const { user: currentUser } = useAdminAuth();
+  const toast = useToast();
+
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [invitations, setInvitations] = useState<AdminInvitation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
   // Modal state
@@ -45,17 +45,16 @@ export function AdminUsersPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const data = await getAdminsAndInvitations();
       setAdmins(data.admins);
       setInvitations(data.invitations);
     } catch (err: any) {
-      setError(err.message || 'Failed to load administrator list.');
+      toast.error(err.message || 'Failed to load administrator list. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadData();
@@ -66,17 +65,14 @@ export function AdminUsersPage() {
     if (!emailInput.trim()) return;
 
     setActionLoading(true);
-    setError(null);
-    setSuccessMsg(null);
-
     try {
       const res = await grantAdmin(emailInput.trim());
-      setSuccessMsg(res.message);
+      toast.success(res.message || `Admin invitation sent to ${emailInput.trim()}!`);
       setEmailInput('');
       setIsModalOpen(false);
       await loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to grant admin privileges.');
+      toast.error(err.message || 'Failed to grant admin privileges. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -86,16 +82,13 @@ export function AdminUsersPage() {
     if (!revokeTarget) return;
 
     setActionLoading(true);
-    setError(null);
-    setSuccessMsg(null);
-
     try {
       const res = await revokeAdmin(revokeTarget.uid, revokeTarget.email);
-      setSuccessMsg(res.message);
+      toast.success(res.message || `Admin access revoked for ${revokeTarget.email}.`);
       setRevokeTarget(null);
       await loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to revoke admin privileges.');
+      toast.error(err.message || 'Failed to revoke admin privileges. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -103,29 +96,29 @@ export function AdminUsersPage() {
 
   const handleResendInvite = async (email: string) => {
     setResendingEmail(email);
-    setError(null);
-    setSuccessMsg(null);
     try {
       const res = await resendInvitation(email);
-      setSuccessMsg(res.message || `Invitation email resent to ${email}!`);
+      toast.success(res.message || `Invitation email resent to ${email}!`);
       await loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to resend invitation email.');
+      toast.error(err.message || `Failed to resend invitation to ${email}. Please try again.`);
     } finally {
       setResendingEmail(null);
     }
   };
 
   const handleCopyLink = async (inv: AdminInvitation) => {
+    // Copies the full accept-invite URL so you can share it directly with the invitee
     const url =
       inv.acceptUrl ||
       `${window.location.origin}/accept-invite?token=${inv.token || ''}&email=${encodeURIComponent(inv.email)}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopiedEmail(inv.email);
+      toast.info(`Invitation link copied to clipboard for ${inv.email}`);
       setTimeout(() => setCopiedEmail(null), 3000);
     } catch {
-      setError('Could not access clipboard to copy invitation link.');
+      toast.error('Could not access clipboard. Please copy the link manually.');
     }
   };
 
@@ -162,31 +155,6 @@ export function AdminUsersPage() {
         </div>
       </div>
 
-      {/* Notifications */}
-      {successMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-            <span>{successMsg}</span>
-          </div>
-          <button onClick={() => setSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-800 font-bold ml-4">
-            ×
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle size={18} className="text-rose-600 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <button onClick={() => setError(null)} className="text-rose-600 hover:text-rose-800 font-bold ml-4">
-            ×
-          </button>
-        </div>
-      )}
-
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
@@ -195,7 +163,7 @@ export function AdminUsersPage() {
             <Users size={18} className="text-emerald-600" />
           </div>
           <div className="text-2xl font-black text-slate-900 font-display">{admins.length}</div>
-          <p className="text-xs text-slate-500 mt-1">Full access to inventory, orders & settings</p>
+          <p className="text-xs text-slate-500 mt-1">Full access to inventory, orders &amp; settings</p>
         </div>
 
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
@@ -204,7 +172,7 @@ export function AdminUsersPage() {
             <Clock size={18} className="text-amber-500" />
           </div>
           <div className="text-2xl font-black text-slate-900 font-display">{invitations.length}</div>
-          <p className="text-xs text-slate-500 mt-1">Activates on their first Google Sign-In</p>
+          <p className="text-xs text-slate-500 mt-1">Waiting for the invitee to accept via email</p>
         </div>
 
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
@@ -331,7 +299,7 @@ export function AdminUsersPage() {
                     <td className="py-4 px-6">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                         <Clock size={12} />
-                        Pending First Google Sign-In
+                        Awaiting Acceptance
                       </span>
                     </td>
                     <td className="py-4 px-6 text-slate-600 text-xs">{inv.invitedBy}</td>
@@ -342,10 +310,14 @@ export function AdminUsersPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleCopyLink(inv)}
-                          title="Copy direct invitation link"
+                          title="Copy direct invitation link to clipboard"
                           className="px-2.5 py-1.5 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-semibold border border-slate-200 transition-colors inline-flex items-center gap-1.5"
                         >
-                          <Copy size={13} className="text-slate-500" />
+                          {copiedEmail === inv.email ? (
+                            <CheckCircle2 size={13} className="text-emerald-600" />
+                          ) : (
+                            <Copy size={13} className="text-slate-500" />
+                          )}
                           <span>{copiedEmail === inv.email ? 'Copied!' : 'Copy Link'}</span>
                         </button>
                         <button
@@ -415,8 +387,7 @@ export function AdminUsersPage() {
               <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 text-emerald-900 text-xs flex gap-2">
                 <Info size={16} className="text-emerald-700 shrink-0 mt-0.5" />
                 <p>
-                  If this user has already signed in, their admin claim is assigned immediately. If not, a pending
-                  invitation is created and their admin status will auto-activate upon their first sign-in!
+                  An invitation email will be sent to this address. The recipient must click the link in the email to accept and activate their admin privileges.
                 </p>
               </div>
 
@@ -434,7 +405,7 @@ export function AdminUsersPage() {
                   className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50"
                 >
                   {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                  <span>Grant Role</span>
+                  <span>Send Invitation</span>
                 </button>
               </div>
             </form>

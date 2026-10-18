@@ -10,13 +10,14 @@ import {
 } from 'lucide-react';
 import { getAllProducts } from '../services/adminProductService';
 import { getAllCategories } from '../services/adminCategoryService';
+import { useToast } from '../context/ToastContext';
 import type { Product, Category } from '../types';
 
 export function DashboardOverviewPage() {
+  const toast = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -33,7 +34,7 @@ export function DashboardOverviewPage() {
         }
       } catch (err: any) {
         if (active) {
-          setError(err.message || 'Failed to load dashboard metrics.');
+          toast.error(err.message || 'Failed to load dashboard metrics.');
         }
       } finally {
         if (active) setLoading(false);
@@ -85,11 +86,6 @@ export function DashboardOverviewPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm">
-          {error}
-        </div>
-      )}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

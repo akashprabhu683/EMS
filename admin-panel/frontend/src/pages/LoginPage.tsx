@@ -1,28 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, AlertCircle, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { useToast } from '../context/ToastContext';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, loginWithGoogle } = useAdminAuth();
 
+  const toast = useToast();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setError('Please provide both email address and password.');
+      toast.warning('Please provide both email address and password.');
       return;
     }
 
-    setError(null);
     setIsSubmitting(true);
-
     try {
       await login(email.trim(), password);
       navigate('/');
@@ -32,16 +32,15 @@ export function LoginPage() {
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
         msg = 'Invalid email or password.';
       } else if (err.code === 'auth/too-many-requests') {
-        msg = 'Too many failed login attempts. Please try again later.';
+        msg = 'Too many failed attempts. Please wait a moment and try again.';
       }
-      setError(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    setError(null);
     setIsGoogleSubmitting(true);
     try {
       await loginWithGoogle();
@@ -54,7 +53,7 @@ export function LoginPage() {
       } else if (err.code === 'auth/popup-blocked') {
         msg = 'Popup was blocked by the browser. Please allow popups for this page.';
       }
-      setError(msg);
+      toast.error(msg);
     } finally {
       setIsGoogleSubmitting(false);
     }
@@ -79,12 +78,6 @@ export function LoginPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2.5">
-            <AlertCircle size={16} className="flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
 
         {/* Google Sign-In Button */}
         <button

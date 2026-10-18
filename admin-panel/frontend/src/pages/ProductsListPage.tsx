@@ -7,10 +7,10 @@ import {
   Edit2,
   Power,
   X,
-  AlertCircle,
-  CheckCircle2,
   ExternalLink,
+  AlertCircle,
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 import {
   getAllProducts,
   createProduct,
@@ -23,11 +23,10 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 import type { Product, Category, ProductFormData } from '../types';
 
 export function ProductsListPage() {
+  const toast = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,7 +57,6 @@ export function ProductsListPage() {
   // Load data
   const loadData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const [prodList, catList] = await Promise.all([
         getAllProducts(),
@@ -67,7 +65,7 @@ export function ProductsListPage() {
       setProducts(prodList);
       setCategories(catList);
     } catch (err: any) {
-      setError(err.message || 'Failed to load products from database.');
+      toast.error(err.message || 'Failed to load products from database.');
     } finally {
       setLoading(false);
     }
@@ -148,14 +146,13 @@ export function ProductsListPage() {
     try {
       if (editingProduct) {
         await updateProduct(editingProduct.id, formData);
-        setSuccessMessage(`Product "${formData.name}" successfully updated.`);
+        toast.success(`Product "${formData.name}" successfully updated.`);
       } else {
         await createProduct(formData);
-        setSuccessMessage(`Product "${formData.name}" successfully created.`);
+        toast.success(`Product "${formData.name}" successfully created.`);
       }
       setIsModalOpen(false);
       await loadData();
-      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
       setModalError(err.message || 'Failed to save product.');
     } finally {
@@ -177,13 +174,10 @@ export function ProductsListPage() {
   const executeStatusChange = async (prod: Product, newStatus: boolean) => {
     try {
       await setProductActiveStatus(prod.id, newStatus);
-      setSuccessMessage(
-        `Product "${prod.name}" has been ${newStatus ? 'activated' : 'deactivated'}.`
-      );
+      toast.success(`Product "${prod.name}" has been ${newStatus ? 'activated' : 'deactivated'}.`);
       await loadData();
-      setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Failed to change product status.');
+      toast.error(err.message || 'Failed to change product status.');
     } finally {
       setDeactivateProduct(null);
       setIsDeactivating(false);
@@ -219,20 +213,6 @@ export function ProductsListPage() {
         </button>
       </div>
 
-      {/* Notifications */}
-      {successMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-center gap-2.5 animate-in fade-in duration-150">
-          <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-center gap-2.5">
-          <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
 
       {/* Search & Filter Toolbar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center gap-3">

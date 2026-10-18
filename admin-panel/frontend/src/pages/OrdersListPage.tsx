@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Package, CheckCircle2, Clock, MapPin, Phone,
   ChevronDown, ChevronUp, RefreshCw, Filter,
-  AlertCircle, Loader2, IndianRupee, User,
+  Loader2, IndianRupee, User,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useToast } from '../context/ToastContext';
 import {
   getAdminOrders,
   updateOrderStatus,
@@ -97,7 +98,7 @@ function OrderCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [error, setError] = useState('');
+  const toast = useToast();
 
   const statusKey = String(order?.orderStatus || 'placed').toLowerCase();
   const cfg = STATUS_CONFIG[statusKey] || DEFAULT_STATUS_CONFIG;
@@ -111,24 +112,22 @@ function OrderCard({
     (statusKey === 'ready_for_pickup' || statusKey === 'collected');
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
-    setError('');
     setUpdating(true);
     try {
       await onStatusChange(order.id, newStatus);
     } catch (e: any) {
-      setError(e.message || 'Failed to update status.');
+      toast.error(e.message || 'Failed to update order status. Please try again.');
     } finally {
       setUpdating(false);
     }
   };
 
   const handleMarkPaid = async () => {
-    setError('');
     setUpdating(true);
     try {
       await onMarkPaid(order.id);
     } catch (e: any) {
-      setError(e.message || 'Failed to mark as paid.');
+      toast.error(e.message || 'Failed to mark order as paid. Please try again.');
     } finally {
       setUpdating(false);
     }
@@ -251,14 +250,6 @@ function OrderCard({
             </div>
           )}
 
-          {/* Error */}
-          {error && (
-            <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
-              <AlertCircle size={13} />
-              <span>{error}</span>
-            </div>
-          )}
-
           {/* Actions */}
           {(nextStatuses.length > 0 || canMarkPaid) && (
             <div className="flex flex-wrap gap-2 pt-1">
@@ -310,25 +301,24 @@ function OrderCard({
 
 /* ── Main Orders List Page ────────────────────────────────────── */
 export function OrdersListPage() {
+  const toast = useToast();
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
-    setError('');
     try {
       const data = await getAdminOrders();
       setOrders(Array.isArray(data) ? data : []);
     } catch (e: any) {
       console.error('Failed to load orders:', e);
-      setError(e.message || 'Failed to load orders.');
+      toast.error(e.message || 'Failed to load orders. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => { loadOrders(); }, [loadOrders, refreshKey]);
 
@@ -404,14 +394,6 @@ export function OrdersListPage() {
         ))}
       </div>
 
-      {/* Error state */}
-      {error && (
-        <div className="flex items-center gap-2.5 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-rose-700 text-xs">
-          <AlertCircle size={15} />
-          <span>{error}</span>
-          <button onClick={loadOrders} className="ml-auto underline text-rose-600 font-semibold">Retry</button>
-        </div>
-      )}
 
       {/* Loading */}
       {loading ? (
