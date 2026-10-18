@@ -14,9 +14,9 @@ A full-stack ecommerce and dispensary management system tailored for authentic A
 
 Experience the customer storefront, browse authentic herbal remedies, and try the Click-and-Collect counter pickup checkout:
 
-[![Shop Now](https://img.shields.io/badge/🌿%20Shop%20Now-Visit%20Storefront-059669?style=for-the-badge&logo=leaf&logoColor=white)](https://ecommerce-storefront-client.netlify.app)
+[![Shop Now](https://img.shields.io/badge/🌿%20Shop%20Now-Visit%20Storefront-059669?style=for-the-badge&logo=leaf&logoColor=white)](https://ecommerce-storefront-client.vercel.app)
 
-👉 **Live URL:** [https://ecommerce-storefront-client.netlify.app](https://ecommerce-storefront-client.netlify.app)
+👉 **Live URL:** [https://ecommerce-storefront-client.vercel.app](https://ecommerce-storefront-client.vercel.app)
 
 ---
 
@@ -95,7 +95,7 @@ cd Ecommerce/frontend
 npm run dev
 ```
 - **Local URL:** `http://localhost:5173`
-- **Live Deployed Storefront:** [https://ecommerce-storefront-client.netlify.app](https://ecommerce-storefront-client.netlify.app)
+- **Live Deployed Storefront:** [https://ecommerce-storefront-client.vercel.app](https://ecommerce-storefront-client.vercel.app)
 
 #### 2. Admin Panel
 ```bash

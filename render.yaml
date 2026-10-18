@@ -15,7 +15,7 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT_KEY
         sync: false
       - key: FRONTEND_URL
-        value: https://ecommerce-storefront-client.netlify.app
+        value: https://ecommerce-storefront-client.vercel.app
 
   # ─── Admin Panel Backend ───
   - type: web
@@ -33,4 +33,4 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT_KEY
         sync: false
       - key: FRONTEND_URL
-        value: https://ems-admin-panel-provider.netlify.app
+        value: https://ems-admin-portal.vercel.app

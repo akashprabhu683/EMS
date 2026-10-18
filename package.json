@@ -2,7 +2,7 @@
   "name": "ems-root",
   "version": "1.0.0",
   "private": true,
-  "description": "EMS (Ecommerce Management System) workspace with separate frontends (Netlify) and backends (Render)",
+  "description": "EMS (Ecommerce Management System) workspace with separate frontends (Vercel) and backends (Render)",
   "scripts": {
     "dev:ecommerce:frontend": "npm --prefix Ecommerce/frontend run dev",
     "dev:ecommerce:backend": "npm --prefix Ecommerce/backend run dev",

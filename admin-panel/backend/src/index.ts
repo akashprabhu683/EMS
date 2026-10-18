@@ -10,6 +10,8 @@ const port = process.env.PORT || 5002;
 
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://ems-admin-portal.vercel.app',
+  'https://ems-admin-panel-provider.vercel.app',
   'https://ems-admin-panel-provider.netlify.app',
   'http://localhost:5174',
   'http://localhost:3000',
