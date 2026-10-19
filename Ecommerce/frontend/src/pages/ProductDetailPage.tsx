@@ -21,7 +21,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 import clsx from 'clsx';
-import { getActiveProducts } from '../services/productService';
+import { getActiveProducts, getActiveProductById } from '../services/productService';
 import type { Product } from '../types';
 
 interface ReviewItem {
@@ -42,6 +42,8 @@ export function ProductDetailPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [directProduct, setDirectProduct] = useState<Product | null>(null);
+  const [directLoading, setDirectLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -54,9 +56,31 @@ export function ProductDetailPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    if (!id) {
+      setDirectLoading(false);
+      return;
+    }
+    setDirectLoading(true);
+    getActiveProductById(id)
+      .then(p => {
+        if (active && p) setDirectProduct(p);
+      })
+      .catch(console.error)
+      .finally(() => { if (active) setDirectLoading(false); });
+
+    return () => { active = false; };
+  }, [id]);
+
   const product = useMemo(() => {
-    return products.find(p => p.id === id);
-  }, [products, id]);
+    if (!id) return undefined;
+    return (
+      products.find(
+        p => p.id === id || p.id.toLowerCase() === id.toLowerCase() || (p as any).slug === id
+      ) || directProduct || undefined
+    );
+  }, [products, id, directProduct]);
 
   const [imgIdx, setImgIdx] = useState(0);
   const [imgError, setImgError] = useState(false);
@@ -130,7 +154,7 @@ export function ProductDetailPage() {
     }
   }, [product?.id, user?.name]);
 
-  if (!product && productsLoading) {
+  if (!product && (productsLoading || directLoading)) {
     return (
       <main className="min-h-screen bg-slate-50 pt-28 text-center px-4">
         <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-8 space-y-4 shadow-xs">

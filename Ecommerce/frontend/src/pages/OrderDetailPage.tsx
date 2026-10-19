@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink } from 'lucide-react';
-import { getOrderById } from '../services/orderService';
+import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink, Trash2 } from 'lucide-react';
+import { getOrderById, deleteOrder } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import type { Order } from '../types';
 
@@ -13,6 +13,8 @@ export function OrderDetailPage() {
   const toast = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -39,6 +41,20 @@ export function OrderDetailPage() {
   const handleViewLocation = () => {
     if (!order) return;
     toast.info(`Pickup Address: ${order.pickupLocation || 'EMS Herbal Dispensary, Main Road Health Complex'}`);
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!order) return;
+    setIsDeleting(true);
+    try {
+      await deleteOrder(order.id);
+      toast.success(`Order ${order.id} has been removed from your history.`);
+      navigate('/orders');
+    } catch (err: any) {
+      console.error('Failed to remove order:', err);
+      toast.error(err.message || 'Could not remove order. Please try again.');
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {
@@ -124,6 +140,13 @@ export function OrderDetailPage() {
 
           {/* Action CTAs */}
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs"
+            >
+              <Trash2 size={15} />
+              <span>Remove Order</span>
+            </button>
             <button
               id="download-order-invoice-btn"
               onClick={handleDownloadInvoice}
@@ -336,6 +359,39 @@ export function OrderDetailPage() {
         </div>
 
       </div>
+
+      {/* Delete Order Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 size={22} />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Remove Order?</h3>
+              <p className="text-xs text-slate-500">
+                Are you sure you want to remove order <span className="font-mono font-semibold text-slate-700">{order.id}</span> from your order history?
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteOrder}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                {isDeleting ? 'Removing...' : 'Yes, Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

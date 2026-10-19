@@ -387,7 +387,7 @@ export function HomePage() {
                 </div>
                 <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">Best selling remedies</h3>
 
-                <Link to={`/products/${bestSellerProduct.id}`} className="mt-3 block group/item">
+                <Link to={`/product/${bestSellerProduct.id}`} className="mt-3 block group/item">
                   <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100">
                     <img
                       src={bestSellerProduct.images[0] || 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&q=80'}
@@ -433,7 +433,7 @@ export function HomePage() {
                 </div>
                 <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">Special offers available</h3>
 
-                <Link to={`/products/${dealProduct.id}`} className="mt-3 block group/item">
+                <Link to={`/product/${dealProduct.id}`} className="mt-3 block group/item">
                   <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100 relative">
                     <img
                       src={dealProduct.images[0] || 'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80'}
@@ -478,7 +478,7 @@ export function HomePage() {
                 </div>
                 <h3 className="font-display font-extrabold text-lg text-slate-900 leading-snug">Immunity must-haves</h3>
 
-                <Link to={`/products/${immunityProduct.id}`} className="mt-3 block group/item">
+                <Link to={`/product/${immunityProduct.id}`} className="mt-3 block group/item">
                   <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100">
                     <img
                       src={immunityProduct.images[0] || 'https://images.unsplash.com/photo-1577937927133-66ef06acdf18?w=600&q=80'}

@@ -55,18 +55,18 @@ export function Navbar() {
         scrolled ? 'border-slate-200/90 shadow-sm' : 'border-slate-200/80 shadow-none'
       }`}
     >
-      <nav className="page-container h-16 flex items-center justify-between gap-6">
+      <nav className="page-container h-16 flex items-center justify-between gap-2 sm:gap-6">
 
         {/* Brand Logo - clean without emojis */}
         <Link
           to="/"
           id="nav-logo"
-          className="flex items-center gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+          className="flex items-center gap-2 sm:gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg min-w-0"
         >
-          <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors">
+          <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors shrink-0">
             <Leaf size={16} className="text-white" />
           </div>
-          <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
+          <span className="font-display font-bold text-base sm:text-xl text-slate-900 tracking-tight truncate">
             EMS<span className="text-emerald-700"> Dispensary</span>
           </span>
         </Link>
@@ -96,65 +96,65 @@ export function Navbar() {
         </ul>
 
         {/* Actions: Wishlist, Cart, User, Hamburger */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
           {/* Wishlist Button */}
           <Link
             to="/favorites"
             id="nav-wishlist-btn"
-            className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="relative flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
             aria-label={`My Favourites with ${favoritesCount} items`}
           >
-            <div className="relative">
+            <div className="relative flex items-center justify-center">
               <Heart size={18} className={favoritesCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-slate-700'} />
               {favoritesCount > 0 && (
-                <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-600 text-white text-[10px] font-bold px-1 shadow-2xs">
+                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-rose-600 text-white text-[9px] font-bold px-0.5 shadow-2xs">
                   {favoritesCount > 99 ? '99+' : favoritesCount}
                 </span>
               )}
             </div>
-            <span className="text-xs font-semibold hidden lg:inline text-slate-700">Favourites</span>
+            <span className="text-xs font-semibold hidden lg:inline text-slate-700 ml-1.5">Favourites</span>
           </Link>
 
           <button
             id="nav-cart-btn"
             onClick={openCart}
-            className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="relative flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
             aria-label={`Shopping Cart with ${totalItems} items`}
           >
-            <div className="relative">
+            <div className="relative flex items-center justify-center">
               <ShoppingBag size={18} className="text-slate-700" />
               {totalItems > 0 && (
-                <span className="absolute -top-2 -right-2.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-700 text-white text-[10px] font-bold px-1 shadow-2xs">
+                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-emerald-700 text-white text-[9px] font-bold px-0.5 shadow-2xs">
                   {totalItems > 99 ? '99+' : totalItems}
                 </span>
               )}
             </div>
-            <span className="text-xs font-semibold hidden sm:inline text-slate-700">Cart</span>
+            <span className="text-xs font-semibold hidden sm:inline text-slate-700 ml-1.5">Cart</span>
           </button>
 
-          <div className="relative" ref={userMenuRef}>
+          <div className="relative shrink-0" ref={userMenuRef}>
             {isAuthenticated ? (
               <button
                 id="nav-user-menu-btn"
                 onClick={() => setUserMenuOpen(v => !v)}
-                className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="w-9 h-9 flex items-center justify-center p-0.5 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 aria-label="User account menu"
               >
                 <img
                   src={user?.avatar}
                   alt={user?.name}
-                  className="w-8 h-8 rounded-full border border-slate-300"
+                  className="w-7 h-7 rounded-full border border-slate-300 object-cover"
                 />
               </button>
             ) : (
               <Link
                 to="/login"
                 id="nav-login-btn"
-                className="inline-flex items-center gap-1.5 py-2 px-3 sm:px-4 text-xs rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-semibold shadow-2xs transition-colors"
+                className="inline-flex items-center justify-center h-9 px-2.5 sm:px-4 text-xs rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-semibold shadow-2xs transition-colors shrink-0"
                 aria-label="Sign in"
               >
                 <User size={15} />
-                <span className="hidden sm:inline">Sign In</span>
+                <span className="hidden sm:inline ml-1.5">Sign In</span>
               </Link>
             )}
 
@@ -214,10 +214,10 @@ export function Navbar() {
           <button
             id="nav-mobile-menu-btn"
             onClick={() => setMobileOpen(v => !v)}
-            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
             aria-label="Toggle navigation menu"
           >
-            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </nav>

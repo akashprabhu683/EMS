@@ -128,6 +128,7 @@ function AppLayout() {
           <Route path="/"                    element={<HomePage />} />
           <Route path="/products"            element={<ProductsPage />} />
           <Route path="/product/:id"         element={<ProductDetailPage />} />
+          <Route path="/products/:id"        element={<ProductDetailPage />} />
           <Route path="/login"               element={<LoginPage initialMode="login" />} />
           <Route path="/register"            element={<LoginPage initialMode="register" />} />
           <Route path="/orders"              element={<OrdersPage />} />

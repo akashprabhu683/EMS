@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, Search, ChevronRight, CheckCircle2, Clock, ArrowRight, ShieldCheck, MapPin, Store, AlertCircle } from 'lucide-react';
+import { Package, Search, ChevronRight, CheckCircle2, Clock, ArrowRight, ShieldCheck, MapPin, Store, AlertCircle, Trash2, AlertTriangle, X } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import { getUserOrders } from '../services/orderService';
+import { getUserOrders, deleteOrder, clearAllUserOrders } from '../services/orderService';
 import type { OrderStatus, Order } from '../types';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
@@ -14,7 +14,42 @@ export function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [showClearAllModal, setShowClearAllModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const toast = useToast();
+
+  const handleConfirmDeleteSingle = async () => {
+    if (!orderToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteOrder(orderToDelete.id);
+      setOrders(prev => prev.filter(o => o.id !== orderToDelete.id));
+      toast.success(`Order ${orderToDelete.id} removed from history.`);
+      setOrderToDelete(null);
+    } catch (err: any) {
+      console.error('Failed to delete order:', err);
+      toast.error(err.message || 'Could not delete order. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleConfirmClearAll = async () => {
+    if (!user?.id) return;
+    setIsDeleting(true);
+    try {
+      await clearAllUserOrders(user.id);
+      setOrders([]);
+      toast.success('Your complete order history has been cleared.');
+      setShowClearAllModal(false);
+    } catch (err: any) {
+      console.error('Failed to clear orders:', err);
+      toast.error(err.message || 'Could not clear order history. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Detect overdue orders: ready_for_pickup but not collected after >24 hours
   const overdueOrders = useMemo(() => {
@@ -246,16 +281,31 @@ export function OrdersPage() {
                 ))}
               </div>
 
-              {/* Search Input */}
-              <div className="relative min-w-[240px] max-w-sm">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by order ID or remedy..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 transition-all text-slate-800"
-                />
+              {/* Search & Actions */}
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64 max-w-sm">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by ID or remedy..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 transition-all text-slate-800"
+                  />
+                </div>
+
+                {orders.length > 0 && (
+                  <button
+                    onClick={() => setShowClearAllModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
+                    title="Clear your complete order history"
+                  >
+                    <Trash2 size={13} />
+                    <span className="hidden sm:inline">Clear History</span>
+                    <span className="sm:inline hidden">({orders.length})</span>
+                    <span className="sm:hidden">Clear</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -396,7 +446,16 @@ export function OrdersPage() {
                           <span>100% Genuine Certified Herbal & Ayurvedic Formulations</span>
                         </div>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setOrderToDelete(order)}
+                            className="inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors"
+                            title="Remove this order from history"
+                          >
+                            <Trash2 size={13} />
+                            <span>Remove</span>
+                          </button>
+
                           <Link
                             to={`/orders/${order.id}`}
                             className="btn-secondary py-2 px-3 text-xs rounded-xl inline-flex items-center gap-1.5 hover:border-emerald-600 hover:text-emerald-700"
@@ -415,6 +474,72 @@ export function OrdersPage() {
         )}
 
       </div>
+
+      {/* Delete Single Order Confirmation Modal */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 size={22} />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Remove Order?</h3>
+              <p className="text-xs text-slate-500">
+                Are you sure you want to remove order <span className="font-mono font-semibold text-slate-700">{orderToDelete.id}</span> from your order history?
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setOrderToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteSingle}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                {isDeleting ? 'Removing...' : 'Yes, Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Orders Confirmation Modal */}
+      {showClearAllModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <AlertTriangle size={22} />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Clear All Order History?</h3>
+              <p className="text-xs text-slate-500">
+                This will permanently remove all {orders.length} order records from your dispensary history. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setShowClearAllModal(false)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmClearAll}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                {isDeleting ? 'Clearing...' : 'Clear All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

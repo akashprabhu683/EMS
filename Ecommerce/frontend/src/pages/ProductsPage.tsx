@@ -260,7 +260,7 @@ export function ProductsPage() {
           {filtersOpen && (
             <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-5">
               {/* Categories */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-2xs">
                 <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider mb-4">Categories</h3>
                 <ul className="space-y-1.5">
                   {categories.map(cat => (
@@ -291,7 +291,7 @@ export function ProductsPage() {
               </div>
 
               {/* Price Range */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-2xs">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider">Price Ceiling</h3>
                   <div className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
@@ -314,7 +314,7 @@ export function ProductsPage() {
               </div>
 
               {/* Rating Filter */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-2xs">
                 <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider mb-3">Minimum Rating</h3>
                 <div className="grid grid-cols-4 gap-2">
                   {[0, 3, 4, 4.5].map(r => (

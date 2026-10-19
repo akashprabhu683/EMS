@@ -129,13 +129,16 @@ export async function getActiveProducts(): Promise<Product[]> {
 export async function getActiveProductById(
     productId: string,
 ): Promise<Product | null> {
+    const cleanId = (productId || '').trim();
+    if (!cleanId) return null;
+
     // Always look up by the exact stable document ID first
     try {
-        const docRef = doc(db, 'products', productId);
+        const docRef = doc(db, 'products', cleanId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data.isActive === true) {
+            if (data.isActive !== false) {
                 return toProduct(docSnap.id, data);
             }
         }
@@ -144,7 +147,19 @@ export async function getActiveProductById(
     }
 
     const products = await getActiveProducts();
-    return products.find((product) => product.id === productId) ?? null;
+    const found = products.find((product) =>
+        product.id === cleanId ||
+        product.id.toLowerCase() === cleanId.toLowerCase() ||
+        (product as any).slug === cleanId
+    );
+    if (found) return found;
+
+    // Final fallback to PRODUCTS catalog
+    return PRODUCTS.find(p =>
+        p.id === cleanId ||
+        p.id.toLowerCase() === cleanId.toLowerCase() ||
+        (p as any).slug === cleanId
+    ) ?? null;
 }
 
 export async function getTrustedProducts(): Promise<Product[]> {

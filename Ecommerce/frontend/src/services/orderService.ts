@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, orderBy, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import type { Order, OrderStatus } from '../types';
 
@@ -201,4 +201,19 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
     console.error('Failed to load order by ID:', err);
     return null;
   }
+}
+
+export async function deleteOrder(orderId: string): Promise<void> {
+  if (!orderId) return;
+  const docRef = doc(db, 'orders', orderId);
+  await deleteDoc(docRef);
+}
+
+export async function clearAllUserOrders(uid: string): Promise<number> {
+  if (!uid) return 0;
+  const q = query(collection(db, 'orders'), where('userId', '==', uid));
+  const snap = await getDocs(q);
+  const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'orders', d.id)));
+  await Promise.all(deletePromises);
+  return snap.docs.length;
 }
