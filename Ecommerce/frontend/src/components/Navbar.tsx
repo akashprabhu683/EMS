@@ -42,12 +42,37 @@ export function Navbar() {
   }, [userMenuOpen]);
 
   const NAV_LINKS = [
-    { to: '/',                                label: 'Home' },
-    { to: '/products',                        label: 'All Products' },
-    { to: '/products?search=Ayurvedic',       label: 'Ayurvedic' },
-    { to: '/products?search=Herbal+Extracts', label: 'Herbal Extracts' },
-    { to: '/products?search=Vitality',        label: 'Vitality' },
+    { to: '/',                 label: 'Home' },
+    { to: '/products',         label: 'All Products' },
+    { to: '/#catalog-section', label: 'Catalog' },
+    { to: '/#how-it-works',    label: 'How It Works' },
+    { to: '/#store-info',      label: 'Store Info' },
   ];
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, to: string) => {
+    if (to.includes('#')) {
+      const hash = to.split('#')[1];
+      if (location.pathname === '/') {
+        e.preventDefault();
+        const el = document.getElementById(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+          window.history.pushState(null, '', `#${hash}`);
+        }
+      }
+    }
+  };
+
+  const isLinkActive = (to: string) => {
+    if (to === '/') {
+      return location.pathname === '/' && !location.hash && !location.search;
+    }
+    if (to.includes('#')) {
+      const hash = '#' + to.split('#')[1];
+      return location.pathname === '/' && location.hash === hash;
+    }
+    return location.pathname === to;
+  };
 
   return (
     <header
@@ -74,14 +99,12 @@ export function Navbar() {
         {/* Desktop Nav Links - with ample breathing space */}
         <ul className="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
           {NAV_LINKS.map(({ to, label }) => {
-            const active =
-              to === '/'
-                ? location.pathname === '/' && !location.search
-                : location.pathname + location.search === to;
+            const active = isLinkActive(to);
             return (
               <li key={to}>
                 <Link
                   to={to}
+                  onClick={(e) => handleNavClick(e, to)}
                   className={`px-3.5 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     active
                       ? 'text-emerald-800 bg-emerald-50 font-bold shadow-2xs'
@@ -218,6 +241,10 @@ export function Navbar() {
                 <li key={to}>
                   <Link
                     to={to}
+                    onClick={(e) => {
+                      handleNavClick(e, to);
+                      setMobileOpen(false);
+                    }}
                     className="block px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
                   >
                     {label}
