@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary emerald green matching the storefront brand -->
+    <color name="emerald_700">#047857</color>
+    <color name="emerald_800">#065F46</color>
+    <color name="emerald_50">#ECFDF5</color>
+    <color name="white">#FFFFFF</color>
+    <color name="slate_50">#F8FAFC</color>
+    <color name="slate_900">#0F172A</color>
+</resources>

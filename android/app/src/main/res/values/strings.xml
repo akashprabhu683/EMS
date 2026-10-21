@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">THANGAM STORES</string>
+    <string name="retry">Try Again</string>
+    <string name="no_connection_title">No Connection</string>
+    <string name="no_connection_message">Please check your internet connection and try again.</string>
+    <string name="loading">Loading store…</string>
+</resources>

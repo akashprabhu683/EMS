@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme -->
+    <style name="Theme.ThangamStores" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/emerald_700</item>
+        <item name="colorPrimaryVariant">@color/emerald_800</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:statusBarColor">@color/emerald_700</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowBackground">@color/white</item>
+    </style>
+
+    <!-- Splash screen theme — full emerald screen, no title bar -->
+    <style name="Theme.ThangamStores.Splash" parent="Theme.ThangamStores">
+        <item name="android:windowBackground">@color/emerald_700</item>
+        <item name="android:statusBarColor">@color/emerald_700</item>
+        <item name="android:navigationBarColor">@color/emerald_700</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+</resources>

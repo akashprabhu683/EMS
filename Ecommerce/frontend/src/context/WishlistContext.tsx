@@ -8,17 +8,31 @@ interface WishlistContextType {
   isFavorite: (productId: string) => boolean;
   toggleFavorite: (productId: string) => void;
   clearFavorites: () => void;
+  purgeStaleFavorites: (validProductIds: string[]) => void;
   favoritesCount: number;
 }
 
 const WishlistContext = createContext<WishlistContextType | null>(null);
 
 const STORAGE_KEY_PREFIX = 'ems_store_favorites_';
+// Bump this version whenever the product schema/ID format changes to auto-clear stale favorites
+const FAVORITES_SCHEMA_VERSION = '2';
+const SCHEMA_VERSION_KEY = 'ems_favorites_schema_v';
 
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
+      // Check schema version — clear stale data if version has changed
+      const storedVersion = localStorage.getItem(SCHEMA_VERSION_KEY);
+      if (storedVersion !== FAVORITES_SCHEMA_VERSION) {
+        // Wipe all favorite keys from old schema
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith(STORAGE_KEY_PREFIX)) localStorage.removeItem(k);
+        });
+        localStorage.setItem(SCHEMA_VERSION_KEY, FAVORITES_SCHEMA_VERSION);
+        return [];
+      }
       const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}guest`);
       return saved ? JSON.parse(saved) : [];
     } catch {
@@ -107,6 +121,27 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     });
   }, [isAuthenticated, user?.id]);
 
+  const purgeStaleFavorites = useCallback((validProductIds: string[]) => {
+    if (validProductIds.length === 0) return; // don't purge before products load
+    setFavorites(prev => {
+      const valid = new Set(validProductIds);
+      const next = prev.filter(id => valid.has(id));
+      if (next.length === prev.length) return prev; // no change
+      const key = isAuthenticated && user?.id
+        ? `${STORAGE_KEY_PREFIX}${user.id}`
+        : `${STORAGE_KEY_PREFIX}guest`;
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch { /* ignore */ }
+      if (isAuthenticated && user?.id) {
+        const userDocRef = doc(db, 'users', user.id);
+        setDoc(userDocRef, { favorites: next, updatedAt: new Date().toISOString() }, { merge: true })
+          .catch(console.warn);
+      }
+      return next;
+    });
+  }, [isAuthenticated, user?.id]);
+
   const clearFavorites = useCallback(() => {
     setFavorites([]);
     const key = isAuthenticated && user?.id
@@ -131,6 +166,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         isFavorite,
         toggleFavorite,
         clearFavorites,
+        purgeStaleFavorites,
         favoritesCount: favorites.length,
       }}
     >

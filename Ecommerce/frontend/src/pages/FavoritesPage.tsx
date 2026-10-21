@@ -21,7 +21,7 @@ import type { Product } from '../types';
 
 export function FavoritesPage() {
   const { user, isAuthenticated, isLoading: authLoading, signInWithGoogle } = useAuth();
-  const { favorites, toggleFavorite, clearFavorites } = useWishlist();
+  const { favorites, toggleFavorite, clearFavorites, purgeStaleFavorites } = useWishlist();
   const { addItem, openCart } = useCart();
   const navigate = useNavigate();
 
@@ -30,12 +30,16 @@ export function FavoritesPage() {
   const [signingIn, setSigningIn] = useState(false);
   const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
 
-  // Fetch active catalog from Firestore
+  // Fetch active catalog from Firestore, then purge stale favorite IDs
   useEffect(() => {
     let active = true;
     getActiveProducts()
       .then(prods => {
-        if (active) setProducts(prods);
+        if (active) {
+          setProducts(prods);
+          // Remove any saved favorite IDs that no longer exist in the catalog
+          purgeStaleFavorites(prods.map(p => p.id));
+        }
       })
       .catch(console.warn)
       .finally(() => {
@@ -44,6 +48,7 @@ export function FavoritesPage() {
     return () => {
       active = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const favoriteProducts = useMemo(() => {
