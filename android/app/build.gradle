@@ -25,8 +25,8 @@ android {
         admin {
             dimension "appType"
             applicationId "com.thangamstores.admin"
-            buildConfigField "String", "START_URL", "\"https://ems-admin-portal.vercel.app\""
-            buildConfigField "String", "START_HOST", "\"ems-admin-portal.vercel.app\""
+            buildConfigField "String", "START_URL", "\"https://ems-admin-panel-provider.vercel.app\""
+            buildConfigField "String", "START_HOST", "\"ems-admin-panel-provider.vercel.app\""
             buildConfigField "boolean", "IS_ADMIN", "true"
         }
     }

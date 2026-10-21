@@ -58,12 +58,12 @@ export function Layout() {
       {/* Sidebar Navigation */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-200 ease-in-out md:translate-x-0 md:static',
+          'fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-200 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0',
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         {/* Brand Banner */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-xs">
               <ShieldCheck size={20} />
@@ -86,7 +86,7 @@ export function Layout() {
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 p-4 space-y-1.5">
+        <nav className="flex-1 min-h-0 p-4 space-y-1.5 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -108,8 +108,8 @@ export function Layout() {
           ))}
         </nav>
 
-        {/* User Card & Sign Out */}
-        <div className="p-4 border-t border-slate-100 space-y-3">
+        {/* User Card & Sign Out - Always pinned to bottom */}
+        <div className="p-4 border-t border-slate-100 space-y-3 shrink-0 mt-auto bg-white">
           <NavLink
             to="/profile"
             onClick={() => setMobileMenuOpen(false)}
@@ -130,7 +130,7 @@ export function Layout() {
           <button
             id="admin-logout-btn"
             onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-100"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-100 cursor-pointer"
           >
             <LogOut size={15} />
             <span>Sign Out</span>
