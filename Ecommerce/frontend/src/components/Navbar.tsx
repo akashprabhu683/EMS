@@ -49,14 +49,84 @@ export function Navbar() {
     { to: '/#store-info',      label: 'Store Info' },
   ];
 
+  const [activeSection, setActiveSection] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/') {
+      return window.location.hash ? `/#${window.location.hash.replace('#', '')}` : '/';
+    }
+    return '';
+  });
+
+  // Track active section in real-time on scroll when on the home page
+  useEffect(() => {
+    if (location.pathname !== '/') {
+      setActiveSection('');
+      return;
+    }
+
+    const computeActiveSection = () => {
+      const scrollY = window.scrollY;
+      const viewportHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+
+      // If user is scrolled near the bottom of the page, activate the last section (#store-info)
+      if (scrollY + viewportHeight >= docHeight - 120) {
+        setActiveSection('/#store-info');
+        return;
+      }
+
+      // Check if user is near the top hero banner before catalog
+      const catalogEl = document.getElementById('catalog-section');
+      if (catalogEl) {
+        const catRect = catalogEl.getBoundingClientRect();
+        if (catRect.top > 160) {
+          setActiveSection('/');
+          return;
+        }
+      } else if (scrollY < 200) {
+        setActiveSection('/');
+        return;
+      }
+
+      // Check sections from bottom to top
+      const sections = ['store-info', 'how-it-works', 'catalog-section'];
+      for (const id of sections) {
+        const el = document.getElementById(id);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          // Navbar is 64px, section is active when top is within upper viewport and bottom is still visible
+          if (rect.top <= 160 && rect.bottom >= 80) {
+            setActiveSection(`/#${id}`);
+            return;
+          }
+        }
+      }
+    };
+
+    computeActiveSection();
+    window.addEventListener('scroll', computeActiveSection, { passive: true });
+    window.addEventListener('resize', computeActiveSection, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', computeActiveSection);
+      window.removeEventListener('resize', computeActiveSection);
+    };
+  }, [location.pathname]);
+
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, to: string) => {
-    if (to.includes('#')) {
+    if (to === '/') {
+      if (location.pathname === '/') {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setActiveSection('/');
+        window.history.pushState(null, '', '/');
+      }
+    } else if (to.includes('#')) {
       const hash = to.split('#')[1];
       if (location.pathname === '/') {
         e.preventDefault();
         const el = document.getElementById(hash);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth' });
+          setActiveSection(to);
           window.history.pushState(null, '', `#${hash}`);
         }
       }
@@ -64,12 +134,14 @@ export function Navbar() {
   };
 
   const isLinkActive = (to: string) => {
-    if (to === '/') {
-      return location.pathname === '/' && !location.hash && !location.search;
+    if (location.pathname === '/') {
+      if (to === '/') {
+        return !activeSection || activeSection === '/';
+      }
+      return activeSection === to;
     }
-    if (to.includes('#')) {
-      const hash = '#' + to.split('#')[1];
-      return location.pathname === '/' && location.hash === hash;
+    if (to === '/products') {
+      return location.pathname.startsWith('/product');
     }
     return location.pathname === to;
   };
@@ -97,8 +169,8 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Desktop Nav Links - with ample breathing space */}
-        <ul className="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
+        {/* Desktop Nav Links - with clean green underline indicators */}
+        <ul className="hidden md:flex items-center gap-1 sm:gap-2 lg:gap-4 shrink-0">
           {NAV_LINKS.map(({ to, label }) => {
             const active = isLinkActive(to);
             return (
@@ -106,13 +178,21 @@ export function Navbar() {
                 <Link
                   to={to}
                   onClick={(e) => handleNavClick(e, to)}
-                  className={`px-3.5 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`relative py-2 px-2.5 text-sm font-semibold transition-colors whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 group flex items-center justify-center ${
                     active
-                      ? 'text-emerald-800 bg-emerald-50 font-bold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                      ? 'text-emerald-800'
+                      : 'text-slate-600 hover:text-emerald-700'
                   }`}
                 >
-                  {label}
+                  <span>{label}</span>
+                  {/* Underline green indicator */}
+                  <span
+                    className={`absolute bottom-0 left-1.5 right-1.5 h-[2.5px] rounded-full transition-all duration-200 ${
+                      active
+                        ? 'bg-emerald-600 opacity-100 scale-x-100'
+                        : 'bg-emerald-600/40 opacity-0 scale-x-0 group-hover:opacity-100 group-hover:scale-x-100'
+                    }`}
+                  />
                 </Link>
               </li>
             );
@@ -238,20 +318,35 @@ export function Navbar() {
         <div className="md:hidden bg-white border-t border-slate-200 animate-fade-in shadow-lg">
           <div className="page-container py-4 space-y-3">
             <ul className="space-y-1">
-              {NAV_LINKS.map(({ to, label }) => (
-                <li key={to}>
-                  <Link
-                    to={to}
-                    onClick={(e) => {
-                      handleNavClick(e, to);
-                      setMobileOpen(false);
-                    }}
-                    className="block px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
-                  >
-                    {label}
-                  </Link>
-                </li>
-              ))}
+              {NAV_LINKS.map(({ to, label }) => {
+                const active = isLinkActive(to);
+                return (
+                  <li key={to}>
+                    <Link
+                      to={to}
+                      onClick={(e) => {
+                        handleNavClick(e, to);
+                        setMobileOpen(false);
+                      }}
+                      className={`relative flex items-center justify-between px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                        active
+                          ? 'text-emerald-800'
+                          : 'text-slate-700 hover:text-emerald-700'
+                      }`}
+                    >
+                      <span>{label}</span>
+                      {active && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shadow-2xs" />
+                      )}
+                      <span
+                        className={`absolute bottom-0 left-3.5 right-3.5 h-[2px] rounded-full transition-all duration-200 ${
+                          active ? 'bg-emerald-600 opacity-100' : 'bg-transparent opacity-0'
+                        }`}
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
               <li>
                 <Link
                   to="/favorites"
