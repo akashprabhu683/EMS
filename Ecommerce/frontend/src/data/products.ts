@@ -8,8 +8,8 @@ export const PRODUCTS: Product[] = [
     price: 449,
     originalPrice: 599,
     images: [
-      'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&q=80',
-      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'ayurvedic',
     rating: 4.9,
@@ -81,7 +81,8 @@ export const PRODUCTS: Product[] = [
     price: 180,
     originalPrice: 240,
     images: [
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&q=80',
+      'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=600&q=80',
+      'https://images.unsplash.com/photo-1617897903246-719242758050?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.8,
@@ -153,7 +154,7 @@ export const PRODUCTS: Product[] = [
     price: 375,
     originalPrice: 490,
     images: [
-      'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
     ],
     category: 'vitality',
     rating: 4.7,
@@ -189,7 +190,7 @@ export const PRODUCTS: Product[] = [
     price: 310,
     originalPrice: 410,
     images: [
-      'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&q=80',
+      'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.7,
@@ -227,7 +228,8 @@ export const PRODUCTS: Product[] = [
     price: 1299,
     originalPrice: 1799,
     images: [
-      'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=600&q=80',
+      'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
     ],
     category: 'ayurvedic',
     rating: 4.9,
@@ -245,7 +247,7 @@ export const PRODUCTS: Product[] = [
     price: 399,
     originalPrice: 520,
     images: [
-      'https://images.unsplash.com/photo-1512069772995-ec65ed45afd6?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
     ],
     category: 'ayurvedic',
     rating: 4.7,
@@ -263,7 +265,7 @@ export const PRODUCTS: Product[] = [
     price: 349,
     originalPrice: 460,
     images: [
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'ayurvedic',
     rating: 4.6,
@@ -299,7 +301,7 @@ export const PRODUCTS: Product[] = [
     price: 159,
     originalPrice: 210,
     images: [
-      'https://images.unsplash.com/photo-1515942400420-2b98fed1f515?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'ayurvedic',
     rating: 4.5,
@@ -317,7 +319,7 @@ export const PRODUCTS: Product[] = [
     price: 549,
     originalPrice: 720,
     images: [
-      'https://images.unsplash.com/photo-1547592180-85f173990554?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'ayurvedic',
     rating: 4.8,
@@ -337,7 +339,7 @@ export const PRODUCTS: Product[] = [
     price: 285,
     originalPrice: 380,
     images: [
-      'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&q=80',
+      'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.8,
@@ -355,7 +357,7 @@ export const PRODUCTS: Product[] = [
     price: 320,
     originalPrice: 420,
     images: [
-      'https://images.unsplash.com/photo-1473492201326-7c01dd2e596b?w=600&q=80',
+      'https://images.unsplash.com/photo-1543362906-acfc16c67564?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.8,
@@ -409,7 +411,8 @@ export const PRODUCTS: Product[] = [
     price: 289,
     originalPrice: 380,
     images: [
-      'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
+      'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.8,
@@ -445,7 +448,7 @@ export const PRODUCTS: Product[] = [
     price: 299,
     originalPrice: 399,
     images: [
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&q=80',
+      'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.6,
@@ -483,7 +486,7 @@ export const PRODUCTS: Product[] = [
     price: 429,
     originalPrice: 560,
     images: [
-      'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600&q=80',
+      'https://images.unsplash.com/photo-1509358271058-acd22cc93898?w=600&q=80',
     ],
     category: 'vitality',
     rating: 4.7,
@@ -501,7 +504,7 @@ export const PRODUCTS: Product[] = [
     price: 749,
     originalPrice: 999,
     images: [
-      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'vitality',
     rating: 4.8,
@@ -519,7 +522,7 @@ export const PRODUCTS: Product[] = [
     price: 449,
     originalPrice: 599,
     images: [
-      'https://images.unsplash.com/photo-1512069772995-ec65ed45afd6?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
     ],
     category: 'vitality',
     rating: 4.8,
@@ -537,7 +540,7 @@ export const PRODUCTS: Product[] = [
     price: 399,
     originalPrice: 520,
     images: [
-      'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'vitality',
     rating: 4.7,
@@ -573,7 +576,7 @@ export const PRODUCTS: Product[] = [
     price: 649,
     originalPrice: 850,
     images: [
-      'https://images.unsplash.com/photo-1593642702821-c8da6771f0c6?w=600&q=80',
+      'https://images.unsplash.com/photo-1509358271058-acd22cc93898?w=600&q=80',
     ],
     category: 'vitality',
     rating: 4.8,
@@ -593,7 +596,7 @@ export const PRODUCTS: Product[] = [
     price: 145,
     originalPrice: 195,
     images: [
-      'https://images.unsplash.com/photo-1574484284002-952d92456975?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'digestive',
     rating: 4.8,
@@ -611,7 +614,7 @@ export const PRODUCTS: Product[] = [
     price: 199,
     originalPrice: 265,
     images: [
-      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'digestive',
     rating: 4.7,
@@ -629,7 +632,7 @@ export const PRODUCTS: Product[] = [
     price: 299,
     originalPrice: 395,
     images: [
-      'https://images.unsplash.com/photo-1515942400420-2b98fed1f515?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
     ],
     category: 'digestive',
     rating: 4.7,
@@ -647,7 +650,7 @@ export const PRODUCTS: Product[] = [
     price: 155,
     originalPrice: 210,
     images: [
-      'https://images.unsplash.com/photo-1547592180-85f173990554?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'digestive',
     rating: 4.6,
@@ -665,7 +668,7 @@ export const PRODUCTS: Product[] = [
     price: 129,
     originalPrice: 175,
     images: [
-      'https://images.unsplash.com/photo-1577234286642-fc512a5f8f11?w=600&q=80',
+      'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
     ],
     category: 'digestive',
     rating: 4.7,
@@ -701,7 +704,7 @@ export const PRODUCTS: Product[] = [
     price: 249,
     originalPrice: 330,
     images: [
-      'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&q=80',
+      'https://images.unsplash.com/photo-1617897903246-719242758050?w=600&q=80',
     ],
     category: 'digestive',
     rating: 4.6,
@@ -721,7 +724,7 @@ export const PRODUCTS: Product[] = [
     price: 649,
     originalPrice: 850,
     images: [
-      'https://images.unsplash.com/photo-1512069772995-ec65ed45afd6?w=600&q=80',
+      'https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&q=80',
     ],
     category: 'joint-care',
     rating: 4.8,
@@ -775,7 +778,7 @@ export const PRODUCTS: Product[] = [
     price: 369,
     originalPrice: 480,
     images: [
-      'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600&q=80',
+      'https://images.unsplash.com/photo-1509358271058-acd22cc93898?w=600&q=80',
     ],
     category: 'joint-care',
     rating: 4.7,
@@ -793,7 +796,7 @@ export const PRODUCTS: Product[] = [
     price: 320,
     originalPrice: 430,
     images: [
-      'https://images.unsplash.com/photo-1614531341773-3bff8b7cb3fc?w=600&q=80',
+      'https://images.unsplash.com/photo-1556760544-74068565f05c?w=600&q=80',
     ],
     category: 'joint-care',
     rating: 4.6,
@@ -811,7 +814,7 @@ export const PRODUCTS: Product[] = [
     price: 189,
     originalPrice: 249,
     images: [
-      'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=600&q=80',
+      'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
     ],
     category: 'joint-care',
     rating: 4.7,
@@ -829,7 +832,7 @@ export const PRODUCTS: Product[] = [
     price: 349,
     originalPrice: 460,
     images: [
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80',
+      'https://images.unsplash.com/photo-1509358271058-acd22cc93898?w=600&q=80',
     ],
     category: 'joint-care',
     rating: 4.8,
@@ -867,7 +870,7 @@ export const PRODUCTS: Product[] = [
     price: 319,
     originalPrice: 420,
     images: [
-      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=600&q=80',
+      'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&q=80',
     ],
     category: 'wellness-teas',
     rating: 4.7,
@@ -885,7 +888,7 @@ export const PRODUCTS: Product[] = [
     price: 199,
     originalPrice: 265,
     images: [
-      'https://images.unsplash.com/photo-1556742205-e10c9486e506?w=600&q=80',
+      'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=600&q=80',
     ],
     category: 'wellness-teas',
     rating: 4.9,
@@ -939,7 +942,7 @@ export const PRODUCTS: Product[] = [
     price: 229,
     originalPrice: 299,
     images: [
-      'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&q=80',
+      'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=600&q=80',
     ],
     category: 'wellness-teas',
     rating: 4.8,
@@ -1049,7 +1052,7 @@ export const PRODUCTS: Product[] = [
     price: 259,
     originalPrice: 345,
     images: [
-      'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&q=80',
+      'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.7,

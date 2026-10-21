@@ -175,13 +175,7 @@ export function Navbar() {
                       <Heart size={13} className="text-rose-500" />
                       <span>My Favourites</span>
                     </div>
-                    {favoritesCount > 0 ? (
-                      <span className="px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200">
-                        {favoritesCount}
-                      </span>
-                    ) : (
-                      <ArrowRight size={12} className="text-slate-400" />
-                    )}
+                    <ArrowRight size={12} className="text-slate-400" />
                   </Link>
                   <Link
                     to="/orders"

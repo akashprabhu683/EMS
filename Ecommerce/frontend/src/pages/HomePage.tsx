@@ -174,10 +174,12 @@ export function HomePage() {
     }
   };
 
-  // Filter products by selected category
+  // Filter products by selected category and limit homepage to 20 products
   const displayedProducts = useMemo(() => {
-    if (selectedCategory === 'all') return products;
-    return products.filter(p => p.category === selectedCategory || (p as any).categorySlug === selectedCategory);
+    const list = selectedCategory === 'all'
+      ? products
+      : products.filter(p => p.category === selectedCategory || (p as any).categorySlug === selectedCategory);
+    return list.slice(0, 20);
   }, [products, selectedCategory]);
 
   return (
@@ -294,21 +296,8 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* ── TRUST BADGES ─────────────────────────────────────── */}
-        <div className="mb-8 flex flex-wrap items-center justify-start sm:justify-center gap-2 sm:gap-3">
-          {TRUST_BADGES.map(({ icon: Icon, text, color, bg, border }) => (
-            <span
-              key={text}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold ${bg} ${color} border ${border} shadow-2xs whitespace-nowrap`}
-            >
-              <Icon size={13} className="shrink-0 text-emerald-700" />
-              {text}
-            </span>
-          ))}
-        </div>
-
         {/* ── CATEGORY NAVIGATION PILLS ──────────────────────────── */}
-        <div className="mb-6 sm:mb-8 overflow-x-auto pb-2 scrollbar-none">
+        <div id="catalog-section" className="mb-6 sm:mb-8 overflow-x-auto pb-2 scrollbar-none">
           <div className="flex items-center gap-2 min-w-max">
             <button
               onClick={() => setSelectedCategory('all')}
@@ -396,7 +385,7 @@ export function HomePage() {
         </section>
 
         {/* ── CONVENIENT CARE: CLICK & COLLECT IN 3 SIMPLE STEPS ─── */}
-        <section aria-label="How Click and Collect Works" className="mb-14 sm:mb-16">
+        <section id="how-it-works" aria-label="How Click and Collect Works" className="mb-14 sm:mb-16">
           <div className="bg-gradient-to-br from-emerald-50 via-teal-50/60 to-emerald-50/80 border border-emerald-200/80 rounded-2xl p-5 sm:p-8">
             <div className="text-center mb-6">
               <span className="text-[10px] sm:text-xs font-bold text-emerald-700 tracking-wider uppercase">Convenient Care</span>
@@ -464,7 +453,7 @@ export function HomePage() {
         </section>
 
         {/* ── STORE INFORMATION STRIP ──────────────────────────────── */}
-        <section aria-label="Store Information" className="mb-4">
+        <section id="store-info" aria-label="Store Information" className="mb-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
