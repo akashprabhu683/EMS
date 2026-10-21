@@ -17,9 +17,12 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
+import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
@@ -29,15 +32,36 @@ import com.google.android.material.snackbar.Snackbar;
 
 public class MainActivity extends AppCompatActivity {
 
-    // Live customer storefront — do NOT use the admin-panel URL
-    private static final String STOREFRONT_URL = "https://ecommerce-storefront-client.vercel.app";
-    private static final String STOREFRONT_HOST = "ecommerce-storefront-client.vercel.app";
+    // Dynamic start URL and host based on active flavor (storefront vs admin)
+    private static final String STOREFRONT_URL = BuildConfig.START_URL;
+    private static final String STOREFRONT_HOST = BuildConfig.START_HOST;
 
     private WebView webView;
     private SwipeRefreshLayout swipeRefresh;
     private View loadingOverlay;
     private View errorOverlay;
     private boolean hasError = false;
+
+    // File chooser callback for uploading product photos
+    private ValueCallback<Uri[]> uploadMessage;
+    private final ActivityResultLauncher<Intent> fileChooserLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (uploadMessage == null) return;
+                Uri[] results = null;
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    if (result.getData().getClipData() != null) {
+                        int count = result.getData().getClipData().getItemCount();
+                        results = new Uri[count];
+                        for (int i = 0; i < count; i++) {
+                            results[i] = result.getData().getClipData().getItemAt(i).getUri();
+                        }
+                    } else if (result.getData().getData() != null) {
+                        results = new Uri[]{result.getData().getData()};
+                    }
+                }
+                uploadMessage.onReceiveValue(results);
+                uploadMessage = null;
+            });
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -60,8 +84,8 @@ public class MainActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);       // Firebase Auth uses localStorage
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
@@ -145,11 +169,29 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // ── WebChromeClient — title & progress ────────────────────
+        // ── WebChromeClient — title, progress & file upload support ──
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
                 return false; // suppress console noise in production
+            }
+
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+                                             FileChooserParams fileChooserParams) {
+                if (uploadMessage != null) {
+                    uploadMessage.onReceiveValue(null);
+                    uploadMessage = null;
+                }
+                uploadMessage = filePathCallback;
+                try {
+                    Intent intent = fileChooserParams.createIntent();
+                    fileChooserLauncher.launch(intent);
+                    return true;
+                } catch (Exception e) {
+                    uploadMessage = null;
+                    return false;
+                }
             }
         });
 

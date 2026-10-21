@@ -7,11 +7,28 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.thangamstores.app"
         minSdk 23
         targetSdk 34
         versionCode 1
         versionName "1.0.0"
+    }
+
+    flavorDimensions = ["appType"]
+    productFlavors {
+        storefront {
+            dimension "appType"
+            applicationId "com.thangamstores.app"
+            buildConfigField "String", "START_URL", "\"https://ecommerce-storefront-client.vercel.app\""
+            buildConfigField "String", "START_HOST", "\"ecommerce-storefront-client.vercel.app\""
+            buildConfigField "boolean", "IS_ADMIN", "false"
+        }
+        admin {
+            dimension "appType"
+            applicationId "com.thangamstores.admin"
+            buildConfigField "String", "START_URL", "\"https://ems-admin-portal.vercel.app\""
+            buildConfigField "String", "START_HOST", "\"ems-admin-portal.vercel.app\""
+            buildConfigField "boolean", "IS_ADMIN", "true"
+        }
     }
 
     buildTypes {
@@ -34,6 +51,7 @@ android {
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 
