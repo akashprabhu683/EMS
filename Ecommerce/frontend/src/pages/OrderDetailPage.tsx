@@ -179,7 +179,7 @@ export function OrderDetailPage() {
                   <p className="text-xs text-slate-500">Fulfillment: Click-and-Collect · Pickup Counter</p>
                 </div>
                 <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg self-start sm:self-auto">
-                  {order.estimatedDelivery || 'Ready for Collection within 2-4 hours'}
+                  {order.estimatedDelivery || 'Ready within 2–4 hours'}
                 </span>
               </div>
 

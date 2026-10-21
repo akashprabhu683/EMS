@@ -433,8 +433,8 @@ export function OrdersPage() {
                             {order.pickupLocation || 'EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex'}
                           </div>
                           <div className="flex justify-between items-center text-slate-500 pt-1.5 border-t border-emerald-200/50">
-                            <span>Ready Estimate:</span>
-                            <span className="text-emerald-900 font-semibold">{order.estimatedDelivery || 'Within 2-4 hours'}</span>
+                            <span>Status:</span>
+                            <span className="text-emerald-900 font-semibold">{order.estimatedDelivery || 'Within 2–4 hours'}</span>
                           </div>
                         </div>
                       </div>

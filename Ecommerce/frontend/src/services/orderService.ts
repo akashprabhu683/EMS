@@ -125,7 +125,15 @@ export function formatFirestoreOrder(docId: string, data: any): Order {
     },
     trackingNumber: `EMS-COLLECT-${docId.slice(-6).toUpperCase()}`,
     courier: 'Self Collection at Dispensary',
-    estimatedDelivery: data.orderStatus === 'ready_for_pickup' ? 'Ready for Collection NOW' : 'Ready within 2-4 hours',
+    estimatedDelivery: (() => {
+      const s = String(data.orderStatus || '').toLowerCase();
+      if (s === 'ready_for_pickup') return 'Ready for Collection NOW';
+      if (s === 'collected' || s === 'delivered') return 'Collected ✓';
+      if (s === 'cancelled') return 'Order Cancelled';
+      if (s === 'accepted') return 'Accepted — Preparing soon';
+      if (s === 'preparing') return 'Being Prepared now';
+      return 'Ready within 2–4 hours';
+    })(),
     timeline: Array.isArray(data.statusHistory) && data.statusHistory.length > 0
       ? data.statusHistory.map((h: any) => ({
           title: statusTitleMap[h.status] || h.status,

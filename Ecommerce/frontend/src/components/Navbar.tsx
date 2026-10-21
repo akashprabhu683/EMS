@@ -67,7 +67,7 @@ export function Navbar() {
             <Leaf size={16} className="text-white" />
           </div>
           <span className="font-display font-bold text-base sm:text-xl text-slate-900 tracking-tight truncate">
-            EMS<span className="text-emerald-700"> Dispensary</span>
+            THANGAM<span className="text-emerald-700"> STORES</span>
           </span>
         </Link>
 
@@ -97,21 +97,14 @@ export function Navbar() {
 
         {/* Actions: Wishlist, Cart, User, Hamburger */}
         <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
-          {/* Wishlist Button */}
+          {/* Wishlist Button - clean without count badge */}
           <Link
             to="/favorites"
             id="nav-wishlist-btn"
-            className="relative flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
-            aria-label={`My Favourites with ${favoritesCount} items`}
+            className="flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
+            aria-label="My Favourites"
           >
-            <div className="relative flex items-center justify-center">
-              <Heart size={18} className={favoritesCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-slate-700'} />
-              {favoritesCount > 0 && (
-                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-rose-600 text-white text-[9px] font-bold px-0.5 shadow-2xs">
-                  {favoritesCount > 99 ? '99+' : favoritesCount}
-                </span>
-              )}
-            </div>
+            <Heart size={18} className="text-slate-700" />
             <span className="text-xs font-semibold hidden lg:inline text-slate-700 ml-1.5">Favourites</span>
           </Link>
 
@@ -243,14 +236,9 @@ export function Navbar() {
                   className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
                 >
                   <span className="flex items-center gap-2">
-                    <Heart size={16} className={favoritesCount > 0 ? 'text-rose-600 fill-rose-600' : 'text-slate-500'} />
+                    <Heart size={16} className="text-slate-500" />
                     <span>My Favourites</span>
                   </span>
-                  {favoritesCount > 0 && (
-                    <span className="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md">
-                      {favoritesCount}
-                    </span>
-                  )}
                 </Link>
               </li>
               <li>

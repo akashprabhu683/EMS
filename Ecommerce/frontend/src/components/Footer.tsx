@@ -14,7 +14,7 @@ export function Footer() {
     e.preventDefault();
     if (email.trim()) {
       setSubscribed(true);
-      toast.success('Thank you! You are now subscribed to EMS Dispensary updates.');
+      toast.success('Thank you! You are now subscribed to THANGAM STORES updates.');
       setEmail('');
     }
   };
@@ -45,7 +45,7 @@ export function Footer() {
           {subscribed ? (
             <div className="flex items-center gap-2.5 px-5 py-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm font-semibold shadow-2xs">
               <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-              <span>You're subscribed! Welcome to EMS Dispensary.</span>
+              <span>You're subscribed! Welcome to THANGAM STORES.</span>
             </div>
           ) : (
             <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
@@ -79,11 +79,11 @@ export function Footer() {
                 🌿
               </div>
               <span className="font-display font-bold text-xl text-slate-900 tracking-tight">
-                EMS<span className="text-emerald-700"> Dispensary</span>
+                THANGAM<span className="text-emerald-700"> STORES</span>
               </span>
             </Link>
             <p className="text-slate-500 text-xs sm:text-sm leading-relaxed mb-5">
-              Your trusted dispensary for authentic Ayurvedic and natural medicines. Order online, collect and pay in person.
+              Your trusted store for authentic Ayurvedic and natural medicines. Order online, collect and pay in person.
             </p>
             <div className="flex gap-2.5">
               {[
@@ -168,7 +168,7 @@ export function Footer() {
 
         {/* 3. Bottom Legal & Trust Bar */}
         <div className="border-t border-slate-200 pt-6 sm:pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {CURRENT_YEAR} EMS Herbal Dispensary. All rights reserved.</p>
+          <p>© {CURRENT_YEAR} THANGAM STORES. All rights reserved.</p>
           <div className="flex items-center gap-2 text-slate-500">
             <ShieldCheck size={16} className="text-emerald-600" />
             <span>Natural &amp; Authentic Herbal Products — Quality Assured</span>

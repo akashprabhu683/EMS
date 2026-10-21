@@ -379,8 +379,8 @@ export function ProductsPage() {
               </div>
             ) : viewMode === 'grid' ? (
               <div>
-                {/* Product Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+                {/* Product Grid: 2 columns on mobile, 2 on tablet, 3 on desktop with sidebar */}
+                <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 items-stretch">
                   {filtered.map((p, i) => (
                     <ProductCard key={p.id} product={p} index={i} />
                   ))}
@@ -390,7 +390,7 @@ export function ProductsPage() {
                 {filtered.length <= 2 && (
                   <div className="mt-8 p-6 bg-slate-100/80 border border-slate-200/80 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div>
-                      <h4 className="text-sm font-bold text-slate-900">Explore more from NovaShop</h4>
+                      <h4 className="text-sm font-bold text-slate-900">Explore more from THANGAM STORES</h4>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Discover other curated essentials across all our categories.
                       </p>

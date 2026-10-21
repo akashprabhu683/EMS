@@ -79,7 +79,7 @@ function docToAdminOrder(id: string, data: DocumentData): AdminOrder {
           productId: String(it.productId ?? ''),
           name: String(it.name ?? it.productId ?? 'Product'),
           quantity: Number(it.quantity ?? 1),
-          unitPricePaise: Number(it.unitPricePaise ?? it.price ?? 0),
+          unitPricePaise: Number(it.unitPricePaise ?? it.unitPrice ?? it.price ?? 0),
         }))
       : [],
     subtotalPaise: Number(data.subtotalPaise ?? data.total ?? 0),

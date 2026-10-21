@@ -203,7 +203,7 @@ export function FavoritesPage() {
         {loading ? (
           <div className="py-20 text-center text-sm text-slate-500 flex flex-col items-center gap-3">
             <Loader2 size={32} className="animate-spin text-emerald-700" />
-            <p>Loading your saved remedies from dispensary database...</p>
+            <p>Loading your saved remedies from THANGAM STORES database...</p>
           </div>
         ) : favoriteProducts.length === 0 ? (
           /* Empty State */
@@ -214,7 +214,7 @@ export function FavoritesPage() {
             <div>
               <h2 className="text-xl font-bold text-slate-900">Your Favourites list is empty</h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
-                You haven't saved any herbal remedies yet. Tap the heart icon on any remedy card in the catalog to add it to your favourites.
+                You haven't saved any remedies yet. Tap the heart icon on any product in the catalog to add it to your favourites.
               </p>
             </div>
             <Link
@@ -222,18 +222,18 @@ export function FavoritesPage() {
               className="btn-primary py-3 px-6 text-xs sm:text-sm rounded-xl inline-flex items-center gap-2 shadow-2xs"
             >
               <Leaf size={15} />
-              <span>Explore 61 Herbal Remedies</span>
+              <span>Explore Products</span>
             </Link>
           </div>
         ) : (
-          /* Products Grid */
+          /* Products Grid: 2 columns on mobile, 3 on tablet, 4 on desktop */
           <div className="space-y-4">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-500 border-b border-slate-200 pb-3">
               <span>Showing {favoriteProducts.length} saved {favoriteProducts.length === 1 ? 'remedy' : 'remedies'}</span>
-              <span className="text-emerald-700">Dispensary Stock Live</span>
+              <span className="text-emerald-700">Store Stock Live</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
               {favoriteProducts.map(product => {
                 const isOutOfStock = product.stock === 0;
                 const isAdded = addedIds[product.id];
@@ -242,18 +242,18 @@ export function FavoritesPage() {
                 return (
                   <div
                     key={product.id}
-                    className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-slate-300 hover:shadow-md transition-all duration-200 flex flex-col"
+                    className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-slate-300 hover:shadow-md transition-all duration-200 flex flex-col h-full"
                   >
                     {/* Image */}
-                    <div className="relative aspect-[4/3] w-full bg-slate-100 overflow-hidden">
-                      <Link to={`/product/${product.id}`} className="block w-full h-full">
+                    <div className="relative aspect-[4/3] w-full bg-slate-50 overflow-hidden flex items-center justify-center p-2.5">
+                      <Link to={`/product/${product.id}`} className="block w-full h-full flex items-center justify-center">
                         <img
                           src={activeImg}
                           alt={product.name}
                           width={600}
                           height={450}
                           loading="lazy"
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
                         />
                       </Link>
 
