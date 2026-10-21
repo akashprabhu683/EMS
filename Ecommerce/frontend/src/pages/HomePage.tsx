@@ -297,7 +297,7 @@ export function HomePage() {
         </div>
 
         {/* ── CATEGORY NAVIGATION PILLS ──────────────────────────── */}
-        <div id="catalog-section" className="mb-6 sm:mb-8 overflow-x-auto pb-2 scrollbar-none">
+        <div id="catalog-section" className="mb-6 sm:mb-8 overflow-x-auto pb-2 scrollbar-none scroll-mt-20">
           <div className="flex items-center gap-2 min-w-max">
             <button
               onClick={() => setSelectedCategory('all')}
@@ -385,7 +385,7 @@ export function HomePage() {
         </section>
 
         {/* ── CONVENIENT CARE: CLICK & COLLECT IN 3 SIMPLE STEPS ─── */}
-        <section id="how-it-works" aria-label="How Click and Collect Works" className="mb-14 sm:mb-16">
+        <section id="how-it-works" aria-label="How Click and Collect Works" className="mb-14 sm:mb-16 scroll-mt-20">
           <div className="bg-gradient-to-br from-emerald-50 via-teal-50/60 to-emerald-50/80 border border-emerald-200/80 rounded-2xl p-5 sm:p-8">
             <div className="text-center mb-6">
               <span className="text-[10px] sm:text-xs font-bold text-emerald-700 tracking-wider uppercase">Convenient Care</span>
@@ -453,7 +453,7 @@ export function HomePage() {
         </section>
 
         {/* ── STORE INFORMATION STRIP ──────────────────────────────── */}
-        <section id="store-info" aria-label="Store Information" className="mb-4">
+        <section id="store-info" aria-label="Store Information" className="mb-4 scroll-mt-20">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">

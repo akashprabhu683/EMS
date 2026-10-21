@@ -9,7 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 const STEPS = ['Cart Review', 'Pickup Details', 'Confirm & Place'];
@@ -54,12 +54,39 @@ export function CheckoutPage() {
     }
   }, [items.length, authLoading, step, navigate]);
 
-  // Pre-fill name from Google account
+  // Pre-fill name and mobile number from profile details / Google account
   useEffect(() => {
-    if (isAuthenticated && user?.name && !form.fullName) {
-      setForm(f => ({ ...f, fullName: user.name }));
+    if (isAuthenticated && user) {
+      if (user.name && !form.fullName) {
+        setForm(f => ({ ...f, fullName: user.name }));
+      }
+      if (user.phone && !form.phone) {
+        setForm(f => ({ ...f, phone: user.phone || '' }));
+      }
+
+      // Check Firestore user document to immediately fetch saved profile phone
+      const currentUid = auth.currentUser?.uid || user.id;
+      if (currentUid) {
+        const userRef = doc(db, 'users', currentUid);
+        getDoc(userRef)
+          .then(snap => {
+            if (snap.exists()) {
+              const data = snap.data();
+              const profilePhone = data.phone || data.mobile || data.phoneNumber;
+              if (profilePhone) {
+                setForm(f => ({ ...f, phone: f.phone ? f.phone : profilePhone }));
+              }
+              if (data.displayName && !form.fullName) {
+                setForm(f => ({ ...f, fullName: f.fullName ? f.fullName : data.displayName }));
+              }
+            }
+          })
+          .catch(err => {
+            console.warn('[CheckoutPage] Could not load profile phone:', err);
+          });
+      }
     }
-  }, [isAuthenticated, user?.name]);
+  }, [isAuthenticated, user]);
 
   const validateContact = (): boolean => {
     if (!form.fullName.trim() || form.fullName.trim().length < 2) {
@@ -157,6 +184,14 @@ export function CheckoutPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      // Save phone to user profile document if entered
+      if (currentUid && form.phone.trim()) {
+        const userRef = doc(db, 'users', currentUid);
+        setDoc(userRef, { phone: form.phone.trim() }, { merge: true }).catch(err => {
+          console.warn('[CheckoutPage] Could not update profile phone:', err);
+        });
+      }
 
       orderId = orderDocRef.id;
       totalPaise = calculatedTotalPaise;

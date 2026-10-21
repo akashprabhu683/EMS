@@ -75,12 +75,13 @@ export function Navbar() {
   };
 
   return (
-    <header
-      className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b transition-all duration-200 ${
-        scrolled ? 'border-slate-200/90 shadow-sm' : 'border-slate-200/80 shadow-none'
-      }`}
-    >
-      <nav className="page-container h-16 flex items-center justify-between gap-2 sm:gap-6">
+    <>
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b transition-all duration-200 ${
+          scrolled ? 'border-slate-200/90 shadow-sm' : 'border-slate-200/80 shadow-none'
+        }`}
+      >
+        <nav className="page-container h-16 flex items-center justify-between gap-2 sm:gap-6">
 
         {/* Brand Logo - clean without emojis */}
         <Link
@@ -300,5 +301,8 @@ export function Navbar() {
         </div>
       )}
     </header>
+    {/* Spacer to prevent fixed header from overlapping page content */}
+    <div className="h-16 w-full shrink-0" aria-hidden="true" />
+  </>
   );
 }

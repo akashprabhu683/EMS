@@ -14,7 +14,7 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import type { User } from '../types';
 import { auth, db } from '../firebase';
 
@@ -36,6 +36,7 @@ function mapFirebaseUser(firebaseUser: NonNullable<typeof auth.currentUser>): Us
     id: firebaseUser.uid,
     name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Customer',
     email: firebaseUser.email || '',
+    phone: firebaseUser.phoneNumber || undefined,
     avatar:
       firebaseUser.photoURL ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -81,7 +82,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (firebaseUser) => {
         if (firebaseUser) {
           await syncUserDocument(firebaseUser);
-          setUser(mapFirebaseUser(firebaseUser));
+          const mapped = mapFirebaseUser(firebaseUser);
+          try {
+            const userSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userSnap.exists()) {
+              const uData = userSnap.data();
+              if (uData.phone) mapped.phone = uData.phone;
+              else if (uData.mobile) mapped.phone = uData.mobile;
+              else if (uData.phoneNumber) mapped.phone = uData.phoneNumber;
+              if (uData.displayName) mapped.name = uData.displayName;
+            }
+          } catch (err) {
+            console.warn('[AuthContext] Could not load extended user profile:', err);
+          }
+          setUser(mapped);
         } else {
           setUser(null);
         }
