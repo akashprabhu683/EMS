@@ -294,7 +294,17 @@ adminRouter.get('/invitations', requireAdminAuth, async (_req: AdminAuthenticate
  * POST /api/admin/invitations
  * Creates a persistent invitation with token, tokenHash, expiration, and canonical URL
  */
+export const PRIMARY_SUPERADMIN_EMAIL = 'akashprabhu0302@gmail.com';
+
 adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
+  const callerEmail = req.adminUser?.email?.toLowerCase().trim();
+  if (callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    res.status(403).json({
+      error: 'Only the primary site owner (akashprabhu0302@gmail.com) has authority to grant admin roles.',
+    });
+    return;
+  }
+
   const { email } = req.body;
   if (!email || typeof email !== 'string') {
     res.status(400).json({ error: 'Valid email address is required.' });
@@ -302,7 +312,6 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  const callerEmail = req.adminUser?.email || 'admin';
   const callerUid = req.adminUser?.uid || null;
 
   try {
@@ -528,10 +537,25 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
  * Revokes invitation or removes administrator privileges
  */
 adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
+  const callerEmail = req.adminUser?.email?.toLowerCase().trim();
+  if (callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    res.status(403).json({
+      error: 'Only the primary site owner (akashprabhu0302@gmail.com) has authority to revoke administrator accounts.',
+    });
+    return;
+  }
+
   const { email } = req.params;
   const cleanEmail = email.trim().toLowerCase();
 
-  if (cleanEmail === req.adminUser?.email?.toLowerCase()) {
+  if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    res.status(403).json({
+      error: 'The primary site owner (akashprabhu0302@gmail.com) cannot be revoked.',
+    });
+    return;
+  }
+
+  if (cleanEmail === callerEmail) {
     res.status(400).json({ error: 'You cannot revoke your own administrator account.' });
     return;
   }

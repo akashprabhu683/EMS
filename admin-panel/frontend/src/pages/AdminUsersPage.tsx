@@ -14,12 +14,14 @@ import {
   Send,
   CheckCircle2,
   Check,
+  Crown,
 } from 'lucide-react';
 import {
   getAdminsAndInvitations,
   grantAdmin,
   revokeAdmin,
   resendInvitation,
+  PRIMARY_SUPERADMIN_EMAIL,
   type AdminUser,
   type AdminInvitation,
 } from '../services/adminRoleService';
@@ -29,6 +31,8 @@ import { useToast } from '../context/ToastContext';
 export function AdminUsersPage() {
   const { user: currentUser } = useAdminAuth();
   const toast = useToast();
+
+  const isOwner = currentUser?.email?.toLowerCase().trim() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
 
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [invitations, setInvitations] = useState<AdminInvitation[]>([]);
@@ -199,13 +203,15 @@ export function AdminUsersPage() {
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-colors"
-          >
-            <UserPlus size={16} />
-            <span>Grant Admin Access</span>
-          </button>
+          {isOwner && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-colors"
+            >
+              <UserPlus size={16} />
+              <span>Grant Admin Access</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -237,9 +243,16 @@ export function AdminUsersPage() {
             <ShieldCheck size={18} className="text-teal-600" />
           </div>
           <div className="text-sm font-bold text-slate-800 truncate">{currentUser?.email || 'Authenticated'}</div>
-          <span className="inline-block px-2 py-0.5 mt-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md">
-            Current Superadmin
-          </span>
+          {isOwner ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-md border border-amber-200">
+              <Crown size={11} className="text-amber-700" />
+              Primary Site Owner
+            </span>
+          ) : (
+            <span className="inline-block px-2 py-0.5 mt-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md">
+              Administrator
+            </span>
+          )}
         </div>
       </div>
 
@@ -332,16 +345,30 @@ export function AdminUsersPage() {
               <tbody className="divide-y divide-slate-100">
                 {admins.map((adm) => {
                   const isCurrent = adm.email.toLowerCase() === currentUser?.email?.toLowerCase();
+                  const isPrimaryOwner = adm.email.toLowerCase() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+
                   return (
                     <tr key={adm.uid} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs shrink-0">
+                          <div
+                            className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs shrink-0 ${
+                              isPrimaryOwner
+                                ? 'bg-amber-100 text-amber-900 ring-2 ring-amber-300'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
                             {adm.displayName?.charAt(0).toUpperCase() || adm.email?.charAt(0).toUpperCase() || 'A'}
                           </div>
                           <div>
                             <div className="font-semibold text-slate-900 flex items-center gap-2">
                               <span>{adm.displayName}</span>
+                              {isPrimaryOwner && (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold border border-amber-200">
+                                  <Crown size={10} className="text-amber-700" />
+                                  Owner
+                                </span>
+                              )}
                               {isCurrent && (
                                 <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">
                                   You
@@ -353,26 +380,40 @@ export function AdminUsersPage() {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          <ShieldCheck size={12} />
-                          Full Admin
-                        </span>
+                        {isPrimaryOwner ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                            <Crown size={12} className="text-amber-700" />
+                            Primary Owner
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <ShieldCheck size={12} />
+                            Full Admin
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-slate-600 text-xs">{adm.grantedBy || 'System Setup'}</td>
                       <td className="py-4 px-6 text-slate-600 text-xs">
                         {adm.grantedAt ? new Date(adm.grantedAt).toLocaleDateString() : '—'}
                       </td>
                       <td className="py-4 px-6 text-right">
-                        {isCurrent ? (
+                        {isPrimaryOwner ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-800 font-semibold px-2 py-1 bg-amber-50 rounded-lg border border-amber-200">
+                            <Crown size={12} className="text-amber-600" />
+                            Protected Owner
+                          </span>
+                        ) : isCurrent ? (
                           <span className="text-xs text-slate-400 italic">Current Session</span>
-                        ) : (
+                        ) : isOwner ? (
                           <button
                             onClick={() => setRevokeTarget({ uid: adm.uid, email: adm.email })}
-                            className="px-3 py-1.5 text-rose-700 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1.5"
+                            className="px-3 py-1.5 text-rose-700 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-rose-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                           >
                             <Trash2 size={13} />
                             <span>Revoke</span>
                           </button>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">No Permission</span>
                         )}
                       </td>
                     </tr>
@@ -434,25 +475,29 @@ export function AdminUsersPage() {
                           )}
                           <span>{copiedEmail === inv.email ? 'Copied!' : 'Copy Link'}</span>
                         </button>
-                        <button
-                          onClick={() => handleResendInvite(inv.email)}
-                          disabled={resendingEmail === inv.email}
-                          title="Resend invitation email via Resend"
-                          className="px-2.5 py-1.5 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          {resendingEmail === inv.email ? (
-                            <Loader2 size={13} className="animate-spin text-emerald-700" />
-                          ) : (
-                            <Send size={13} className="text-emerald-700" />
-                          )}
-                          <span>Resend Email</span>
-                        </button>
-                        <button
-                          onClick={() => setRevokeTarget({ email: inv.email })}
-                          className="px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-slate-200 hover:border-rose-200 transition-colors"
-                        >
-                          Cancel
-                        </button>
+                        {isOwner && (
+                          <>
+                            <button
+                              onClick={() => handleResendInvite(inv.email)}
+                              disabled={resendingEmail === inv.email}
+                              title="Resend invitation email via Resend"
+                              className="px-2.5 py-1.5 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                            >
+                              {resendingEmail === inv.email ? (
+                                <Loader2 size={13} className="animate-spin text-emerald-700" />
+                              ) : (
+                                <Send size={13} className="text-emerald-700" />
+                              )}
+                              <span>Resend Email</span>
+                            </button>
+                            <button
+                              onClick={() => setRevokeTarget({ email: inv.email })}
+                              className="px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

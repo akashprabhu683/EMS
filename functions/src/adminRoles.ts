@@ -17,6 +17,8 @@ function hashToken(rawToken: string): string {
   return createHash("sha256").update(rawToken).digest("hex");
 }
 
+export const PRIMARY_SUPERADMIN_EMAIL = "akashprabhu0302@gmail.com";
+
 /**
  * Helper: Ensures caller is authenticated and has admin privileges.
  */
@@ -26,6 +28,20 @@ function assertAdmin(request: any) {
   }
   if (!request.auth.token || request.auth.token.admin !== true) {
     throw new HttpsError("permission-denied", "Access restricted to EMS administrators.");
+  }
+}
+
+/**
+ * Helper: Ensures caller is the primary superadmin owner.
+ */
+function assertSuperadminOwner(request: any) {
+  assertAdmin(request);
+  const callerEmail = (request.auth?.token?.email || "").toLowerCase().trim();
+  if (callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    throw new HttpsError(
+      "permission-denied",
+      "Only the primary site owner (akashprabhu0302@gmail.com) has authority to manage, grant, or revoke administrator accounts."
+    );
   }
 }
 
@@ -85,9 +101,10 @@ export const listAdmins = onCall(async (request) => {
 /**
  * Callable: grantAdminRole
  * Generates an invitation token, saves it to Firestore, and dispatches an invitation email via Resend.
+ * Only the site owner (akashprabhu0302@gmail.com) has authority to grant admin roles.
  */
 export const grantAdminRole = onCall(async (request) => {
-  assertAdmin(request);
+  assertSuperadminOwner(request);
 
   const emailRaw = request.data?.email;
   if (!emailRaw || typeof emailRaw !== "string") {
@@ -148,9 +165,10 @@ export const grantAdminRole = onCall(async (request) => {
 /**
  * Callable: resendAdminInvitation
  * Resends the invitation email to a pending administrator.
+ * Only the site owner (akashprabhu0302@gmail.com) has authority to resend invitations.
  */
 export const resendAdminInvitation = onCall(async (request) => {
-  assertAdmin(request);
+  assertSuperadminOwner(request);
 
   const emailRaw = request.data?.email;
   if (!emailRaw || typeof emailRaw !== "string") {
@@ -382,13 +400,23 @@ export const acceptAdminInvitation = onCall(async (request) => {
 /**
  * Callable: revokeAdminRole
  * Removes admin claim from a user and removes them from the admins collection.
+ * Protected: Only primary superadmin (akashprabhu0302@gmail.com) can revoke roles,
+ * and akashprabhu0302@gmail.com can NEVER be revoked by anyone.
  */
 export const revokeAdminRole = onCall(async (request) => {
-  assertAdmin(request);
+  assertSuperadminOwner(request);
 
   const { uid, email } = request.data || {};
   if (!uid && !email) {
     throw new HttpsError("invalid-argument", "User UID or Email is required to revoke admin role.");
+  }
+
+  // Absolute protection: akashprabhu0302@gmail.com can never be revoked under any circumstance
+  if (email && email.toLowerCase() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    throw new HttpsError(
+      "permission-denied",
+      "The primary superadmin and site owner (akashprabhu0302@gmail.com) cannot be revoked."
+    );
   }
 
   // Safety: Prevent self-revocation
@@ -417,6 +445,13 @@ export const revokeAdminRole = onCall(async (request) => {
     if (targetUid) {
       const user = await auth.getUser(targetUid);
       targetEmail = user.email || targetEmail;
+
+      if (targetEmail && targetEmail.toLowerCase() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+        throw new HttpsError(
+          "permission-denied",
+          "The primary superadmin and site owner (akashprabhu0302@gmail.com) cannot be revoked."
+        );
+      }
 
       const currentClaims = user.customClaims || {};
       const { admin: _, ...remainingClaims } = currentClaims as any;

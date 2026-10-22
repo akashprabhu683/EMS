@@ -128,6 +128,11 @@ export async function grantAdmin(email: string): Promise<{
   message: string;
   acceptUrl?: string;
 }> {
+  const currentEmail = auth.currentUser?.email?.toLowerCase().trim();
+  if (currentEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    throw new Error('Only the primary site owner (akashprabhu0302@gmail.com) has authority to grant admin roles.');
+  }
+
   const cleanEmail = email.trim().toLowerCase();
 
   // 1. Try Cloud Function
@@ -167,6 +172,11 @@ export async function grantAdmin(email: string): Promise<{
  * Resends an invitation email to a pending administrator.
  */
 export async function resendInvitation(email: string): Promise<{ success: boolean; message: string; acceptUrl?: string }> {
+  const currentEmail = auth.currentUser?.email?.toLowerCase().trim();
+  if (currentEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    throw new Error('Only the primary site owner (akashprabhu0302@gmail.com) has authority to resend invitations.');
+  }
+
   const cleanEmail = email.trim().toLowerCase();
 
   // 1. Try Cloud Function
@@ -269,15 +279,28 @@ export async function acceptInvitation(token: string): Promise<{ success: boolea
   throw new Error(data.error || 'Failed to accept invitation.');
 }
 
+export const PRIMARY_SUPERADMIN_EMAIL = 'akashprabhu0302@gmail.com';
+
 /**
  * Revokes admin role from a user.
  */
 export async function revokeAdmin(uid?: string, email?: string): Promise<{ success: boolean; message: string }> {
+  const currentEmail = auth.currentUser?.email?.toLowerCase().trim();
+  const cleanEmail = email?.trim().toLowerCase();
+
+  // Protect akashprabhu0302@gmail.com from ever being revoked
+  if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    throw new Error('The primary site owner (akashprabhu0302@gmail.com) cannot be revoked.');
+  }
+
+  // Ensure only the primary site owner can perform revocations
+  if (currentEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    throw new Error('Only the primary site owner (akashprabhu0302@gmail.com) has authority to revoke administrator accounts.');
+  }
+
   if (uid && uid === auth.currentUser?.uid) {
     throw new Error('You cannot revoke your own administrator account.');
   }
-
-  const cleanEmail = email?.trim().toLowerCase();
 
   // 1. Try Cloud Function
   try {
