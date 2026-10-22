@@ -60,6 +60,7 @@ export interface CreateOrderResponse {
   paymentMethod: string; // click_and_collect
   itemCount: number;
   pickupLocation: string;
+  pickupCode: string;
   createdAt: string; // ISO string
 }
 
@@ -510,6 +511,7 @@ export async function executeCreateOrder(
     const orderId = orderRef.id;
     const now = FieldValue.serverTimestamp();
     const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
+    const pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const orderRecord = {
       id: orderId,
@@ -522,6 +524,10 @@ export async function executeCreateOrder(
       fulfillmentMethod: "click_and_collect",
       pickupContact: normalizedContact,
       pickupLocation: DEFAULT_PICKUP_LOCATION,
+      pickupCode,
+      pickupAttempts: 0,
+      maxPickupAttempts: 5,
+      inventoryDeducted: true,
       orderStatus: "placed",
       paymentStatus: "unpaid",
       paymentMethod: "click_and_collect",
@@ -530,6 +536,8 @@ export async function executeCreateOrder(
         {
           status: "placed",
           timestamp: new Date().toISOString(),
+          actor: "customer",
+          actorId: uid,
           note: "Order placed for Click-and-Collect. Awaiting dispensary confirmation.",
         },
       ],
@@ -548,6 +556,7 @@ export async function executeCreateOrder(
       paymentMethod: "click_and_collect",
       itemCount: orderItems.reduce((sum, it) => sum + it.quantity, 0),
       pickupLocation: DEFAULT_PICKUP_LOCATION,
+      pickupCode,
       createdAt: new Date().toISOString(),
     };
 
@@ -624,3 +633,389 @@ export const createOrder = onCall(
     }
   }
 );
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ORDER STATUS TRANSITIONS & LIFECYCLE MANAGEMENT
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export const PERMITTED_STATUS_TRANSITIONS: Record<string, string[]> = {
+  placed: ["accepted", "cancelled"],
+  accepted: ["preparing", "cancelled"],
+  preparing: ["ready_for_pickup", "cancelled"],
+  ready_for_pickup: ["collected", "cancelled"],
+  collected: [],
+  cancelled: [],
+};
+
+export interface TransitionOrderStatusParams {
+  db: FirebaseFirestore.Firestore;
+  caller: {
+    uid: string;
+    email?: string;
+    isAdmin: boolean;
+  };
+  orderId: string;
+  newStatus: string;
+  pickupCode?: string;
+  note?: string;
+}
+
+export interface TransitionOrderStatusResult {
+  success: boolean;
+  orderId: string;
+  previousStatus: string;
+  newStatus: string;
+  pickupVerified?: boolean;
+}
+
+/**
+ * Authoritatively executes an order status transition with role-based validation,
+ * sequence checking, terminal state protection, pickup code verification,
+ * and automated inventory restoration on cancellation.
+ */
+export async function executeTransitionOrderStatus(
+  params: TransitionOrderStatusParams
+): Promise<TransitionOrderStatusResult> {
+  const { db, caller, orderId, newStatus, pickupCode, note } = params;
+
+  if (!orderId || typeof orderId !== "string") {
+    throw new HttpsError("invalid-argument", "orderId is required.");
+  }
+
+  const validStatuses = ["placed", "accepted", "preparing", "ready_for_pickup", "collected", "cancelled"];
+  if (!validStatuses.includes(newStatus)) {
+    throw new HttpsError("invalid-argument", `Invalid target status '${newStatus}'. Allowed: ${validStatuses.join(", ")}`);
+  }
+
+  const orderRef = db.collection("orders").doc(orderId);
+
+  return await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(orderRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", `Order ${orderId} does not exist.`);
+    }
+
+    const order = snap.data() || {};
+    const currentStatus: string = order.orderStatus || "placed";
+
+    // 1. Idempotency: If status is already newStatus, return success
+    if (currentStatus === newStatus) {
+      return {
+        success: true,
+        orderId,
+        previousStatus: currentStatus,
+        newStatus,
+      };
+    }
+
+    // 2. Terminal state check: 'collected' and 'cancelled' are immutable final states
+    if (currentStatus === "collected" || currentStatus === "cancelled") {
+      throw new HttpsError(
+        "failed-precondition",
+        `Order is in terminal state '${currentStatus}' and cannot be transitioned further.`
+      );
+    }
+
+    // 3. Permitted transition sequence validation
+    const allowedTargets = PERMITTED_STATUS_TRANSITIONS[currentStatus] || [];
+    if (!allowedTargets.includes(newStatus)) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Invalid status transition: Cannot move from '${currentStatus}' to '${newStatus}'. Permitted next statuses: ${allowedTargets.join(", ") || "none"}.`
+      );
+    }
+
+    // 4. Role-based authorization
+    if (!caller.isAdmin) {
+      // Non-admins (Customers) can ONLY cancel their own order, and ONLY if still in 'placed' status
+      if (order.userId !== caller.uid) {
+        throw new HttpsError("permission-denied", "You do not have permission to modify this order.");
+      }
+
+      if (newStatus !== "cancelled") {
+        throw new HttpsError("permission-denied", "Customers can only request order cancellation.");
+      }
+
+      if (currentStatus !== "placed") {
+        throw new HttpsError(
+          "failed-precondition",
+          "This order has already been processed by the dispensary and cannot be cancelled online. Please contact dispensary staff."
+        );
+      }
+    }
+
+    // 5. Collection verification workflow (when advancing to 'collected')
+    let pickupVerified = false;
+    if (newStatus === "collected") {
+      const attempts = Number(order.pickupAttempts || 0);
+      const maxAttempts = Number(order.maxPickupAttempts || 5);
+
+      if (attempts >= maxAttempts) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Pickup verification locked due to excessive failed attempts (>5). Please verify customer identity manually."
+        );
+      }
+
+      const cleanCode = String(pickupCode || "").trim();
+      const expectedCode = String(order.pickupCode || "").trim();
+
+      if (!cleanCode || cleanCode !== expectedCode) {
+        await orderRef.update({
+          pickupAttempts: attempts + 1,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        const remaining = Math.max(0, maxAttempts - (attempts + 1));
+        throw new HttpsError(
+          "invalid-argument",
+          `Invalid 6-digit collection code. ${remaining} attempts remaining before lock.`
+        );
+      }
+
+
+      pickupVerified = true;
+    }
+
+    // 6. Cancellation inventory restoration
+    if (newStatus === "cancelled" && order.inventoryDeducted && !order.inventoryRestored) {
+      const items = Array.isArray(order.items) ? order.items : [];
+      for (const item of items) {
+        if (!item.productId) continue;
+        const prodRef = db.collection("products").doc(item.productId);
+        const prodSnap = await transaction.get(prodRef);
+        if (prodSnap.exists) {
+          const currentStock = Number(prodSnap.data()?.stock ?? 0);
+          const restoreQty = Number(item.quantity ?? 1);
+          transaction.update(prodRef, {
+            stock: currentStock + restoreQty,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    }
+
+    // 7. Record status transition audit log
+    const actorRole = caller.isAdmin ? "admin" : "customer";
+    const actorId = caller.email || caller.uid;
+    const historyEntry = {
+      status: newStatus,
+      timestamp: new Date().toISOString(),
+      actor: actorRole,
+      actorId,
+      note: note || (newStatus === "collected" ? "Order collected and verified with 6-digit PIN at counter." : `Order status updated to ${newStatus}`),
+    };
+
+    const updatePayload: Record<string, any> = {
+      orderStatus: newStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+      statusHistory: FieldValue.arrayUnion(historyEntry),
+    };
+
+    if (newStatus === "collected") {
+      updatePayload.collectedAt = FieldValue.serverTimestamp();
+      updatePayload.collectedVerifiedBy = actorId;
+    }
+
+    if (newStatus === "cancelled") {
+      updatePayload.cancelledAt = FieldValue.serverTimestamp();
+      updatePayload.cancelledBy = actorId;
+      updatePayload.cancelReason = note || "Order cancelled";
+      if (order.inventoryDeducted && !order.inventoryRestored) {
+        updatePayload.inventoryRestored = true;
+        updatePayload.inventoryRestoredAt = FieldValue.serverTimestamp();
+      }
+    }
+
+    transaction.update(orderRef, updatePayload);
+
+    return {
+      success: true,
+      orderId,
+      previousStatus: currentStatus,
+      newStatus,
+      pickupVerified,
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PAYMENT RECORDING (Strictly Decoupled from Fulfilment)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export interface RecordPaymentParams {
+  db: FirebaseFirestore.Firestore;
+  caller: {
+    uid: string;
+    email?: string;
+    isAdmin: boolean;
+  };
+  orderId: string;
+  note?: string;
+}
+
+export interface RecordPaymentResult {
+  success: boolean;
+  orderId: string;
+  paymentStatus: "paid";
+  paidAt: string;
+  paidConfirmedBy: string;
+}
+
+/**
+ * Records receipt of in-person Cash/UPI payment at the dispensary counter.
+ * Fulfilment status ('orderStatus') is NOT modified.
+ */
+export async function executeRecordPayment(
+  params: RecordPaymentParams
+): Promise<RecordPaymentResult> {
+  const { db, caller, orderId, note } = params;
+
+  if (!caller.isAdmin) {
+    throw new HttpsError("permission-denied", "Only authorized dispensary staff can record payment receipt.");
+  }
+
+  if (!orderId || typeof orderId !== "string") {
+    throw new HttpsError("invalid-argument", "orderId is required.");
+  }
+
+  const orderRef = db.collection("orders").doc(orderId);
+
+  return await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(orderRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", `Order ${orderId} does not exist.`);
+    }
+
+    const order = snap.data() || {};
+
+    if (order.orderStatus === "cancelled") {
+      throw new HttpsError("failed-precondition", "Cannot record payment on a cancelled order.");
+    }
+
+    const actorId = caller.email || caller.uid;
+    const nowIso = new Date().toISOString();
+
+    // Idempotent: If already marked paid
+    if (order.paymentStatus === "paid") {
+      return {
+        success: true,
+        orderId,
+        paymentStatus: "paid",
+        paidAt: order.paidAt?.toDate ? order.paidAt.toDate().toISOString() : nowIso,
+        paidConfirmedBy: order.paidConfirmedBy || actorId,
+      };
+    }
+
+    const historyEntry = {
+      paymentStatus: "paid",
+      timestamp: nowIso,
+      actor: "admin",
+      actorId,
+      note: note || "In-person payment (Cash / UPI) confirmed received at dispensary counter.",
+    };
+
+    transaction.update(orderRef, {
+      paymentStatus: "paid",
+      paidAt: FieldValue.serverTimestamp(),
+      paidConfirmedBy: actorId,
+      statusHistory: FieldValue.arrayUnion(historyEntry),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      success: true,
+      orderId,
+      paymentStatus: "paid",
+      paidAt: nowIso,
+      paidConfirmedBy: actorId,
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CALLABLE CLOUD FUNCTIONS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export interface UpdateOrderStatusRequestData {
+  orderId: string;
+  newStatus: string;
+  pickupCode?: string;
+  note?: string;
+}
+
+export const updateOrderStatus = onCall(
+  { cors: true },
+  async (request: CallableRequest<UpdateOrderStatusRequestData>): Promise<TransitionOrderStatusResult> => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "Authentication required to update order status.");
+    }
+
+    const uid = request.auth.uid;
+    const email = request.auth.token.email;
+    const db = admin.firestore();
+
+    // Check if user has admin claim or is in admins collection
+    let isAdmin = Boolean(request.auth.token.admin);
+    if (!isAdmin) {
+      const adminSnap = await db.collection("admins").doc(uid).get();
+      if (adminSnap.exists) {
+        isAdmin = true;
+      }
+    }
+
+    try {
+      return await executeTransitionOrderStatus({
+        db,
+        caller: { uid, email, isAdmin },
+        orderId: request.data.orderId,
+        newStatus: request.data.newStatus,
+        pickupCode: request.data.pickupCode,
+        note: request.data.note,
+      });
+    } catch (err: unknown) {
+      if (err instanceof HttpsError) throw err;
+      logger.error("updateOrderStatus failure:", err);
+      throw new HttpsError("internal", "An error occurred while transitioning order status.");
+    }
+  }
+);
+
+export interface RecordPaymentRequestData {
+  orderId: string;
+  note?: string;
+}
+
+export const recordOrderPayment = onCall(
+  { cors: true },
+  async (request: CallableRequest<RecordPaymentRequestData>): Promise<RecordPaymentResult> => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "Authentication required to record order payment.");
+    }
+
+    const uid = request.auth.uid;
+    const email = request.auth.token.email;
+    const db = admin.firestore();
+
+    let isAdmin = Boolean(request.auth.token.admin);
+    if (!isAdmin) {
+      const adminSnap = await db.collection("admins").doc(uid).get();
+      if (adminSnap.exists) {
+        isAdmin = true;
+      }
+    }
+
+    try {
+      return await executeRecordPayment({
+        db,
+        caller: { uid, email, isAdmin },
+        orderId: request.data.orderId,
+        note: request.data.note,
+      });
+    } catch (err: unknown) {
+      if (err instanceof HttpsError) throw err;
+      logger.error("recordOrderPayment failure:", err);
+      throw new HttpsError("internal", "An error occurred while recording payment.");
+    }
+  }
+);
+

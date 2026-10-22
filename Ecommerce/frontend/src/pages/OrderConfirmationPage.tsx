@@ -11,6 +11,7 @@ interface OrderConfirmationState {
   subtotal?: number;
   orderStatus?: string;
   paymentStatus?: string;
+  pickupCode?: string;
   itemCount?: number;
   pickupName?: string;
   pickupPhone?: string;
@@ -24,6 +25,7 @@ export function OrderConfirmationPage() {
 
   const [fallbackRef] = useState(() => `EMS-${Math.floor(1_000_000 + Math.random() * 9_000_000)}`);
   const orderRef = state.orderId || fallbackRef;
+  const pickupCode = state.pickupCode;
   const total = state.total ?? 0;
   const itemCount = state.itemCount ?? 1;
   const pickupName = state.pickupName ?? 'Customer';
@@ -79,6 +81,21 @@ export function OrderConfirmationPage() {
                   </p>
                 </div>
               </div>
+
+              {/* 6-Digit Counter Collection PIN */}
+              {pickupCode && (
+                <div className="bg-emerald-50/80 border-2 border-dashed border-emerald-300 rounded-2xl p-4 text-center">
+                  <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block">
+                    Counter Verification PIN
+                  </span>
+                  <div className="font-mono text-3xl font-extrabold tracking-widest text-emerald-900 my-1">
+                    {pickupCode}
+                  </div>
+                  <p className="text-[11px] text-emerald-700">
+                    Present this PIN at the dispensary counter when collecting your remedies.
+                  </p>
+                </div>
+              )}
 
               {/* Order Details */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-3">

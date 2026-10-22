@@ -115,6 +115,7 @@ export interface Order {
   // Click-and-Collect fields
   pickupContact?: PickupContact;
   pickupLocation?: string;
+  pickupCode?: string;
   timeline: OrderTimelineStep[];
   // Legacy shipping fields (kept for backward compat with existing pages/data)
   shipping?: number;

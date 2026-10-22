@@ -8,6 +8,9 @@ import {
   isValidHttpsUrl,
   computeRequestFingerprint,
   executeCreateOrder,
+  executeTransitionOrderStatus,
+  executeRecordPayment,
+  PERMITTED_STATUS_TRANSITIONS,
   MAX_DISTINCT_ITEMS_PER_ORDER,
 } from "../lib/orders.js";
 
@@ -57,10 +60,19 @@ class MockFirestore {
               data: () => (entry ? JSON.parse(JSON.stringify(entry.data)) : undefined),
             };
           },
+          async update(data) {
+            const entry = firestore._getDoc(collName, docId);
+            if (!entry) throw new Error(`Cannot update non-existent document ${collName}/${docId}`);
+            firestore._setDoc(collName, docId, { ...entry.data, ...data });
+          },
+          async set(data) {
+            firestore._setDoc(collName, docId, data);
+          },
         };
       },
     };
   }
+
 
   async runTransaction(updateFunction) {
     const maxAttempts = 5;
@@ -175,14 +187,22 @@ function seedDatabase(db) {
     isActive: false,
   });
 
-  // Seed sample customer cart
+  // Seed sample customer carts
   db._setDoc("carts", "user_123", {
     items: [
       { productId: "prod_1", quantity: 1 },
       { productId: "prod_2", quantity: 2 },
     ],
   });
+
+  db._setDoc("carts", "customer_alice", {
+    items: [
+      { productId: "prod_1", quantity: 1 },
+      { productId: "prod_2", quantity: 1 },
+    ],
+  });
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════════
    TEST SUITE: CLICK-AND-COLLECT DISPENSARY ORDER ENGINE
@@ -548,3 +568,413 @@ test("14. Reusing idempotency key with different request details is rejected", a
     /previously used with different order details/
   );
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PHASE 2: REAL-TIME ORDER & COLLECTION LIFECYCLE TESTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+test("15. Full permitted Click-and-Collect transition lifecycle: placed -> accepted -> preparing -> ready_for_pickup -> collected", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_full_cycle",
+  });
+
+  const orderId = orderRes.orderId;
+  const pickupCode = orderRes.pickupCode;
+  assert.ok(pickupCode && pickupCode.length === 6, "Must generate 6-digit pickup code");
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // placed -> accepted
+  const step1 = await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId,
+    newStatus: "accepted",
+    note: "Pharmacist accepted order",
+  });
+  assert.equal(step1.newStatus, "accepted");
+  assert.equal(db._getDoc("orders", orderId).data.orderStatus, "accepted");
+
+  // accepted -> preparing
+  const step2 = await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId,
+    newStatus: "preparing",
+    note: "Packing herbal powders into air-tight containers",
+  });
+  assert.equal(step2.newStatus, "preparing");
+  assert.equal(db._getDoc("orders", orderId).data.orderStatus, "preparing");
+
+  // preparing -> ready_for_pickup
+  const step3 = await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId,
+    newStatus: "ready_for_pickup",
+    note: "Order placed on pickup rack counter",
+  });
+  assert.equal(step3.newStatus, "ready_for_pickup");
+  assert.equal(db._getDoc("orders", orderId).data.orderStatus, "ready_for_pickup");
+
+  // ready_for_pickup -> collected (requires valid pickupCode)
+  const step4 = await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId,
+    newStatus: "collected",
+    pickupCode: pickupCode,
+    note: "Verified customer collection code",
+  });
+  assert.equal(step4.newStatus, "collected");
+  assert.equal(step4.pickupVerified, true);
+  assert.equal(db._getDoc("orders", orderId).data.orderStatus, "collected");
+});
+
+test("16. Out-of-sequence order transitions are rejected server-side", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_bad_sequence",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Attempting to jump directly from 'placed' to 'collected'
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "collected",
+        pickupCode: orderRes.pickupCode,
+      });
+    },
+    /Invalid status transition: Cannot move from 'placed' to 'collected'/
+  );
+
+  // Attempting to jump from 'placed' to 'ready_for_pickup'
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "ready_for_pickup",
+      });
+    },
+    /Invalid status transition: Cannot move from 'placed' to 'ready_for_pickup'/
+  );
+});
+
+test("17. Terminal states ('collected' and 'cancelled') cannot be transitioned further", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_terminal_check",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Cancel the order
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "cancelled",
+    note: "Customer cancelled",
+  });
+
+  // Attempt to transition out of 'cancelled'
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "accepted",
+      });
+    },
+    /Order is in terminal state 'cancelled' and cannot be transitioned further/
+  );
+});
+
+test("18. Customer can cancel their own order only while status is 'placed'", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_customer_cancel",
+  });
+
+  const customerCaller = { uid: "customer_alice", email: "alice@example.com", isAdmin: false };
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // 1. Advance to 'accepted' by admin
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "accepted",
+  });
+
+  // 2. Customer attempts to cancel order that has already been accepted
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: customerCaller,
+        orderId: orderRes.orderId,
+        newStatus: "cancelled",
+      });
+    },
+    /already been processed by the dispensary and cannot be cancelled online/
+  );
+
+  // 3. Customer attempts to set status to 'preparing' (must fail permission check)
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: customerCaller,
+        orderId: orderRes.orderId,
+        newStatus: "preparing",
+      });
+    },
+    /Customers can only request order cancellation/
+  );
+});
+
+
+test("19. Non-owner customer cannot cancel or touch another customer's order", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_unauthorized_user",
+  });
+
+  const impostorCaller = { uid: "customer_eve", email: "eve@attacker.com", isAdmin: false };
+
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: impostorCaller,
+        orderId: orderRes.orderId,
+        newStatus: "cancelled",
+      });
+    },
+    /You do not have permission to modify this order/
+  );
+});
+
+test("20. Collection PIN verification: missing or invalid pickup code is rejected", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_verify_code_fail",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "accepted" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "preparing" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "ready_for_pickup" });
+
+  // Missing pickupCode
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "collected",
+      });
+    },
+    /Invalid 6-digit collection code/
+  );
+
+  // Wrong pickupCode
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "collected",
+        pickupCode: "000000",
+      });
+    },
+    /Invalid 6-digit collection code/
+  );
+});
+
+test("21. Rate limiting: 5 failed collection attempts lock collection workflow", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_rate_limit",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "accepted" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "preparing" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "ready_for_pickup" });
+
+  // Fail 5 times
+  for (let i = 0; i < 5; i++) {
+    try {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "collected",
+        pickupCode: `99999${i}`,
+      });
+    } catch {
+      // Expected failure
+    }
+  }
+
+  // 6th attempt even with correct code must be locked
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        newStatus: "collected",
+        pickupCode: orderRes.pickupCode,
+      });
+    },
+    /Pickup verification locked due to excessive failed attempts/
+  );
+});
+
+test("22. Payment and fulfilment separation: recording in-person payment does NOT alter orderStatus", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_pay_separation",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Order is currently in 'placed' status
+  assert.equal(db._getDoc("orders", orderRes.orderId).data.orderStatus, "placed");
+  assert.equal(db._getDoc("orders", orderRes.orderId).data.paymentStatus, "unpaid");
+
+  // Admin records in-person cash payment
+  const payResult = await executeRecordPayment({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    note: "Customer paid in full via counter cash",
+  });
+
+  assert.equal(payResult.paymentStatus, "paid");
+
+  // Verify doc: paymentStatus is 'paid', but orderStatus is STILL 'placed' (not altered to collected!)
+  const updatedOrder = db._getDoc("orders", orderRes.orderId).data;
+  assert.equal(updatedOrder.paymentStatus, "paid");
+  assert.equal(updatedOrder.orderStatus, "placed", "Fulfilment status must remain strictly separate from payment status");
+  assert.equal(updatedOrder.paidConfirmedBy, "bob@ems.dispensary");
+});
+
+test("23. Payment recording constraints: non-admin cannot record payment, cannot pay cancelled order", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_pay_constraints",
+  });
+
+  const customerCaller = { uid: "customer_alice", email: "alice@example.com", isAdmin: false };
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Customer tries to record payment
+  await assert.rejects(
+    async () => {
+      await executeRecordPayment({
+        db,
+        caller: customerCaller,
+        orderId: orderRes.orderId,
+      });
+    },
+    /Only authorized dispensary staff can record payment receipt/
+  );
+
+  // Cancel order
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "cancelled",
+  });
+
+  // Admin tries to record payment on cancelled order
+  await assert.rejects(
+    async () => {
+      await executeRecordPayment({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+      });
+    },
+    /Cannot record payment on a cancelled order/
+  );
+});
+
+test("24. Order cancellation automatically restores catalog stock atomically", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  // Initial stock of prod_1 is 10
+  assert.equal(db._getDoc("products", "prod_1").data.stock, 10);
+
+  // Place order for items in customer_alice cart (1 unit of prod_1)
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_stock_restore",
+  });
+
+  // Stock is now 9 (10 - 1)
+  assert.equal(db._getDoc("products", "prod_1").data.stock, 9);
+
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Cancel the order
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "cancelled",
+    note: "Customer cancelled due to travel",
+  });
+
+  // Stock must be restored back to 10
+  assert.equal(db._getDoc("products", "prod_1").data.stock, 10, "Stock must be fully restored upon cancellation");
+  assert.equal(db._getDoc("orders", orderRes.orderId).data.inventoryRestored, true);
+});
+

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink, Trash2 } from 'lucide-react';
-import { getOrderById, deleteOrder } from '../services/orderService';
+import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink, Trash2, AlertTriangle, X } from 'lucide-react';
+import { getOrderById, deleteOrder, subscribeOrderDetail, cancelCustomerOrder } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import type { Order } from '../types';
 
@@ -14,23 +14,35 @@ export function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    if (orderId) {
-      getOrderById(orderId)
-        .then(res => {
-          if (active) setOrder(res);
-        })
-        .catch(console.error)
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    } else {
+    if (!orderId) {
       setLoading(false);
+      return;
     }
-    return () => { active = false; };
+
+    setLoading(true);
+    const unsubscribe = subscribeOrderDetail(
+      orderId,
+      (liveOrder) => {
+        setOrder(liveOrder);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Real-time order subscription error:', err);
+        // Fallback to one-time fetch
+        getOrderById(orderId)
+          .then((res) => setOrder(res))
+          .finally(() => setLoading(false));
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [orderId]);
 
   const handleDownloadInvoice = () => {
@@ -41,6 +53,21 @@ export function OrderDetailPage() {
   const handleViewLocation = () => {
     if (!order) return;
     toast.info(`Pickup Address: ${order.pickupLocation || 'EMS Herbal Dispensary, Main Road Health Complex'}`);
+  };
+
+  const handleCancelOrder = async () => {
+    if (!order) return;
+    setIsCancelling(true);
+    try {
+      await cancelCustomerOrder(order.id);
+      toast.success(`Order ${order.id} has been cancelled.`);
+      setShowCancelModal(false);
+    } catch (err: any) {
+      console.error('Failed to cancel order:', err);
+      toast.error(err.message || 'Could not cancel order. Please contact dispensary staff.');
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const handleDeleteOrder = async () => {
@@ -56,6 +83,7 @@ export function OrderDetailPage() {
       setIsDeleting(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -140,9 +168,18 @@ export function OrderDetailPage() {
 
           {/* Action CTAs */}
           <div className="flex flex-wrap items-center gap-3">
+            {order.status === 'placed' && (
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs"
+              >
+                <X size={15} />
+                <span>Cancel Order</span>
+              </button>
+            )}
             <button
               onClick={() => setShowDeleteModal(true)}
-              className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs"
             >
               <Trash2 size={15} />
               <span>Remove Order</span>
@@ -171,6 +208,21 @@ export function OrderDetailPage() {
           {/* Left Column (8 cols): Items & Timeline */}
           <div className="lg:col-span-8 space-y-6">
 
+            {/* 6-Digit Counter Collection PIN Banner */}
+            {order.pickupCode && (
+              <div className="bg-emerald-50/90 border-2 border-dashed border-emerald-400 rounded-2xl p-5 text-center shadow-xs">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block mb-1">
+                  Counter Collection Verification PIN
+                </span>
+                <div className="font-mono text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-950 my-1">
+                  {order.pickupCode}
+                </div>
+                <p className="text-xs text-emerald-700 mt-1">
+                  Please show this 6-digit PIN to the pharmacist at the dispensary counter to verify collection.
+                </p>
+              </div>
+            )}
+
             {/* Preparation & Pickup Progress Timeline */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
@@ -182,6 +234,7 @@ export function OrderDetailPage() {
                   {order.estimatedDelivery || 'Ready within 2–4 hours'}
                 </span>
               </div>
+
 
               <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
                 {(Array.isArray(order.timeline) ? order.timeline : []).map((step, idx) => (
@@ -359,6 +412,39 @@ export function OrderDetailPage() {
         </div>
 
       </div>
+
+      {/* Cancel Order Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <AlertTriangle size={22} />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Cancel Pending Order?</h3>
+              <p className="text-xs text-slate-500">
+                Are you sure you want to cancel order <span className="font-mono font-semibold text-slate-700">{order.id}</span>? Reserved medicines will be immediately returned to catalog inventory.
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                {isCancelling ? 'Cancelling...' : 'Yes, Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Order Confirmation Modal */}
       {showDeleteModal && (

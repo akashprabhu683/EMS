@@ -1,5 +1,6 @@
-import { collection, query, where, getDocs, doc, getDoc, orderBy, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { collection, query, where, getDocs, doc, getDoc, orderBy, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth, functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 import type { Order, OrderStatus } from '../types';
 
 export interface FirestoreOrderRecord {
@@ -109,6 +110,7 @@ export function formatFirestoreOrder(docId: string, data: any): Order {
     paymentStatus: (data.paymentStatus as any) || 'unpaid',
     pickupContact: data.pickupContact || { fullName: customerName, phone: customerPhone },
     pickupLocation,
+    pickupCode: data.pickupCode ? String(data.pickupCode) : undefined,
     paymentMethod: {
       type: 'click_and_collect',
       last4: 'PAY AT SHOP',
@@ -225,3 +227,108 @@ export async function clearAllUserOrders(uid: string): Promise<number> {
   await Promise.all(deletePromises);
   return snap.docs.length;
 }
+
+/**
+ * Subscribes to real-time updates for a customer's orders list.
+ * Live changes (e.g. accepted, preparing, ready_for_pickup) stream immediately without refresh.
+ */
+export function subscribeUserOrders(
+  uid: string,
+  onOrders: (orders: Order[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  if (!uid) {
+    onOrders([]);
+    return () => {};
+  }
+
+  let fallbackUnsub: (() => void) | null = null;
+
+  try {
+    const q = query(
+      collection(db, 'orders'),
+      where('userId', '==', uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map((d) => formatFirestoreOrder(d.id, d.data()));
+        onOrders(orders);
+      },
+      (err) => {
+        console.warn('Real-time customer orders query failed, falling back to base filter:', err);
+        fallbackUnsub = onSnapshot(
+          query(collection(db, 'orders'), where('userId', '==', uid)),
+          (snap) => {
+            const orders = snap.docs.map((d) => formatFirestoreOrder(d.id, d.data()));
+            onOrders(orders);
+          },
+          onError
+        );
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      if (fallbackUnsub) fallbackUnsub();
+    };
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribes to real-time status updates for a single order (tracking page).
+ */
+export function subscribeOrderDetail(
+  orderId: string,
+  onOrder: (order: Order | null) => void,
+  onError?: (err: Error) => void
+): () => void {
+  if (!orderId) {
+    onOrder(null);
+    return () => {};
+  }
+
+  try {
+    const docRef = doc(db, 'orders', orderId);
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        if (!snap.exists()) {
+          onOrder(null);
+        } else {
+          onOrder(formatFirestoreOrder(snap.id, snap.data()));
+        }
+      },
+      (err) => {
+        console.error(`Real-time order subscription error for #${orderId}:`, err);
+        if (onError) onError(err);
+      }
+    );
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+/**
+ * Cancels an order requested by the customer.
+ * Permitted only if the order status is currently 'placed'.
+ */
+export async function cancelCustomerOrder(orderId: string, note?: string): Promise<void> {
+  const updateFn = httpsCallable<
+    { orderId: string; newStatus: string; note?: string },
+    { success: boolean }
+  >(functions, 'updateOrderStatus');
+
+  await updateFn({
+    orderId,
+    newStatus: 'cancelled',
+    note: note || 'Customer requested order cancellation',
+  });
+}
+

@@ -37,6 +37,8 @@ export interface AdminOrder {
   userId: string;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
+  pickupCode?: string;
+  pickupAttempts?: number;
   pickupContact: {
     fullName: string;
     phone: string;
@@ -69,6 +71,8 @@ function docToAdminOrder(id: string, data: DocumentData): AdminOrder {
     userId: String(data.userId ?? ''),
     orderStatus: (data.orderStatus ?? 'placed') as OrderStatus,
     paymentStatus: (data.paymentStatus ?? 'unpaid') as PaymentStatus,
+    pickupCode: data.pickupCode ? String(data.pickupCode) : undefined,
+    pickupAttempts: Number(data.pickupAttempts ?? 0),
     pickupContact: {
       fullName: String(data.pickupContact?.fullName ?? data.shippingAddress?.name ?? 'Unknown'),
       phone: String(data.pickupContact?.phone ?? data.shippingAddress?.phone ?? '—'),
@@ -121,7 +125,6 @@ export function subscribeAdminOrders(
       },
       (err) => {
         console.warn('Realtime orders query error, falling back to base collection listener:', err);
-        // Fallback without orderBy if index is building or absent
         fallbackUnsub = onSnapshot(
           collection(db, 'orders'),
           (snap) => {
@@ -144,44 +147,44 @@ export function subscribeAdminOrders(
   }
 }
 
+export interface UpdateOrderStatusOptions {
+  pickupCode?: string;
+  note?: string;
+}
+
+/**
+ * Updates an order status with server-side validation and pickup verification.
+ */
 export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
-  note?: string
+  options?: UpdateOrderStatusOptions | string
 ): Promise<void> {
-  const adminBackendUrl = import.meta.env.VITE_ADMIN_API_URL;
+  const opts: UpdateOrderStatusOptions =
+    typeof options === 'string' ? { note: options } : options || {};
 
-  if (adminBackendUrl) {
-    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-    const res = await fetch(
-      `${adminBackendUrl.replace(/\/$/, '')}/api/admin/orders/${orderId}/status`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ orderStatus: newStatus, note }),
-      }
-    );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
+  // 1. Try authoritative Cloud Function
+  try {
+    const { httpsCallable } = await import('firebase/functions');
+    const { functions } = await import('../firebase');
+    const updateFn = httpsCallable(functions, 'updateOrderStatus');
+    await updateFn({
+      orderId,
+      newStatus,
+      pickupCode: opts.pickupCode,
+      note: opts.note,
+    });
     return;
+  } catch (fnErr: any) {
+    console.warn('updateOrderStatus Cloud Function failed, checking Express / direct fallback:', fnErr);
+    // If it's a domain logic validation error (e.g. invalid code or illegal transition), rethrow immediately
+    if (fnErr.code && fnErr.code !== 'functions/not-found' && fnErr.code !== 'functions/unavailable') {
+      throw new Error(fnErr.message || 'Failed to update order status');
+    }
   }
 
-  // Fallback: direct Firestore write (admin only)
-  const orderRef = doc(db, 'orders', orderId);
-  await updateDoc(orderRef, {
-    orderStatus: newStatus,
-    updatedAt: serverTimestamp(),
-  });
-}
-
-export async function markOrderPaid(orderId: string, note?: string): Promise<void> {
+  // 2. Fallback to Express backend if configured
   const adminBackendUrl = import.meta.env.VITE_ADMIN_API_URL;
-
   if (adminBackendUrl) {
     const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
     const res = await fetch(
@@ -193,9 +196,9 @@ export async function markOrderPaid(orderId: string, note?: string): Promise<voi
           Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
-          paymentStatus: 'paid',
-          orderStatus: 'collected',
-          note: note || 'Payment confirmed in person at dispensary',
+          orderStatus: newStatus,
+          pickupCode: opts.pickupCode,
+          note: opts.note,
         }),
       }
     );
@@ -206,11 +209,65 @@ export async function markOrderPaid(orderId: string, note?: string): Promise<voi
     return;
   }
 
-  // Fallback: direct Firestore write
+  // 3. Fallback: direct Firestore write (admin only)
   const orderRef = doc(db, 'orders', orderId);
   await updateDoc(orderRef, {
-    paymentStatus: 'paid',
-    orderStatus: 'collected',
+    orderStatus: newStatus,
     updatedAt: serverTimestamp(),
   });
 }
+
+/**
+ * Records receipt of in-person Cash/UPI payment at the dispensary counter.
+ * Strictly separates payment from fulfilment (does NOT change orderStatus).
+ */
+export async function markOrderPaid(orderId: string, note?: string): Promise<void> {
+  // 1. Try authoritative Cloud Function
+  try {
+    const { httpsCallable } = await import('firebase/functions');
+    const { functions } = await import('../firebase');
+    const recordPaymentFn = httpsCallable(functions, 'recordOrderPayment');
+    await recordPaymentFn({
+      orderId,
+      note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
+    });
+    return;
+  } catch (fnErr: any) {
+    console.warn('recordOrderPayment Cloud Function failed, checking Express / direct fallback:', fnErr);
+    if (fnErr.code && fnErr.code !== 'functions/not-found' && fnErr.code !== 'functions/unavailable') {
+      throw new Error(fnErr.message || 'Failed to record payment');
+    }
+  }
+
+  // 2. Fallback to Express backend if configured
+  const adminBackendUrl = import.meta.env.VITE_ADMIN_API_URL;
+  if (adminBackendUrl) {
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+    const res = await fetch(
+      `${adminBackendUrl.replace(/\/$/, '')}/api/admin/orders/${orderId}/payment`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
+        }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return;
+  }
+
+  // 3. Fallback: direct Firestore write (preserves fulfilment status intact)
+  const orderRef = doc(db, 'orders', orderId);
+  await updateDoc(orderRef, {
+    paymentStatus: 'paid',
+    updatedAt: serverTimestamp(),
+  });
+}
+

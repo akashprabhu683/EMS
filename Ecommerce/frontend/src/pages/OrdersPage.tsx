@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import { Package, Search, ChevronRight, CheckCircle2, Clock, ArrowRight, ShieldCheck, MapPin, Store, AlertCircle, Trash2, AlertTriangle, X } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import { getUserOrders, deleteOrder, clearAllUserOrders } from '../services/orderService';
+import {
+  getUserOrders,
+  subscribeUserOrders,
+  deleteOrder,
+  clearAllUserOrders,
+  cancelCustomerOrder,
+} from '../services/orderService';
 import type { OrderStatus, Order } from '../types';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
@@ -15,8 +21,10 @@ export function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [showClearAllModal, setShowClearAllModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const toast = useToast();
 
   const handleConfirmDeleteSingle = async () => {
@@ -63,26 +71,47 @@ export function OrdersPage() {
     });
   }, [orders]);
 
-  useEffect(() => {
-    let active = true;
-    if (user?.id) {
-      setLoading(true);
-      getUserOrders(user.id)
-        .then(res => {
-          if (active) setOrders(Array.isArray(res) ? res : []);
-        })
-        .catch(err => {
-          console.error('Failed to load orders:', err);
-          if (active) toast.error('Could not load your orders. Please try again.');
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    } else {
-      setLoading(false);
+  const handleConfirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    setIsCancelling(true);
+    try {
+      await cancelCustomerOrder(orderToCancel.id);
+      toast.success(`Order ${orderToCancel.id} has been cancelled.`);
+      setOrderToCancel(null);
+    } catch (err: any) {
+      console.error('Failed to cancel order:', err);
+      toast.error(err.message || 'Could not cancel order. Please contact dispensary staff.');
+    } finally {
+      setIsCancelling(false);
     }
-    return () => { active = false; };
+  };
+
+  useEffect(() => {
+    if (!user?.id) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const unsubscribe = subscribeUserOrders(
+      user.id,
+      (liveOrders) => {
+        setOrders(Array.isArray(liveOrders) ? liveOrders : []);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Failed to stream real-time orders:', err);
+        toast.error('Real-time connection interrupted. Showing cached orders.');
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [user?.id]);
+
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -424,7 +453,7 @@ export function OrdersPage() {
                         </div>
 
                         {/* Dispensary Pickup column */}
-                        <div className="md:col-span-4 bg-emerald-50/60 border border-emerald-100 rounded-xl p-3.5 text-xs space-y-1.5">
+                        <div className="md:col-span-4 bg-emerald-50/60 border border-emerald-100 rounded-xl p-3.5 text-xs space-y-2">
                           <div className="flex items-center gap-1.5 text-emerald-800 font-bold mb-1">
                             <Store size={14} className="text-emerald-700" />
                             <span>Click & Collect Pickup</span>
@@ -432,6 +461,16 @@ export function OrdersPage() {
                           <div className="text-slate-600 text-[11px]">
                             {order.pickupLocation || 'EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex'}
                           </div>
+
+                          {order.pickupCode && (
+                            <div className="bg-emerald-100/80 border border-emerald-300/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Pickup PIN</span>
+                              <span className="font-mono text-xs font-extrabold tracking-widest text-emerald-950 bg-white px-2 py-0.5 rounded shadow-2xs">
+                                {order.pickupCode}
+                              </span>
+                            </div>
+                          )}
+
                           <div className="flex justify-between items-center text-slate-500 pt-1.5 border-t border-emerald-200/50">
                             <span>Status:</span>
                             <span className="text-emerald-900 font-semibold">{order.estimatedDelivery || 'Within 2–4 hours'}</span>
@@ -447,9 +486,20 @@ export function OrdersPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {order.status === 'placed' && (
+                            <button
+                              onClick={() => setOrderToCancel(order)}
+                              className="inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors"
+                              title="Cancel pending order"
+                            >
+                              <X size={13} />
+                              <span>Cancel Order</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => setOrderToDelete(order)}
-                            className="inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors"
+                            className="inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
                             title="Remove this order from history"
                           >
                             <Trash2 size={13} />
@@ -474,6 +524,39 @@ export function OrdersPage() {
         )}
 
       </div>
+
+      {/* Cancel Order Confirmation Modal */}
+      {orderToCancel && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 mx-auto">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="font-display font-bold text-base text-slate-900">Cancel Order?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to cancel order <span className="font-mono font-bold text-slate-700">#{orderToCancel.id}</span>? Reserved stock will be returned to the dispensary catalog.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setOrderToCancel(null)}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 px-3 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleConfirmCancelOrder}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 px-3 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors shadow-2xs disabled:opacity-50"
+              >
+                {isCancelling ? 'Cancelling…' : 'Yes, Cancel Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Single Order Confirmation Modal */}
       {orderToDelete && (

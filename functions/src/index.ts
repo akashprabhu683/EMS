@@ -8,7 +8,11 @@ admin.initializeApp();
 setGlobalOptions({ maxInstances: 10, region: "us-central1" });
 
 // 1. Order Management & Checkout
-export { createOrder } from "./orders.js";
+export {
+  createOrder,
+  updateOrderStatus,
+  recordOrderPayment,
+} from "./orders.js";
 
 // 2. Automated Inventory Deduction & Restoration
 export {

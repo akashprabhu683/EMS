@@ -164,6 +164,7 @@ export function CheckoutPage() {
 
       // 2. Call trusted createOrder Cloud Function (enforces atomic inventory deduction & transaction)
       let orderPlaced = false;
+      let pickupCode = '';
       try {
         const createOrderFn = httpsCallable<
           { pickupContact: any; idempotencyKey: string; paymentMethod: string },
@@ -173,6 +174,7 @@ export function CheckoutPage() {
             subtotal: number;
             orderStatus: string;
             paymentStatus: string;
+            pickupCode?: string;
             itemCount: number;
             pickupLocation: string;
           }
@@ -190,6 +192,7 @@ export function CheckoutPage() {
           subtotalPaise = result.data.subtotal;
           orderStatus = result.data.orderStatus;
           paymentStatus = result.data.paymentStatus;
+          pickupCode = result.data.pickupCode || '';
           itemCount = result.data.itemCount;
           orderPlaced = true;
         }
@@ -259,11 +262,14 @@ export function CheckoutPage() {
           subtotal: subtotalPaise / 100,
           orderStatus,
           paymentStatus,
+          pickupCode,
           itemCount,
           pickupName: pickupContact.fullName,
           pickupPhone: pickupContact.phone,
         },
       });
+
+
     } catch (err: any) {
       toast.error(err.message || 'Failed to place order. Please try again.');
     } finally {

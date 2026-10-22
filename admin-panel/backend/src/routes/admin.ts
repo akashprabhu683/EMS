@@ -141,24 +141,32 @@ adminRouter.get('/orders', requireAdminAuth, async (req: AdminAuthenticatedReque
 
 /**
  * PATCH /api/admin/orders/:orderId/status
- * Updates order status (e.g. confirmed -> processing -> shipped -> delivered -> cancelled)
+ * Updates order status according to permitted lifecycle transitions.
+ * Permitted: placed -> accepted -> preparing -> ready_for_pickup -> collected
+ * Cancellation allowed from any active state.
+ * Terminal states: collected, cancelled.
  */
 adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
   const { orderId } = req.params;
-  const { status, paymentStatus, note } = req.body;
-  const adminEmail = req.adminUser?.email || 'admin';
+  const targetStatus = req.body.orderStatus || req.body.status;
+  const pickupCode = req.body.pickupCode;
+  const note = req.body.note;
+  const adminEmail = req.adminUser?.email || req.adminUser?.uid || 'admin';
 
-  const validStatuses = ['placed', 'accepted', 'preparing', 'ready_for_pickup', 'collected', 'cancelled', 'confirmed'];
-  if (status && !validStatuses.includes(status)) {
+  const validStatuses = ['placed', 'accepted', 'preparing', 'ready_for_pickup', 'collected', 'cancelled'];
+  if (!targetStatus || !validStatuses.includes(targetStatus)) {
     res.status(400).json({ error: `Invalid order status. Allowed: ${validStatuses.join(', ')}` });
     return;
   }
 
-  const validPaymentStatuses = ['unpaid', 'paid', 'refunded'];
-  if (paymentStatus && !validPaymentStatuses.includes(paymentStatus)) {
-    res.status(400).json({ error: `Invalid payment status. Allowed: ${validPaymentStatuses.join(', ')}` });
-    return;
-  }
+  const PERMITTED_TRANSITIONS: Record<string, string[]> = {
+    placed: ['accepted', 'cancelled'],
+    accepted: ['preparing', 'cancelled'],
+    preparing: ['ready_for_pickup', 'cancelled'],
+    ready_for_pickup: ['collected', 'cancelled'],
+    collected: [],
+    cancelled: [],
+  };
 
   try {
     const orderRef = adminDb.collection('orders').doc(orderId);
@@ -170,39 +178,165 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
     }
 
     const currentOrder = snap.data() || {};
-    const updatePayload: Record<string, any> = {
-      updatedAt: FieldValue.serverTimestamp(),
-    };
+    const currentStatus = currentOrder.orderStatus || 'placed';
 
-    if (status) {
-      updatePayload.orderStatus = status;
+    if (currentStatus === targetStatus) {
+      res.json({ success: true, orderId, updatedStatus: targetStatus });
+      return;
     }
 
-    if (paymentStatus) {
-      updatePayload.paymentStatus = paymentStatus;
-      if (paymentStatus === 'paid') {
-        updatePayload.paidAt = FieldValue.serverTimestamp();
-        updatePayload.paidConfirmedBy = adminEmail;
+    if (currentStatus === 'collected' || currentStatus === 'cancelled') {
+      res.status(400).json({
+        error: `Order is in terminal state '${currentStatus}' and cannot be transitioned further.`,
+      });
+      return;
+    }
+
+    const allowed = PERMITTED_TRANSITIONS[currentStatus] || [];
+    if (!allowed.includes(targetStatus)) {
+      res.status(400).json({
+        error: `Invalid transition from '${currentStatus}' to '${targetStatus}'. Allowed: ${allowed.join(', ') || 'none'}`,
+      });
+      return;
+    }
+
+    // Collection verification workflow
+    if (targetStatus === 'collected') {
+      const attempts = Number(currentOrder.pickupAttempts || 0);
+      const maxAttempts = Number(currentOrder.maxPickupAttempts || 5);
+
+      if (attempts >= maxAttempts) {
+        res.status(400).json({
+          error: 'Pickup verification locked due to excessive failed attempts (>5). Verify identity manually.',
+        });
+        return;
+      }
+
+      const cleanCode = String(pickupCode || '').trim();
+      const expectedCode = String(currentOrder.pickupCode || '').trim();
+
+      if (!cleanCode || cleanCode !== expectedCode) {
+        await orderRef.update({
+          pickupAttempts: attempts + 1,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        const remaining = Math.max(0, maxAttempts - (attempts + 1));
+        res.status(400).json({
+          error: `Invalid 6-digit collection code. ${remaining} attempts remaining before lock.`,
+        });
+        return;
+      }
+    }
+
+    // Inventory restoration on cancellation
+    if (targetStatus === 'cancelled' && currentOrder.inventoryDeducted && !currentOrder.inventoryRestored) {
+      const items = Array.isArray(currentOrder.items) ? currentOrder.items : [];
+      for (const item of items) {
+        if (!item.productId) continue;
+        const prodRef = adminDb.collection('products').doc(item.productId);
+        const prodSnap = await prodRef.get();
+        if (prodSnap.exists) {
+          const currentStock = Number(prodSnap.data()?.stock ?? 0);
+          const restoreQty = Number(item.quantity ?? 1);
+          await prodRef.update({
+            stock: currentStock + restoreQty,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
       }
     }
 
     const historyEntry = {
-      status: status || currentOrder.orderStatus || 'updated',
-      paymentStatus: paymentStatus || currentOrder.paymentStatus || 'unpaid',
-      updatedBy: adminEmail,
+      status: targetStatus,
       timestamp: new Date().toISOString(),
-      note: note || `Status updated by ${adminEmail}`,
+      actor: 'admin',
+      actorId: adminEmail,
+      note: note || (targetStatus === 'collected' ? 'Verified collection code at dispensary counter' : `Status advanced to ${targetStatus}`),
     };
 
-    updatePayload.statusHistory = FieldValue.arrayUnion(historyEntry);
+    const updatePayload: Record<string, any> = {
+      orderStatus: targetStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+      statusHistory: FieldValue.arrayUnion(historyEntry),
+    };
+
+    if (targetStatus === 'collected') {
+      updatePayload.collectedAt = FieldValue.serverTimestamp();
+      updatePayload.collectedVerifiedBy = adminEmail;
+    }
+
+    if (targetStatus === 'cancelled') {
+      updatePayload.cancelledAt = FieldValue.serverTimestamp();
+      updatePayload.cancelledBy = adminEmail;
+      updatePayload.cancelReason = note || 'Admin cancelled';
+      if (currentOrder.inventoryDeducted && !currentOrder.inventoryRestored) {
+        updatePayload.inventoryRestored = true;
+        updatePayload.inventoryRestoredAt = FieldValue.serverTimestamp();
+      }
+    }
 
     await orderRef.update(updatePayload);
-    res.json({ success: true, orderId, updatedStatus: status, updatedPaymentStatus: paymentStatus });
+    res.json({ success: true, orderId, updatedStatus: targetStatus });
   } catch (err: any) {
     console.error('Failed to update order status:', err);
     res.status(500).json({ error: 'Failed to update order status.' });
   }
 });
+
+/**
+ * PATCH /api/admin/orders/:orderId/payment
+ * Records in-person payment (Cash/UPI) at dispensary counter.
+ * Fulfilment status ('orderStatus') is strictly preserved and not modified.
+ */
+adminRouter.patch('/orders/:orderId/payment', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
+  const { orderId } = req.params;
+  const { note } = req.body;
+  const adminEmail = req.adminUser?.email || req.adminUser?.uid || 'admin';
+
+  try {
+    const orderRef = adminDb.collection('orders').doc(orderId);
+    const snap = await orderRef.get();
+
+    if (!snap.exists) {
+      res.status(404).json({ error: `Order ${orderId} not found.` });
+      return;
+    }
+
+    const currentOrder = snap.data() || {};
+
+    if (currentOrder.orderStatus === 'cancelled') {
+      res.status(400).json({ error: 'Cannot record payment on a cancelled order.' });
+      return;
+    }
+
+    if (currentOrder.paymentStatus === 'paid') {
+      res.json({ success: true, orderId, paymentStatus: 'paid' });
+      return;
+    }
+
+    const historyEntry = {
+      paymentStatus: 'paid',
+      timestamp: new Date().toISOString(),
+      actor: 'admin',
+      actorId: adminEmail,
+      note: note || 'In-person payment (Cash / UPI) confirmed received at dispensary counter.',
+    };
+
+    await orderRef.update({
+      paymentStatus: 'paid',
+      paidAt: FieldValue.serverTimestamp(),
+      paidConfirmedBy: adminEmail,
+      statusHistory: FieldValue.arrayUnion(historyEntry),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    res.json({ success: true, orderId, paymentStatus: 'paid' });
+  } catch (err: any) {
+    console.error('Failed to record order payment:', err);
+    res.status(500).json({ error: 'Failed to record order payment.' });
+  }
+});
+
 
 /**
  * POST /api/admin/set-claim
