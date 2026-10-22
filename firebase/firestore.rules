@@ -73,10 +73,18 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Admin Management & Invitations
+    // 4. Admin Management, Revocations & Invitations
     // ─────────────────────────────────────────────────────────────
     match /admins/{uid} {
-      allow read, write: if isAdmin();
+      // Admins can read all; authenticated user can read their own admin doc to observe live revocation
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    match /admin_revocations/{uid} {
+      // Real-time broadcast signal for revoked administrators
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow write: if isAdmin();
     }
 
     match /admin_invitations/{email} {

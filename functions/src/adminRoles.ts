@@ -462,6 +462,14 @@ export const revokeAdminRole = onCall(async (request) => {
       });
 
       await db.collection("admins").doc(targetUid).delete();
+
+      // Write immediate real-time revocation marker document
+      await db.collection("admin_revocations").doc(targetUid).set({
+        uid: targetUid,
+        email: targetEmail,
+        revokedAt: FieldValue.serverTimestamp(),
+        revokedBy: request.auth?.token.email || "superadmin",
+      }).catch(() => {});
     }
 
     if (targetEmail) {

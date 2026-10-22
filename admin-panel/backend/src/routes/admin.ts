@@ -577,6 +577,14 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
         admin: false,
       });
       await adminDb.collection('admins').doc(targetUid).delete();
+
+      // Write immediate real-time revocation marker document
+      await adminDb.collection('admin_revocations').doc(targetUid).set({
+        uid: targetUid,
+        email: cleanEmail,
+        revokedAt: FieldValue.serverTimestamp(),
+        revokedBy: callerEmail,
+      }).catch(() => {});
     }
 
     await adminDb.collection('admin_invitations').doc(cleanEmail).delete().catch(() => {});

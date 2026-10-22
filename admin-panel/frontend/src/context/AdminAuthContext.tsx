@@ -78,25 +78,31 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for Firebase Auth state changes
   useEffect(() => {
-    let firestoreUnsub: (() => void) | null = null;
+    let adminDocUnsub: (() => void) | null = null;
+    let revocationDocUnsub: (() => void) | null = null;
 
     const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setRawUser(firebaseUser);
-      if (firestoreUnsub) {
-        firestoreUnsub();
-        firestoreUnsub = null;
+
+      if (adminDocUnsub) {
+        adminDocUnsub();
+        adminDocUnsub = null;
+      }
+      if (revocationDocUnsub) {
+        revocationDocUnsub();
+        revocationDocUnsub = null;
       }
 
       if (firebaseUser) {
         await verifyAdminClaims(firebaseUser);
 
-        // Real-time live listener: If the owner revokes this admin, Firestore /admins/{uid} is deleted.
-        // This listener fires instantly without needing page reload!
-        firestoreUnsub = onSnapshot(
+        // Listener 1: Watch the admin's role document at /admins/{uid}
+        // If the owner deletes this document, it immediately triggers snapshot.exists() === false!
+        adminDocUnsub = onSnapshot(
           doc(db, 'admins', firebaseUser.uid),
           (snapshot) => {
             if (!snapshot.exists()) {
-              // Admin document deleted by owner! Revocation is immediate.
+              // Admin role document deleted by owner! Revoke instantly without waiting for token expiry.
               setIsAdmin(false);
               setIsRevoked(true);
               setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
@@ -107,7 +113,28 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
             }
           },
           (error) => {
-            console.warn('Real-time admin role listener warning:', error);
+            // Permission denied error occurs if firestore rules cut off access — which also signifies revocation!
+            if (error.code === 'permission-denied') {
+              setIsAdmin(false);
+              setIsRevoked(true);
+              setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
+            }
+          }
+        );
+
+        // Listener 2: Watch dedicated real-time revocation broadcast signal at /admin_revocations/{uid}
+        // When owner revokes access, this document is created and fires instantly.
+        revocationDocUnsub = onSnapshot(
+          doc(db, 'admin_revocations', firebaseUser.uid),
+          (snapshot) => {
+            if (snapshot.exists()) {
+              setIsAdmin(false);
+              setIsRevoked(true);
+              setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
+            }
+          },
+          (err) => {
+            console.warn('Revocation broadcast listener note:', err.message);
           }
         );
       } else {
@@ -120,9 +147,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       authUnsubscribe();
-      if (firestoreUnsub) {
-        firestoreUnsub();
-      }
+      if (adminDocUnsub) adminDocUnsub();
+      if (revocationDocUnsub) revocationDocUnsub();
     };
   }, [verifyAdminClaims]);
 
