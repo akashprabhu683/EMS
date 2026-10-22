@@ -268,10 +268,13 @@ adminRouter.get('/invitations', requireAdminAuth, async (_req: AdminAuthenticate
     const invitations: any[] = [];
     invitesSnap.forEach((doc) => {
       const data = doc.data();
+      const status = data.status || 'pending';
+      if (status !== 'pending') return;
+
       invitations.push({
         id: doc.id,
         email: data.email || doc.id,
-        status: data.status || 'pending',
+        status: 'pending',
         invitedBy: data.invitedBy || 'Admin',
         invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : data.invitedAt || null,
         expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,

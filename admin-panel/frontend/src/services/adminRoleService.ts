@@ -92,12 +92,22 @@ export async function getAdminsAndInvitations(): Promise<{
   });
 
   const invitations: AdminInvitation[] = [];
+  const activeAdminEmails = new Set(admins.map((a) => a.email.toLowerCase()));
+
   invitesSnap.forEach((d) => {
     const data = d.data();
+    const invEmail = (data.email || d.id).toLowerCase();
+    const status = data.status || 'pending';
+
+    // If invitation has status accepted OR if the email is already in active admins, don't show as pending
+    if (status !== 'pending' || activeAdminEmails.has(invEmail)) {
+      return;
+    }
+
     invitations.push({
       id: d.id,
       email: data.email || d.id,
-      status: data.status || 'pending',
+      status: 'pending',
       invitedBy: data.invitedBy || 'Admin',
       invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : String(data.invitedAt || ''),
       expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,

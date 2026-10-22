@@ -58,3 +58,33 @@ body {
 .duration-200 {
   animation-duration: 200ms;
 }
+
+@keyframes pop-dismiss {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(0.98);
+    opacity: 1;
+  }
+  35% {
+    /* idle pause before moving out */
+    transform: scale(1) translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.92) translateX(120%);
+    opacity: 0;
+  }
+}
+
+.animate-pop-slide-right {
+  animation: pop-dismiss 0.85s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  pointer-events: none;
+}
+

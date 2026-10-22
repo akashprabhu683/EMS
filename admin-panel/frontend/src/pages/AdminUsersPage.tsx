@@ -13,6 +13,7 @@ import {
   Copy,
   Send,
   CheckCircle2,
+  Check,
 } from 'lucide-react';
 import {
   getAdminsAndInvitations,
@@ -33,6 +34,15 @@ export function AdminUsersPage() {
   const [invitations, setInvitations] = useState<AdminInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [dismissedAcceptedEmails, setDismissedAcceptedEmails] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('dismissed_accepted_admin_cards');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,12 +53,38 @@ export function AdminUsersPage() {
   // Revoke confirmation modal state
   const [revokeTarget, setRevokeTarget] = useState<{ uid?: string; email: string } | null>(null);
 
+  // Dismiss card with pop and slide-out right animation:
+  // Immediately triggers pop animation, stays idle for 0.3s, slides right out of screen, then unmounts
+  const handleDismissAcceptedCard = (email: string) => {
+    const clean = email.toLowerCase();
+    setDismissingId(clean);
+
+    setTimeout(() => {
+      setDismissedAcceptedEmails((prev) => {
+        const next = new Set(prev);
+        next.add(clean);
+        try {
+          localStorage.setItem('dismissed_accepted_admin_cards', JSON.stringify(Array.from(next)));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+      setDismissingId(null);
+    }, 850);
+  };
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getAdminsAndInvitations();
       setAdmins(data.admins);
-      setInvitations(data.invitations);
+      // Filter out any invitation whose email is already an active administrator
+      const activeAdminEmails = new Set(data.admins.map((a) => a.email.toLowerCase()));
+      const pendingInvites = data.invitations.filter(
+        (inv) => inv.status === 'pending' && !activeAdminEmails.has(inv.email.toLowerCase())
+      );
+      setInvitations(pendingInvites);
     } catch (err: any) {
       toast.error(err.message || 'Failed to load administrator list. Check your connection and try again.');
     } finally {
@@ -190,7 +226,9 @@ export function AdminUsersPage() {
             <Clock size={18} className="text-amber-500" />
           </div>
           <div className="text-2xl font-black text-slate-900 font-display">{invitations.length}</div>
-          <p className="text-xs text-slate-500 mt-1">Waiting for the invitee to accept via email</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {invitations.length === 0 ? 'All sent invitations have been accepted' : 'Waiting for the invitee to accept via email'}
+          </p>
         </div>
 
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
@@ -204,6 +242,64 @@ export function AdminUsersPage() {
           </span>
         </div>
       </div>
+
+      {/* Accepted Invitations Notifications — Smooth Pop & Slide-out Right on Click */}
+      {admins
+        .filter((adm) => {
+          const cleanEmail = adm.email.toLowerCase();
+          // Exclude initial_setup and already dismissed cards
+          return (
+            adm.grantedBy !== 'initial_setup' &&
+            !dismissedAcceptedEmails.has(cleanEmail)
+          );
+        })
+        .map((adm) => {
+          const cleanEmail = adm.email.toLowerCase();
+          const isDismissing = dismissingId === cleanEmail;
+          return (
+            <div
+              key={`accepted-${adm.uid}`}
+              className={`relative overflow-hidden bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 sm:p-5 shadow-xs transition-all ${
+                isDismissing ? 'animate-pop-slide-right' : 'animate-in fade-in'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <CheckCircle2 size={22} className="stroke-[2.5]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-bold text-slate-900 font-display">
+                        Invitation Accepted!
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200">
+                        <Check size={10} className="stroke-[3]" />
+                        Active Admin
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5 truncate">
+                      <span className="font-semibold text-slate-800 font-mono">{adm.email}</span> ({adm.displayName}) has accepted administrator privileges.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleDismissAcceptedCard(adm.email)}
+                    disabled={isDismissing}
+                    className="group flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-300 hover:border-emerald-600 text-xs font-bold rounded-xl shadow-2xs hover:shadow-xs transition-all transform active:scale-95 cursor-pointer"
+                    title="Acknowledge and dismiss notification"
+                  >
+                    <Check size={14} className="stroke-[3] text-emerald-600 group-hover:text-white transition-colors" />
+                    <span>✓</span>
+                    <span className="hidden sm:inline">Acknowledge</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
       {/* Active Administrators Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
