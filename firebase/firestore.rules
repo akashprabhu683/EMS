@@ -53,16 +53,26 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      // Read: owner or admin
+      // Read: Customer owner can read their own orders; Admins can read all orders
       allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
 
-      // Allow authenticated customer to create their own order
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // SECURITY LOCKDOWN (PHASE 1):
+      // Direct client creation is blocked. All orders MUST be created via the trusted
+      // serverless `createOrder` Cloud Function which performs atomic inventory reservation,
+      // idempotency checking, trusted price calculation in paise, and cart clearing.
+      allow create: if false;
 
-      // Allow admin to advance order status, or owner to update/cancel order
-      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      // Update: Admins can update status; Owner cannot change totals or status arbitrarily
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        // Customer can only cancel their own order if it's still 'placed'
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orderStatus', 'statusHistory', 'updatedAt']) &&
+        request.resource.data.orderStatus == 'cancelled' &&
+        resource.data.orderStatus == 'placed'
+      );
 
-      // Allow user or admin to delete order from order history
+      // Customer can delete from their personal order history; Admins can delete
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
 
       // Notifications subcollection

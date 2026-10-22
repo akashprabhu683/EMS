@@ -9,8 +9,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { collection, addDoc, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { collection, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '../firebase';
 
 const STEPS = ['Cart Review', 'Pickup Details', 'Confirm & Place'];
 
@@ -148,42 +149,98 @@ export function CheckoutPage() {
       }
 
       const calculatedTotalPaise = Math.round(totalPrice * 100);
-      const orderItems = items.map(item => ({
-        productId: item.product.id || '',
-        name: item.product.name || 'Herbal Product',
-        unitPrice: Math.round((item.product.price || 0) * 100),
-        quantity: item.quantity || 1,
-        lineTotal: Math.round((item.product.price || 0) * (item.quantity || 1) * 100),
-        imageUrl: (item.product.images && item.product.images[0]) || '',
-        selectedColor: item.selectedColor || null,
-        selectedSize: item.selectedSize || null,
-      }));
 
-      // Directly create order in live Firestore orders collection
-      const orderDocRef = await addDoc(collection(db, 'orders'), {
-        userId: currentUid,
-        orderStatus: 'placed',
-        paymentStatus: 'unpaid',
-        paymentMethod: 'click_and_collect',
-        fulfillmentMethod: 'click_and_collect',
-        pickupContact,
-        pickupLocation: 'EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001',
-        items: orderItems,
-        subtotal: calculatedTotalPaise,
-        total: calculatedTotalPaise,
-        shippingFee: 0,
-        codFee: 0,
-        itemCount: items.length,
-        statusHistory: [
+      // 1. Sync in-memory items to remote cart (carts/{uid}) first to ensure Cloud Function reads fresh items
+      const { persistRemoteCart } = await import('../services/cartService');
+      await persistRemoteCart(
+        currentUid,
+        items.map(i => ({
+          productId: i.product.id,
+          quantity: i.quantity,
+          selectedColor: i.selectedColor,
+          selectedSize: i.selectedSize,
+        }))
+      );
+
+      // 2. Call trusted createOrder Cloud Function (enforces atomic inventory deduction & transaction)
+      let orderPlaced = false;
+      try {
+        const createOrderFn = httpsCallable<
+          { pickupContact: any; idempotencyKey: string; paymentMethod: string },
           {
-            status: 'placed',
-            timestamp: new Date().toISOString(),
-            note: 'Order placed for Click-and-Collect dispensary pickup. Awaiting dispensary confirmation.',
-          },
-        ],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+            orderId: string;
+            total: number;
+            subtotal: number;
+            orderStatus: string;
+            paymentStatus: string;
+            itemCount: number;
+            pickupLocation: string;
+          }
+        >(functions, 'createOrder');
+
+        const result = await createOrderFn({
+          pickupContact,
+          idempotencyKey: idempotencyKeyRef.current,
+          paymentMethod: 'click_and_collect',
+        });
+
+        if (result.data && result.data.orderId) {
+          orderId = result.data.orderId;
+          totalPaise = result.data.total;
+          subtotalPaise = result.data.subtotal;
+          orderStatus = result.data.orderStatus;
+          paymentStatus = result.data.paymentStatus;
+          itemCount = result.data.itemCount;
+          orderPlaced = true;
+        }
+      } catch (fnErr: any) {
+        console.warn('[CheckoutPage] Cloud Function createOrder failed, checking backend API:', fnErr);
+        // If Cloud Function returned a business error (e.g. out of stock), throw it directly
+        if (fnErr.code && fnErr.code !== 'internal' && fnErr.code !== 'unavailable') {
+          throw new Error(fnErr.message || 'Failed to place order.');
+        }
+      }
+
+      // 3. Fallback: Try Express Backend API if Cloud Function was unavailable
+      if (!orderPlaced && apiUrl) {
+        try {
+          const idToken = await auth.currentUser?.getIdToken();
+          const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/api/orders`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({
+              userId: currentUid,
+              items: items.map(i => ({
+                productId: i.product.id,
+                quantity: i.quantity,
+                selectedColor: i.selectedColor,
+                selectedSize: i.selectedSize,
+              })),
+              pickupContact,
+              idempotencyKey: idempotencyKeyRef.current,
+            }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            orderId = data.orderId || data.order?.id;
+            totalPaise = data.total || calculatedTotalPaise;
+            subtotalPaise = data.subtotal || calculatedTotalPaise;
+            orderStatus = data.orderStatus || 'placed';
+            paymentStatus = data.paymentStatus || 'unpaid';
+            itemCount = data.itemCount || items.length;
+            orderPlaced = true;
+          }
+        } catch (apiErr) {
+          console.warn('[CheckoutPage] Backend API /api/orders failed:', apiErr);
+        }
+      }
+
+      if (!orderPlaced || !orderId) {
+        throw new Error('Could not place order through secure server validation. Please check your network and try again.');
+      }
 
       // Save phone to user profile document if entered
       if (currentUid && form.phone.trim()) {
@@ -192,13 +249,6 @@ export function CheckoutPage() {
           console.warn('[CheckoutPage] Could not update profile phone:', err);
         });
       }
-
-      orderId = orderDocRef.id;
-      totalPaise = calculatedTotalPaise;
-      subtotalPaise = calculatedTotalPaise;
-      orderStatus = 'placed';
-      paymentStatus = 'unpaid';
-      itemCount = items.length;
 
       clearCart();
 
