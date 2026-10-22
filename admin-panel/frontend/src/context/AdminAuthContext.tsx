@@ -8,7 +8,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, functions, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import type { AdminUser } from '../types';
 
 const googleProvider = new GoogleAuthProvider();
@@ -18,6 +18,7 @@ interface AdminAuthContextType {
   rawUser: User | null;
   isAdmin: boolean;
   isLoading: boolean;
+  isRevoked: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -31,6 +32,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [rawUser, setRawUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRevoked, setIsRevoked] = useState(false);
 
   const verifyAdminClaims = useCallback(async (firebaseUser: User): Promise<boolean> => {
     try {
@@ -38,19 +40,21 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       let tokenResult = await firebaseUser.getIdTokenResult(true);
       let hasAdminClaim = Boolean(tokenResult.claims.admin);
 
-      // Also verify canonical Firestore admins collection
-      if (!hasAdminClaim) {
-        try {
-          const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
-          if (adminDoc.exists()) {
-            hasAdminClaim = true;
-          }
-        } catch (docErr) {
-          console.warn('Checking admins collection in Firestore failed:', docErr);
+      // Check canonical Firestore admins collection
+      try {
+        const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
+        if (adminDoc.exists()) {
+          hasAdminClaim = true;
+        } else {
+          // If the admin document was removed from /admins/{uid}, treat as not admin
+          hasAdminClaim = false;
         }
+      } catch (docErr) {
+        console.warn('Checking admins collection in Firestore failed:', docErr);
       }
 
       setIsAdmin(hasAdminClaim);
+      setIsRevoked(!hasAdminClaim);
       setUser({
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -61,6 +65,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Failed to verify admin custom claims:', err);
       setIsAdmin(false);
+      setIsRevoked(true);
       setUser({
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -71,19 +76,54 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Listen for Firebase Auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let firestoreUnsub: (() => void) | null = null;
+
+    const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setRawUser(firebaseUser);
+      if (firestoreUnsub) {
+        firestoreUnsub();
+        firestoreUnsub = null;
+      }
+
       if (firebaseUser) {
         await verifyAdminClaims(firebaseUser);
+
+        // Real-time live listener: If the owner revokes this admin, Firestore /admins/{uid} is deleted.
+        // This listener fires instantly without needing page reload!
+        firestoreUnsub = onSnapshot(
+          doc(db, 'admins', firebaseUser.uid),
+          (snapshot) => {
+            if (!snapshot.exists()) {
+              // Admin document deleted by owner! Revocation is immediate.
+              setIsAdmin(false);
+              setIsRevoked(true);
+              setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
+            } else {
+              setIsAdmin(true);
+              setIsRevoked(false);
+              setUser((prev) => (prev ? { ...prev, isAdmin: true } : null));
+            }
+          },
+          (error) => {
+            console.warn('Real-time admin role listener warning:', error);
+          }
+        );
       } else {
         setUser(null);
         setIsAdmin(false);
+        setIsRevoked(false);
       }
       setIsLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      authUnsubscribe();
+      if (firestoreUnsub) {
+        firestoreUnsub();
+      }
+    };
   }, [verifyAdminClaims]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -134,6 +174,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         rawUser,
         isAdmin,
         isLoading,
+        isRevoked,
         login,
         loginWithGoogle,
         logout,
