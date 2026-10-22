@@ -59,7 +59,13 @@ export function AdminUsersPage() {
 
   // Dismiss card with pop and slide-out right animation:
   // Immediately triggers pop animation, stays idle for 0.3s, slides right out of screen, then unmounts
+  // Strictly restricted to primary superadmin owner akashprabhu0302@gmail.com
   const handleDismissAcceptedCard = (email: string) => {
+    if (!isOwner) {
+      toast.error('Only the primary site owner (akashprabhu0302@gmail.com) can acknowledge accepted invitations.');
+      return;
+    }
+
     const clean = email.toLowerCase();
     setDismissingId(clean);
 
@@ -256,17 +262,18 @@ export function AdminUsersPage() {
         </div>
       </div>
 
-      {/* Accepted Invitations Notifications — Smooth Pop & Slide-out Right on Click */}
-      {admins
-        .filter((adm) => {
-          const cleanEmail = adm.email.toLowerCase();
-          // Exclude initial_setup and already dismissed cards
-          return (
-            adm.grantedBy !== 'initial_setup' &&
-            !dismissedAcceptedEmails.has(cleanEmail)
-          );
-        })
-        .map((adm) => {
+      {/* Accepted Invitations Notifications — Only shown to and acknowledgeable by the Primary Site Owner */}
+      {isOwner &&
+        admins
+          .filter((adm) => {
+            const cleanEmail = adm.email.toLowerCase();
+            // Exclude initial_setup and already dismissed cards
+            return (
+              adm.grantedBy !== 'initial_setup' &&
+              !dismissedAcceptedEmails.has(cleanEmail)
+            );
+          })
+          .map((adm) => {
           const cleanEmail = adm.email.toLowerCase();
           const isDismissing = dismissingId === cleanEmail;
           return (
