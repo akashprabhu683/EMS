@@ -2,11 +2,20 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { sendAdminInvitationEmail } from "./emailService.js";
 
 const db = admin.firestore();
 const auth = admin.auth();
+
+function getCanonicalPortalUrl(): string {
+  const url = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://ems-admin-panel-provider.vercel.app";
+  return url.replace(/\/$/, "");
+}
+
+function hashToken(rawToken: string): string {
+  return createHash("sha256").update(rawToken).digest("hex");
+}
 
 /**
  * Helper: Ensures caller is authenticated and has admin privileges.
@@ -58,6 +67,7 @@ export const listAdmins = onCall(async (request) => {
         invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : data.invitedAt || null,
         expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,
         token: data.token || null,
+        acceptUrl: data.acceptUrl || null,
       });
     });
 
@@ -82,22 +92,28 @@ export const grantAdminRole = onCall(async (request) => {
 
   const email = emailRaw.trim().toLowerCase();
   const callerEmail = request.auth?.token.email || request.auth?.uid || "admin";
+  const callerUid = request.auth?.uid || null;
 
   try {
     // Generate secure 32-byte cryptographic invitation token
     const token = randomBytes(32).toString("hex");
+    const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days validity
-    const portalUrl = process.env.ADMIN_PORTAL_URL || "https://ems-admin-portal.vercel.app";
+    const portalUrl = getCanonicalPortalUrl();
     const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
 
-    // Store in admin_invitations collection
+    // Store in admin_invitations collection with token hash and expiration metadata
     await db.collection("admin_invitations").doc(email).set({
       email,
-      token,
+      token, // stored for administrator copy-link convenience
+      tokenHash,
       status: "pending",
       invitedBy: callerEmail,
+      invitedByUid: callerUid,
       invitedAt: FieldValue.serverTimestamp(),
       expiresAt: Timestamp.fromDate(expiresAt),
+      acceptedAt: null,
+      acceptedByUid: null,
       acceptUrl,
     });
 
@@ -146,14 +162,17 @@ export const resendAdminInvitation = onCall(async (request) => {
       throw new HttpsError("not-found", `No pending invitation found for ${email}.`);
     }
 
-    // Refresh token and expiration
+    // Refresh token, tokenHash, and expiration
     const token = randomBytes(32).toString("hex");
+    const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const portalUrl = process.env.ADMIN_PORTAL_URL || "https://ems-admin-portal.vercel.app";
+    const portalUrl = getCanonicalPortalUrl();
     const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
 
     await inviteDoc.ref.update({
       token,
+      tokenHash,
+      status: "pending",
       expiresAt: Timestamp.fromDate(expiresAt),
       acceptUrl,
       lastResentAt: FieldValue.serverTimestamp(),
@@ -184,24 +203,60 @@ export const resendAdminInvitation = onCall(async (request) => {
  */
 export const verifyInvitationToken = onCall(async (request) => {
   const { token, email } = request.data || {};
-  if (!token || !email) {
-    return { valid: false, reason: "Invitation token and email are required." };
+  if (!token) {
+    return { valid: false, reason: "Invitation token is required." };
   }
 
-  const cleanEmail = String(email).trim().toLowerCase();
+  const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+  const tokenStr = String(token).trim();
+  const tokenHash = hashToken(tokenStr);
 
   try {
-    const inviteDoc = await db.collection("admin_invitations").doc(cleanEmail).get();
-    if (!inviteDoc.exists) {
-      return { valid: false, reason: "No invitation exists for this email address." };
+    let inviteDoc: admin.firestore.DocumentSnapshot | null = null;
+
+    if (cleanEmail) {
+      const docSnap = await db.collection("admin_invitations").doc(cleanEmail).get();
+      if (docSnap.exists) {
+        inviteDoc = docSnap;
+      }
+    }
+
+    // Fallback search by token or tokenHash if email doc wasn't found or email wasn't provided
+    if (!inviteDoc) {
+      const querySnap = await db
+        .collection("admin_invitations")
+        .where("tokenHash", "==", tokenHash)
+        .limit(1)
+        .get();
+
+      if (!querySnap.empty) {
+        inviteDoc = querySnap.docs[0];
+      } else {
+        const rawQuerySnap = await db
+          .collection("admin_invitations")
+          .where("token", "==", tokenStr)
+          .limit(1)
+          .get();
+        if (!rawQuerySnap.empty) {
+          inviteDoc = rawQuerySnap.docs[0];
+        }
+      }
+    }
+
+    if (!inviteDoc || !inviteDoc.exists) {
+      return { valid: false, reason: "No invitation exists for this link." };
     }
 
     const data = inviteDoc.data() || {};
+    if (data.status === "accepted") {
+      return { valid: false, reason: "This invitation has already been accepted." };
+    }
     if (data.status !== "pending") {
-      return { valid: false, reason: "This invitation has already been accepted or deactivated." };
+      return { valid: false, reason: "This invitation is no longer active." };
     }
 
-    if (data.token !== token) {
+    const tokenMatches = data.token === tokenStr || data.tokenHash === tokenHash;
+    if (!tokenMatches) {
       return { valid: false, reason: "Invalid invitation token." };
     }
 
@@ -214,8 +269,9 @@ export const verifyInvitationToken = onCall(async (request) => {
 
     return {
       valid: true,
-      email: cleanEmail,
+      email: data.email,
       invitedBy: data.invitedBy || "EMS Administrator",
+      status: "pending",
     };
   } catch (err: any) {
     logger.error("verifyInvitationToken error:", err);
@@ -226,6 +282,7 @@ export const verifyInvitationToken = onCall(async (request) => {
 /**
  * Callable: acceptAdminInvitation
  * Called by the authenticated user to claim their admin role using the invitation token.
+ * Uses atomic Firestore transaction to prevent concurrent or duplicate redemption.
  */
 export const acceptAdminInvitation = onCall(async (request) => {
   if (!request.auth || !request.auth.token.email) {
@@ -237,50 +294,76 @@ export const acceptAdminInvitation = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Invitation token is required.");
   }
 
-  const userEmail = request.auth.token.email.toLowerCase();
+  const userEmail = request.auth.token.email.toLowerCase().trim();
   const uid = request.auth.uid;
+  const userName = (request.auth.token.name as string | undefined) || userEmail.split("@")[0];
+  const userPicture = (request.auth.token.picture as string | undefined) || null;
+  const tokenStr = String(token).trim();
+  const tokenHash = hashToken(tokenStr);
 
   try {
-    const inviteDoc = await db.collection("admin_invitations").doc(userEmail).get();
-    if (!inviteDoc.exists) {
-      throw new HttpsError("not-found", "No invitation was found for your signed-in email address.");
-    }
+    // Execute atomic validation and acceptance in a Firestore transaction
+    const inviteDocRef = db.collection("admin_invitations").doc(userEmail);
+    const adminDocRef = db.collection("admins").doc(uid);
 
-    const data = inviteDoc.data() || {};
-    if (data.token !== token) {
-      throw new HttpsError("permission-denied", "Invitation token mismatch.");
-    }
-
-    if (data.expiresAt) {
-      const expiry = data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
-      if (Date.now() > expiry.getTime()) {
-        throw new HttpsError("deadline-exceeded", "This invitation token has expired.");
+    await db.runTransaction(async (transaction) => {
+      const inviteSnap = await transaction.get(inviteDocRef);
+      if (!inviteSnap.exists) {
+        throw new HttpsError(
+          "not-found",
+          `No invitation found for ${userEmail}. Please sign in with the invited email address.`
+        );
       }
-    }
 
-    // 1. Grant custom claims in Firebase Auth
+      const data = inviteSnap.data() || {};
+
+      if (data.status === "accepted") {
+        throw new HttpsError("already-exists", "This invitation has already been accepted.");
+      }
+      if (data.status !== "pending") {
+        throw new HttpsError("failed-precondition", "This invitation is no longer valid.");
+      }
+
+      const tokenMatches = data.token === tokenStr || data.tokenHash === tokenHash;
+      if (!tokenMatches) {
+        throw new HttpsError("permission-denied", "Invitation token mismatch.");
+      }
+
+      if (data.expiresAt) {
+        const expiry = data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
+        if (Date.now() > expiry.getTime()) {
+          throw new HttpsError("deadline-exceeded", "This invitation has expired.");
+        }
+      }
+
+      // Mark invitation as accepted atomically
+      transaction.update(inviteDocRef, {
+        status: "accepted",
+        acceptedAt: FieldValue.serverTimestamp(),
+        acceptedByUid: uid,
+      });
+
+      // Write admin role document
+      transaction.set(adminDocRef, {
+        uid,
+        email: userEmail,
+        displayName: userName,
+        photoURL: userPicture,
+        role: "admin",
+        grantedBy: data.invitedBy || "invitation",
+        grantedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    // Grant Firebase Auth custom claim
     const userRecord = await auth.getUser(uid);
     await auth.setCustomUserClaims(uid, {
       ...(userRecord.customClaims || {}),
       admin: true,
     });
 
-    // 2. Create active record in admins collection
-    await db.collection("admins").doc(uid).set({
-      uid,
-      email: userEmail,
-      displayName: userRecord.displayName || userEmail.split("@")[0],
-      photoURL: userRecord.photoURL || null,
-      role: "admin",
-      grantedBy: data.invitedBy || "invitation",
-      grantedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    // 3. Remove pending invitation document
-    await inviteDoc.ref.delete();
-
-    logger.info(`Admin invitation accepted by ${userEmail} (UID: ${uid})`);
+    logger.info(`Admin invitation atomically accepted by ${userEmail} (UID: ${uid})`);
     return {
       success: true,
       message: "Admin role activated successfully! You now have full administrator access.",
@@ -359,43 +442,8 @@ export const revokeAdminRole = onCall(async (request) => {
 
 /**
  * Callable: checkAndActivatePendingAdmin
- * Backwards-compatibility fallback when an invited admin logs in directly at /login.
+ * Note: Per security policy, invitations require explicit token redemption via acceptAdminInvitation.
  */
-export const checkAndActivatePendingAdmin = onCall(async (request) => {
-  if (!request.auth || !request.auth.token.email) {
-    return { activated: false };
-  }
-
-  const userEmail = request.auth.token.email.toLowerCase();
-  const uid = request.auth.uid;
-
-  try {
-    const inviteDoc = await db.collection("admin_invitations").doc(userEmail).get();
-    if (inviteDoc.exists) {
-      const userRecord = await auth.getUser(uid);
-      await auth.setCustomUserClaims(uid, {
-        ...(userRecord.customClaims || {}),
-        admin: true,
-      });
-
-      await db.collection("admins").doc(uid).set({
-        uid,
-        email: userEmail,
-        displayName: userRecord.displayName || userEmail.split("@")[0],
-        photoURL: userRecord.photoURL || null,
-        role: "admin",
-        grantedBy: inviteDoc.data()?.invitedBy || "invitation",
-        grantedAt: FieldValue.serverTimestamp(),
-      });
-
-      await inviteDoc.ref.delete();
-      logger.info(`Auto-activated pending admin role for ${userEmail} (UID: ${uid})`);
-      return { activated: true };
-    }
-
-    return { activated: false };
-  } catch (err) {
-    logger.error("checkAndActivatePendingAdmin error:", err);
-    return { activated: false };
-  }
+export const checkAndActivatePendingAdmin = onCall(async () => {
+  return { activated: false };
 });

@@ -140,10 +140,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    const result = await signInWithPopup(auth, provider);
-    await syncUserDocument(result.user);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
+      await syncUserDocument(result.user);
+    } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user') {
+        // User closed or dismissed the popup without signing in
+        return;
+      }
+      throw err;
+    }
   }, []);
 
   const handleUpdateProfile = useCallback(async (data: { name?: string; phone?: string }) => {

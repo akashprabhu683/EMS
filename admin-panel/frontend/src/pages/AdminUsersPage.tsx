@@ -108,10 +108,28 @@ export function AdminUsersPage() {
   };
 
   const handleCopyLink = async (inv: AdminInvitation) => {
-    // Copies the full accept-invite URL so you can share it directly with the invitee
-    const url =
-      inv.acceptUrl ||
-      `${window.location.origin}/accept-invite?token=${inv.token || ''}&email=${encodeURIComponent(inv.email)}`;
+    let url = inv.acceptUrl;
+    if (!url && inv.token) {
+      url = `${window.location.origin}/accept-invite?token=${inv.token}&email=${encodeURIComponent(inv.email)}`;
+    }
+
+    if (!url) {
+      toast.info(`Generating a fresh invitation link for ${inv.email}...`);
+      try {
+        const refreshed = await resendInvitation(inv.email);
+        url = refreshed.acceptUrl;
+        await loadData();
+      } catch {
+        toast.error('Could not generate link. Please use "Resend Invitation".');
+        return;
+      }
+    }
+
+    if (!url) {
+      toast.error('No invitation URL available. Please resend the invitation.');
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(url);
       setCopiedEmail(inv.email);

@@ -50,6 +50,7 @@ html {
   overflow-x: hidden;
   max-width: 100%;
   width: 100%;
+  overscroll-behavior-y: contain;
   /* Push anchored scroll targets below the sticky header */
   scroll-padding-top: var(--sticky-offset);
 }
@@ -64,6 +65,7 @@ body {
   max-width: 100%;
   width: 100%;
   position: relative;
+  overscroll-behavior-y: contain;
 }
 
 #root {

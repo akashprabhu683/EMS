@@ -1,6 +1,7 @@
 package com.thangamstores.app;
 
 import android.annotation.SuppressLint;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -9,8 +10,10 @@ import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Message;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
@@ -25,7 +28,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.snackbar.Snackbar;
@@ -41,6 +43,10 @@ public class MainActivity extends AppCompatActivity {
     private View loadingOverlay;
     private View errorOverlay;
     private boolean hasError = false;
+
+    // Multi-window popup dialog for Google OAuth / Firebase Auth popups
+    private Dialog popupDialog;
+    private WebView popupWebView;
 
     // File chooser callback for uploading product photos
     private ValueCallback<Uri[]> uploadMessage;
@@ -82,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
         // ── WebView settings ──────────────────────────────────────
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);       // Firebase Auth uses localStorage
+        settings.setDomStorageEnabled(true);       // Firebase Auth uses localStorage / IndexedDB
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
@@ -92,9 +98,16 @@ public class MainActivity extends AppCompatActivity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        // Modern user agent — helps Google OAuth work correctly
-        String ua = settings.getUserAgentString().replace("; wv", "");
-        settings.setUserAgentString(ua);
+
+        // Enable multiple windows so Firebase signInWithPopup works natively in-app
+        settings.setSupportMultipleWindows(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+
+        // Clean modern mobile Chrome User-Agent without WebView identifiers (; wv, Version/4.0)
+        // This ensures Google OAuth permits in-app authentication without 403 disallowed_useragent
+        String rawUa = settings.getUserAgentString();
+        String cleanUa = rawUa.replaceAll(";\\s*wv", "").replaceAll("Version/\\d+\\.\\d+\\s*", "");
+        settings.setUserAgentString(cleanUa);
 
         webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
 
@@ -107,28 +120,38 @@ public class MainActivity extends AppCompatActivity {
                 String host = uri.getHost();
                 String scheme = uri.getScheme();
 
-                // Allow navigation within the storefront domain
-                if (host != null && host.equals(STOREFRONT_HOST)) {
+                // 1. Allow internal storefront/admin domain navigation
+                if (host != null && (host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST))) {
                     return false; // let WebView handle it
                 }
 
-                // Google OAuth / Firebase Auth sign-in flows
+                // 2. Allow Google OAuth & Firebase Auth domains to proceed inside WebView / popup
+                // This ensures sessionStorage and window.opener relationships remain intact!
                 if (host != null && (
                         host.equals("accounts.google.com") ||
                         host.endsWith(".google.com") ||
                         host.equals("firebaseapp.com") ||
                         host.endsWith(".firebaseapp.com"))) {
-                    // Open in Chrome Custom Tabs for proper OAuth support
-                    openInCustomTabs(uri);
+                    return false; // let WebView / popup handle it directly
+                }
+
+                // 3. Handle device protocols (phone calls, email links)
+                if ("tel".equals(scheme) || "mailto".equals(scheme)) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                        startActivity(intent);
+                    } catch (Exception ignored) {}
                     return true;
                 }
 
-                // Open all other external links in Chrome, not in app
+                // 4. Open external third-party links in system browser
                 if ("https".equals(scheme) || "http".equals(scheme)) {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-                    if (intent.resolveActivity(getPackageManager()) != null) {
-                        startActivity(intent);
-                    }
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                        if (intent.resolveActivity(getPackageManager()) != null) {
+                            startActivity(intent);
+                        }
+                    } catch (Exception ignored) {}
                     return true;
                 }
 
@@ -141,6 +164,7 @@ public class MainActivity extends AppCompatActivity {
                 hasError = false;
                 showLoading(true);
                 hideError();
+                updateSwipeRefreshState(url);
             }
 
             @Override
@@ -153,6 +177,7 @@ public class MainActivity extends AppCompatActivity {
                 if (!hasError) {
                     hideError();
                 }
+                updateSwipeRefreshState(url);
             }
 
             @Override
@@ -169,11 +194,77 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // ── WebChromeClient — title, progress & file upload support ──
+        // ── WebChromeClient — title, progress, multi-window & file upload support ──
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
                 return false; // suppress console noise in production
+            }
+
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                if (popupDialog != null && popupDialog.isShowing()) {
+                    popupDialog.dismiss();
+                }
+
+                popupWebView = new WebView(MainActivity.this);
+                WebSettings popupSettings = popupWebView.getSettings();
+                popupSettings.setJavaScriptEnabled(true);
+                popupSettings.setDomStorageEnabled(true);
+                popupSettings.setDatabaseEnabled(true);
+                popupSettings.setSupportMultipleWindows(true);
+                popupSettings.setJavaScriptCanOpenWindowsAutomatically(true);
+                popupSettings.setUserAgentString(cleanUa);
+
+                CookieManager.getInstance().setAcceptThirdPartyCookies(popupWebView, true);
+
+                popupWebView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                        // Keep auth in popup WebView
+                        return false;
+                    }
+                });
+
+                popupWebView.setWebChromeClient(new WebChromeClient() {
+                    @Override
+                    public void onCloseWindow(WebView window) {
+                        if (popupDialog != null && popupDialog.isShowing()) {
+                            popupDialog.dismiss();
+                        }
+                        if (popupWebView != null) {
+                            popupWebView.destroy();
+                            popupWebView = null;
+                        }
+                    }
+                });
+
+                popupDialog = new Dialog(MainActivity.this, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
+                popupDialog.setContentView(popupWebView, new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                popupDialog.setOnDismissListener(dialog -> {
+                    if (popupWebView != null) {
+                        popupWebView.destroy();
+                        popupWebView = null;
+                    }
+                });
+                popupDialog.show();
+
+                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                transport.setWebView(popupWebView);
+                resultMsg.sendToTarget();
+                return true;
+            }
+
+            @Override
+            public void onCloseWindow(WebView window) {
+                if (popupDialog != null && popupDialog.isShowing()) {
+                    popupDialog.dismiss();
+                }
+                if (popupWebView != null) {
+                    popupWebView.destroy();
+                    popupWebView = null;
+                }
             }
 
             @Override
@@ -195,8 +286,27 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // ── Swipe-to-refresh ─────────────────────────────────────
+        // ── Swipe-to-refresh & child scroll handling ─────────────
         swipeRefresh.setColorSchemeResources(R.color.emerald_700);
+
+        // Intelligently check if the WebView can scroll upwards before triggering pull-to-refresh
+        swipeRefresh.setOnChildScrollUpCallback((parent, child) -> {
+            // If the content is scrolled down, child CAN scroll up -> do not trigger pull to refresh!
+            if (webView.canScrollVertically(-1)) {
+                return true;
+            }
+            // If we are on an invitation or authentication page, disable pull-to-refresh completely
+            String url = webView.getUrl();
+            if (url != null && (
+                    url.contains("/accept-invite") ||
+                    url.contains("/login") ||
+                    url.contains("/checkout") ||
+                    url.contains("/profile"))) {
+                return true;
+            }
+            return false;
+        });
+
         swipeRefresh.setOnRefreshListener(() -> {
             hasError = false;
             hideError();
@@ -234,25 +344,26 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ── Open a URL in Chrome Custom Tabs (for Google OAuth) ───────
-    private void openInCustomTabs(Uri uri) {
-        try {
-            CustomTabsIntent customTabsIntent = new CustomTabsIntent.Builder()
-                    .setShowTitle(true)
-                    .build();
-            customTabsIntent.launchUrl(this, uri);
-        } catch (Exception e) {
-            // Fallback to default browser
-            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-            if (intent.resolveActivity(getPackageManager()) != null) {
-                startActivity(intent);
-            }
+    private void updateSwipeRefreshState(String url) {
+        if (swipeRefresh == null) return;
+        if (url != null && (
+                url.contains("/accept-invite") ||
+                url.contains("/login") ||
+                url.contains("/checkout") ||
+                url.contains("/profile"))) {
+            swipeRefresh.setEnabled(false);
+        } else {
+            swipeRefresh.setEnabled(true);
         }
     }
 
     // ── Back navigation inside WebView ────────────────────────────
     @Override
     public void onBackPressed() {
+        if (popupDialog != null && popupDialog.isShowing()) {
+            popupDialog.dismiss();
+            return;
+        }
         if (webView.canGoBack()) {
             webView.goBack();
         } else {

@@ -23,6 +23,19 @@ export interface AdminInvitation {
   acceptUrl?: string | null;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ems-admin-backend.onrender.com';
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  if (auth.currentUser) {
+    const idToken = await auth.currentUser.getIdToken();
+    return {
+      'Authorization': `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    };
+  }
+  return { 'Content-Type': 'application/json' };
+}
+
 /**
  * Lists all active administrators and pending admin invitations.
  */
@@ -41,10 +54,24 @@ export async function getAdminsAndInvitations(): Promise<{
       return result.data;
     }
   } catch (err) {
-    console.warn('listAdmins callable failed, falling back to direct Firestore:', err);
+    console.warn('listAdmins callable failed, checking backend API:', err);
   }
 
-  // 2. Fallback: Direct Firestore collection reads
+  // 2. Try Express Backend API
+  try {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/api/admin/invitations`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.admins)) {
+        return data;
+      }
+    }
+  } catch (apiErr) {
+    console.warn('Backend API /api/admin/invitations failed, falling back to direct Firestore:', apiErr);
+  }
+
+  // 3. Fallback: Direct Firestore collection reads
   const [adminsSnap, invitesSnap] = await Promise.all([
     getDocs(collection(db, 'admins')),
     getDocs(collection(db, 'admin_invitations')),
@@ -83,7 +110,7 @@ export async function getAdminsAndInvitations(): Promise<{
 }
 
 /**
- * Grants admin role to an email address and dispatches an email via Resend.
+ * Grants admin role to an email address and dispatches an invitation.
  */
 export async function grantAdmin(email: string): Promise<{
   success: boolean;
@@ -100,38 +127,68 @@ export async function grantAdmin(email: string): Promise<{
       { success: boolean; status: string; message: string; acceptUrl?: string }
     >(functions, 'grantAdminRole');
     const result = await grantFn({ email: cleanEmail });
-    return result.data;
+    if (result.data) {
+      return result.data;
+    }
   } catch (err: any) {
-    console.warn('grantAdminRole callable failed, falling back to Firestore invitation:', err);
+    console.warn('grantAdminRole callable failed, trying backend API:', err);
   }
 
-  // 2. Direct Firestore fallback: create pending invitation
-  const callerEmail = auth.currentUser?.email || auth.currentUser?.uid || 'Admin';
-  await setDoc(doc(db, 'admin_invitations', cleanEmail), {
-    email: cleanEmail,
-    status: 'pending',
-    invitedBy: callerEmail,
-    invitedAt: serverTimestamp(),
-  });
-
-  return {
-    success: true,
-    status: 'invited',
-    message: `Invitation recorded for ${cleanEmail}. An invitation has been queued.`,
-  };
+  // 2. Try Express Backend API
+  try {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE_URL}/api/admin/invitations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      return data;
+    }
+    throw new Error(data.error || 'Failed to create invitation via backend.');
+  } catch (apiErr: any) {
+    console.error('All invitation generation methods failed:', apiErr);
+    throw new Error(apiErr.message || 'Could not generate admin invitation.');
+  }
 }
 
 /**
  * Resends an invitation email to a pending administrator.
  */
-export async function resendInvitation(email: string): Promise<{ success: boolean; message: string }> {
+export async function resendInvitation(email: string): Promise<{ success: boolean; message: string; acceptUrl?: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  const resendFn = httpsCallable<{ email: string }, { success: boolean; message: string }>(
-    functions,
-    'resendAdminInvitation'
-  );
-  const result = await resendFn({ email: cleanEmail });
-  return result.data;
+
+  // 1. Try Cloud Function
+  try {
+    const resendFn = httpsCallable<{ email: string }, { success: boolean; message: string; acceptUrl?: string }>(
+      functions,
+      'resendAdminInvitation'
+    );
+    const result = await resendFn({ email: cleanEmail });
+    if (result.data) {
+      return result.data;
+    }
+  } catch (err: any) {
+    console.warn('resendAdminInvitation callable failed, trying backend API:', err);
+  }
+
+  // 2. Try Express Backend API (re-invites to refresh token and url)
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE_URL}/api/admin/invitations`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email: cleanEmail }),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    return {
+      success: true,
+      message: `Invitation refreshed for ${cleanEmail}.`,
+      acceptUrl: data.acceptUrl,
+    };
+  }
+  throw new Error(data.error || 'Failed to resend invitation.');
 }
 
 /**
@@ -139,26 +196,67 @@ export async function resendInvitation(email: string): Promise<{ success: boolea
  */
 export async function verifyInvitation(
   token: string,
-  email: string
+  email?: string
 ): Promise<{ valid: boolean; email?: string; invitedBy?: string; reason?: string }> {
-  const verifyFn = httpsCallable<
-    { token: string; email: string },
-    { valid: boolean; email?: string; invitedBy?: string; reason?: string }
-  >(functions, 'verifyInvitationToken');
-  const result = await verifyFn({ token, email });
-  return result.data;
+  // 1. Try Cloud Function
+  try {
+    const verifyFn = httpsCallable<
+      { token: string; email?: string },
+      { valid: boolean; email?: string; invitedBy?: string; reason?: string }
+    >(functions, 'verifyInvitationToken');
+    const result = await verifyFn({ token, email });
+    if (result.data) {
+      return result.data;
+    }
+  } catch (err: any) {
+    console.warn('verifyInvitationToken callable failed, trying backend API:', err);
+  }
+
+  // 2. Try Express Backend API
+  try {
+    const url = new URL(`${API_BASE_URL}/api/admin/invitations/verify`);
+    url.searchParams.set('token', token);
+    if (email) url.searchParams.set('email', email);
+
+    const res = await fetch(url.toString());
+    const data = await res.json();
+    return data;
+  } catch (apiErr: any) {
+    console.error('verifyInvitation API call failed:', apiErr);
+    return { valid: false, reason: 'Failed to verify invitation. Please check your network connection.' };
+  }
 }
 
 /**
  * Accepts an invitation token using the current user's Google session.
  */
 export async function acceptInvitation(token: string): Promise<{ success: boolean; message: string }> {
-  const acceptFn = httpsCallable<{ token: string }, { success: boolean; message: string }>(
-    functions,
-    'acceptAdminInvitation'
-  );
-  const result = await acceptFn({ token });
-  return result.data;
+  // 1. Try Cloud Function
+  try {
+    const acceptFn = httpsCallable<{ token: string }, { success: boolean; message: string }>(
+      functions,
+      'acceptAdminInvitation'
+    );
+    const result = await acceptFn({ token });
+    if (result.data) {
+      return result.data;
+    }
+  } catch (err: any) {
+    console.warn('acceptAdminInvitation callable failed, trying backend API:', err);
+  }
+
+  // 2. Try Express Backend API
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE_URL}/api/admin/invitations/accept`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ token }),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    return data;
+  }
+  throw new Error(data.error || 'Failed to accept invitation.');
 }
 
 /**
@@ -169,24 +267,44 @@ export async function revokeAdmin(uid?: string, email?: string): Promise<{ succe
     throw new Error('You cannot revoke your own administrator account.');
   }
 
+  const cleanEmail = email?.trim().toLowerCase();
+
   // 1. Try Cloud Function
   try {
     const revokeFn = httpsCallable<{ uid?: string; email?: string }, { success: boolean; message: string }>(
       functions,
       'revokeAdminRole'
     );
-    const result = await revokeFn({ uid, email });
-    return result.data;
+    const result = await revokeFn({ uid, email: cleanEmail });
+    if (result.data) {
+      return result.data;
+    }
   } catch (err: any) {
-    console.warn('revokeAdminRole callable failed, falling back to direct Firestore removal:', err);
+    console.warn('revokeAdminRole callable failed, trying backend API:', err);
   }
 
-  // 2. Direct Firestore fallback
+  // 2. Try Express Backend API
+  if (cleanEmail) {
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`${API_BASE_URL}/api/admin/invitations/${encodeURIComponent(cleanEmail)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (apiErr) {
+      console.warn('Backend DELETE /invitations failed, falling back to direct Firestore:', apiErr);
+    }
+  }
+
+  // 3. Direct Firestore fallback
   if (uid) {
     await deleteDoc(doc(db, 'admins', uid));
   }
-  if (email) {
-    await deleteDoc(doc(db, 'admin_invitations', email.toLowerCase()));
+  if (cleanEmail) {
+    await deleteDoc(doc(db, 'admin_invitations', cleanEmail));
   }
 
   return {

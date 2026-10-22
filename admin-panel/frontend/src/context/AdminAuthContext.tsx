@@ -7,8 +7,8 @@ import {
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-import { auth, functions } from '../firebase';
-import { httpsCallable } from 'firebase/functions';
+import { auth, functions, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import type { AdminUser } from '../types';
 
 const googleProvider = new GoogleAuthProvider();
@@ -38,20 +38,15 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       let tokenResult = await firebaseUser.getIdTokenResult(true);
       let hasAdminClaim = Boolean(tokenResult.claims.admin);
 
-      // If user does not yet have admin claim, check if they have a pending admin invite to auto-activate
-      if (!hasAdminClaim && firebaseUser.email) {
+      // Also verify canonical Firestore admins collection
+      if (!hasAdminClaim) {
         try {
-          const activateFn = httpsCallable<void, { activated: boolean }>(
-            functions,
-            'checkAndActivatePendingAdmin'
-          );
-          const res = await activateFn();
-          if (res.data?.activated) {
-            tokenResult = await firebaseUser.getIdTokenResult(true);
-            hasAdminClaim = Boolean(tokenResult.claims.admin);
+          const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
+          if (adminDoc.exists()) {
+            hasAdminClaim = true;
           }
-        } catch (callErr) {
-          console.warn('Pending admin invite activation check failed:', callErr);
+        } catch (docErr) {
+          console.warn('Checking admins collection in Firestore failed:', docErr);
         }
       }
 

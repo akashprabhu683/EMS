@@ -14,6 +14,7 @@ export function AcceptInvitePage() {
   const token = searchParams.get('token') || '';
   const emailParam = searchParams.get('email') || '';
 
+  const [canonicalEmail, setCanonicalEmail] = useState<string>(emailParam);
   const [isLoading, setIsLoading] = useState(true);
   const [isValid, setIsValid] = useState(false);
   const [invitedBy, setInvitedBy] = useState<string>('EMS Administrator');
@@ -23,16 +24,17 @@ export function AcceptInvitePage() {
 
   useEffect(() => {
     async function checkToken() {
-      if (!token || !emailParam) {
-        setErrorMsg('Invalid or incomplete invitation link. Missing token or email parameter.');
+      if (!token) {
+        setErrorMsg('Invalid or incomplete invitation link. Missing token parameter.');
         setIsLoading(false);
         return;
       }
 
       try {
-        const res = await verifyInvitation(token, emailParam);
+        const res = await verifyInvitation(token, emailParam || undefined);
         if (res.valid) {
           setIsValid(true);
+          if (res.email) setCanonicalEmail(res.email);
           if (res.invitedBy) setInvitedBy(res.invitedBy);
         } else {
           setErrorMsg(res.reason || 'This invitation is invalid, has expired, or was already accepted.');
@@ -51,20 +53,22 @@ export function AcceptInvitePage() {
     setIsSubmitting(true);
     setErrorMsg(null);
 
+    const targetEmail = (canonicalEmail || emailParam).trim().toLowerCase();
+
     try {
       const provider = new GoogleAuthProvider();
       // Hint Google to prompt the invited email
       provider.setCustomParameters({
-        login_hint: emailParam,
+        login_hint: targetEmail,
         prompt: 'select_account',
       });
 
       const cred = await signInWithPopup(auth, provider);
-      const loggedEmail = cred.user.email?.toLowerCase();
+      const loggedEmail = cred.user.email?.toLowerCase().trim();
 
-      if (loggedEmail !== emailParam.toLowerCase()) {
+      if (targetEmail && loggedEmail !== targetEmail) {
         setErrorMsg(
-          `You signed in with ${loggedEmail}, but this invitation was issued to ${emailParam}. Please sign in with ${emailParam}.`
+          `You signed in with ${loggedEmail}, but this invitation was issued to ${targetEmail}. Please sign in with ${targetEmail}.`
         );
         setIsSubmitting(false);
         return;
@@ -85,6 +89,8 @@ export function AcceptInvitePage() {
       let msg = 'Failed to accept invitation. Please try again.';
       if (err.code === 'auth/popup-closed-by-user') {
         msg = 'Sign-in popup was closed before completing.';
+      } else if (err.code === 'auth/popup-blocked') {
+        msg = 'Sign-in popup was blocked. Please allow popups or use Google sign-in inside the app.';
       } else if (err.message) {
         msg = err.message;
       }
@@ -158,7 +164,7 @@ export function AcceptInvitePage() {
               </p>
               <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
                 <span>Invited Account:</span>
-                <span className="font-mono font-semibold text-slate-800">{emailParam}</span>
+                <span className="font-mono font-semibold text-slate-800">{canonicalEmail || emailParam}</span>
               </div>
             </div>
 
