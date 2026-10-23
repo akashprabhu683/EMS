@@ -9,6 +9,7 @@ import {
   type DocumentData,
   Timestamp,
   onSnapshot,
+  arrayUnion,
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 
@@ -177,44 +178,83 @@ export async function updateOrderStatus(
     return;
   } catch (fnErr: any) {
     console.warn('updateOrderStatus Cloud Function failed, checking Express / direct fallback:', fnErr);
-    // If it's a domain logic validation error (e.g. invalid code or illegal transition), rethrow immediately
-    if (fnErr.code && fnErr.code !== 'functions/not-found' && fnErr.code !== 'functions/unavailable') {
+    const errorCode = String(fnErr?.code || '').toLowerCase();
+    const errorMsg = String(fnErr?.message || '').toLowerCase();
+    const isDomainError =
+      (errorCode.includes('failed-precondition') ||
+       errorCode.includes('invalid-argument') ||
+       errorCode.includes('permission-denied') ||
+       errorCode.includes('already-exists')) &&
+      !errorMsg.includes('internal [0]') &&
+      !errorMsg.includes('internal');
+
+    // If it's an explicit domain logic validation error (e.g. invalid code or illegal transition), rethrow immediately
+    if (isDomainError) {
       throw new Error(fnErr.message || 'Failed to update order status');
     }
   }
 
   // 2. Fallback to Express backend if configured
-  const adminBackendUrl = import.meta.env.VITE_ADMIN_API_URL;
+  const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
-    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-    const res = await fetch(
-      `${adminBackendUrl.replace(/\/$/, '')}/api/admin/orders/${orderId}/status`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          orderStatus: newStatus,
-          pickupCode: opts.pickupCode,
-          note: opts.note,
-        }),
+    try {
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const res = await fetch(
+        `${adminBackendUrl.replace(/\/$/, '')}/api/admin/orders/${orderId}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            orderStatus: newStatus,
+            pickupCode: opts.pickupCode,
+            note: opts.note,
+          }),
+        }
+      );
+      if (res.ok) {
+        return;
       }
-    );
-    if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
+      if (err?.error && !err.error.includes('HTTP 5') && !err.error.includes('internal')) {
+        throw new Error(err.error);
+      }
+    } catch (apiErr: any) {
+      console.warn('Admin API /api/admin/orders/:id/status failed, using direct Firestore:', apiErr);
+      if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('HTTP')) {
+        throw apiErr;
+      }
     }
-    return;
   }
 
   // 3. Fallback: direct Firestore write (admin only)
   const orderRef = doc(db, 'orders', orderId);
-  await updateDoc(orderRef, {
+  const actorId = auth.currentUser?.email || auth.currentUser?.uid || 'admin';
+  const historyEntry: StatusHistoryEntry = {
+    status: newStatus,
+    timestamp: new Date().toISOString(),
+    updatedBy: actorId,
+    note: opts.note || `Order status updated to ${newStatus}`,
+  };
+
+  const updatePayload: Record<string, any> = {
     orderStatus: newStatus,
     updatedAt: serverTimestamp(),
-  });
+    statusHistory: arrayUnion(historyEntry),
+  };
+
+  if (newStatus === 'collected') {
+    updatePayload.collectedAt = serverTimestamp();
+    updatePayload.collectedBy = actorId;
+  } else if (newStatus === 'cancelled') {
+    updatePayload.cancelledAt = serverTimestamp();
+    updatePayload.cancelledBy = actorId;
+    updatePayload.cancelReason = opts.note || 'Order cancelled by dispensary administrator';
+  }
+
+  await updateDoc(orderRef, updatePayload);
 }
 
 /**
@@ -234,40 +274,68 @@ export async function markOrderPaid(orderId: string, note?: string): Promise<voi
     return;
   } catch (fnErr: any) {
     console.warn('recordOrderPayment Cloud Function failed, checking Express / direct fallback:', fnErr);
-    if (fnErr.code && fnErr.code !== 'functions/not-found' && fnErr.code !== 'functions/unavailable') {
+    const errorCode = String(fnErr?.code || '').toLowerCase();
+    const errorMsg = String(fnErr?.message || '').toLowerCase();
+    const isDomainError =
+      (errorCode.includes('failed-precondition') ||
+       errorCode.includes('invalid-argument') ||
+       errorCode.includes('permission-denied') ||
+       errorCode.includes('already-exists')) &&
+      !errorMsg.includes('internal [0]') &&
+      !errorMsg.includes('internal');
+
+    if (isDomainError) {
       throw new Error(fnErr.message || 'Failed to record payment');
     }
   }
 
   // 2. Fallback to Express backend if configured
-  const adminBackendUrl = import.meta.env.VITE_ADMIN_API_URL;
+  const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
-    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-    const res = await fetch(
-      `${adminBackendUrl.replace(/\/$/, '')}/api/admin/orders/${orderId}/payment`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
-        }),
+    try {
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const res = await fetch(
+        `${adminBackendUrl.replace(/\/$/, '')}/api/admin/orders/${orderId}/payment`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
+          }),
+        }
+      );
+      if (res.ok) {
+        return;
       }
-    );
-    if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
+      if (err?.error && !err.error.includes('HTTP 5') && !err.error.includes('internal')) {
+        throw new Error(err.error);
+      }
+    } catch (apiErr: any) {
+      console.warn('Admin API /api/admin/orders/:id/payment failed, using direct Firestore:', apiErr);
+      if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('HTTP')) {
+        throw apiErr;
+      }
     }
-    return;
   }
 
   // 3. Fallback: direct Firestore write (preserves fulfilment status intact)
   const orderRef = doc(db, 'orders', orderId);
+  const actorId = auth.currentUser?.email || auth.currentUser?.uid || 'admin';
   await updateDoc(orderRef, {
     paymentStatus: 'paid',
+    paidAt: serverTimestamp(),
+    paidConfirmedBy: actorId,
     updatedAt: serverTimestamp(),
+    statusHistory: arrayUnion({
+      paymentStatus: 'paid',
+      timestamp: new Date().toISOString(),
+      updatedBy: actorId,
+      note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
+    }),
   });
 }
 

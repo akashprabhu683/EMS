@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { SEO } from '../components/SEO';
+import { AppInstallBanner } from '../components/AppInstallBanner';
 
 interface OrderConfirmationState {
   orderId?: string;
@@ -66,6 +67,9 @@ export function OrderConfirmationPage() {
             Thank you! Your herbal order has been received. We will prepare it and notify you when it is ready for collection.
           </p>
         </div>
+
+        {/* Mobile App & Real-Time Alerts Banner */}
+        <AppInstallBanner />
 
         {/* Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

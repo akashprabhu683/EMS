@@ -4,6 +4,7 @@ import { Package, Search, ChevronRight, CheckCircle2, Clock, ArrowRight, ShieldC
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { SEO } from '../components/SEO';
+import { AppInstallBanner } from '../components/AppInstallBanner';
 import {
   getUserOrders,
   subscribeUserOrders,
@@ -234,6 +235,9 @@ export function OrdersPage() {
             <ArrowRight size={15} />
           </Link>
         </div>
+
+        {/* Mobile App & Real-Time Notification Alert Banner */}
+        {isAuthenticated && <AppInstallBanner />}
 
         {/* Unauthenticated State */}
         {!isAuthenticated && (

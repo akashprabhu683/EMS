@@ -10,6 +10,7 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { SEO } from '../components/SEO';
+import { AppInstallBanner } from '../components/AppInstallBanner';
 
 export function ProfilePage() {
   const { user, isAuthenticated, isLoading: authLoading, updateProfile } = useAuth();
@@ -130,6 +131,8 @@ export function ProfilePage() {
           </div>
         </div>
 
+        {/* Mobile App & Real-Time Alerts Banner */}
+        <AppInstallBanner />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 

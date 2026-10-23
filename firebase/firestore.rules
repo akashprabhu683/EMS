@@ -46,6 +46,18 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────
     match /users/{uid} {
       allow read, write: if isOwner(uid) || isAdmin();
+
+      // Device tokens for mobile FCM push alerts
+      match /fcm_tokens/{tokenId} {
+        allow read, write: if isOwner(uid) || isAdmin();
+      }
+
+      // Customer in-app notification alerts (reliable website fallback)
+      match /notifications/{notifId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow update: if isOwner(uid) || isAdmin();
+        allow create, delete: if isAdmin();
+      }
     }
 
     match /carts/{uid} {
@@ -89,6 +101,15 @@ service cloud.firestore {
       // Admins can read all; authenticated user can read their own admin doc to observe live revocation
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
       allow write: if isAdmin();
+
+      match /fcm_tokens/{tokenId} {
+        allow read, write: if (isAuthenticated() && request.auth.uid == uid) || isAdmin();
+      }
+    }
+
+    match /admin_notifications/{notifId} {
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
     }
 
     match /admin_revocations/{uid} {

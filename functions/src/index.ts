@@ -21,10 +21,12 @@ export {
   onOrderCancelledInventory,
 } from "./inventory.js";
 
-// 3. Customer SMS / WhatsApp Notification Alerts
+// 3. Customer & Admin FCM Push Notifications & In-App Alerts
 export {
   onOrderCreatedNotification,
   onOrderStatusNotification,
+  registerFcmToken,
+  unregisterFcmToken,
 } from "./notifications.js";
 
 // 4. In-App Admin Role Delegation & Management

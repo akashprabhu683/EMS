@@ -3,6 +3,7 @@ import { ShoppingBag, User, Menu, X, ArrowRight, Leaf, Heart } from 'lucide-reac
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
+import { NotificationCenter } from './NotificationCenter';
 import { useState, useEffect, useRef } from 'react';
 
 export function Navbar() {
@@ -228,6 +229,8 @@ export function Navbar() {
             </div>
             <span className="text-xs font-semibold hidden sm:inline text-slate-700 ml-1.5">Cart</span>
           </button>
+
+          <NotificationCenter />
 
           <div className="relative shrink-0" ref={userMenuRef}>
             {isAuthenticated ? (

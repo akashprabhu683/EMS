@@ -276,6 +276,30 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
     }
 
     await orderRef.update(updatePayload);
+
+    // Record server-side append-only audit trail
+    try {
+      const auditRef = adminDb.collection('audit_logs').doc();
+      await auditRef.set({
+        action: targetStatus === 'collected' ? 'ORDER_COLLECTED' : targetStatus === 'cancelled' ? 'ORDER_CANCELLED' : 'ORDER_STATUS_CHANGED',
+        actor: {
+          uid: req.adminUser?.uid || 'admin',
+          email: adminEmail,
+          role: 'admin',
+        },
+        target: {
+          collection: 'orders',
+          id: orderId,
+          label: `Order #${orderId.slice(-6)}`,
+        },
+        summary: `Order #${orderId.slice(-6)} updated to '${targetStatus}' by ${adminEmail}.`,
+        changes: [{ field: 'orderStatus', before: currentStatus, after: targetStatus }],
+        timestamp: FieldValue.serverTimestamp(),
+      });
+    } catch (auditErr) {
+      console.warn('Audit log write error:', auditErr);
+    }
+
     res.json({ success: true, orderId, updatedStatus: targetStatus });
   } catch (err: any) {
     console.error('Failed to update order status:', err);
@@ -329,6 +353,29 @@ adminRouter.patch('/orders/:orderId/payment', requireAdminAuth, async (req: Admi
       statusHistory: FieldValue.arrayUnion(historyEntry),
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    // Record server-side append-only audit trail
+    try {
+      const auditRef = adminDb.collection('audit_logs').doc();
+      await auditRef.set({
+        action: 'PAYMENT_RECORDED',
+        actor: {
+          uid: req.adminUser?.uid || 'admin',
+          email: adminEmail,
+          role: 'admin',
+        },
+        target: {
+          collection: 'orders',
+          id: orderId,
+          label: `Order #${orderId.slice(-6)}`,
+        },
+        summary: `In-person payment of ₹${Number(currentOrder.total || currentOrder.subtotal || 0) / 100} confirmed received at counter by ${adminEmail}.`,
+        changes: [{ field: 'paymentStatus', before: currentOrder.paymentStatus || 'unpaid', after: 'paid' }],
+        timestamp: FieldValue.serverTimestamp(),
+      });
+    } catch (auditErr) {
+      console.warn('Audit log write error:', auditErr);
+    }
 
     res.json({ success: true, orderId, paymentStatus: 'paid' });
   } catch (err: any) {
