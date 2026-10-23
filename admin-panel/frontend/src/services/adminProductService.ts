@@ -24,6 +24,7 @@ function docToProduct(id: string, data: DocumentData): Product {
       ? data.imageUrl
       : undefined,
     stock: Math.max(0, Math.round(Number(data.stock ?? 0))),
+    lowStockThreshold: data.lowStockThreshold !== undefined ? Math.max(0, Math.round(Number(data.lowStockThreshold))) : 5,
     isActive: Boolean(data.isActive),
     createdAt: data.createdAt ?? null,
     updatedAt: data.updatedAt ?? null,
@@ -62,6 +63,13 @@ export function validateProductForm(form: ProductFormData): string | null {
   const stockNum = parseInt(form.stock, 10);
   if (isNaN(stockNum) || stockNum < 0 || stockNum.toString() !== form.stock.trim()) {
     return 'Stock must be a non-negative whole integer.';
+  }
+
+  if (form.lowStockThreshold && form.lowStockThreshold.trim()) {
+    const thresholdNum = parseInt(form.lowStockThreshold, 10);
+    if (isNaN(thresholdNum) || thresholdNum < 0) {
+      return 'Low-stock threshold must be a non-negative whole integer.';
+    }
   }
 
   if (form.imageUrl.trim() && !form.imageUrl.trim().startsWith('https://')) {
@@ -129,6 +137,7 @@ export async function createProduct(form: ProductFormData): Promise<string> {
 
   const priceInPaise = rupeesToPaise(form.priceRupees);
   const stock = parseInt(form.stock, 10);
+  const lowStockThreshold = form.lowStockThreshold && form.lowStockThreshold.trim() ? parseInt(form.lowStockThreshold, 10) : 5;
 
   // Generate stable slug ID: prod_{slug} — e.g. prod_ashwagandha_capsules
   const slug = form.name.trim()
@@ -147,6 +156,7 @@ export async function createProduct(form: ProductFormData): Promise<string> {
     categorySlug: form.categoryId.trim(),
     price: priceInPaise,
     stock,
+    lowStockThreshold,
     isActive: Boolean(form.isActive),
     rating: 4.5,
     reviewCount: 0,
@@ -176,6 +186,7 @@ export async function updateProduct(id: string, form: ProductFormData): Promise<
 
   const priceInPaise = rupeesToPaise(form.priceRupees);
   const stock = parseInt(form.stock, 10);
+  const lowStockThreshold = form.lowStockThreshold && form.lowStockThreshold.trim() ? parseInt(form.lowStockThreshold, 10) : 5;
 
   const docRef = doc(db, 'products', id);
   const payload: Record<string, any> = {
@@ -186,6 +197,7 @@ export async function updateProduct(id: string, form: ProductFormData): Promise<
     categorySlug: form.categoryId.trim(),
     price: priceInPaise,
     stock,
+    lowStockThreshold,
     isActive: Boolean(form.isActive),
     updatedAt: serverTimestamp(),
   };

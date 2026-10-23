@@ -82,16 +82,27 @@ export const onOrderCreatedInventory = onDocumentCreated("orders/{orderId}", asy
       }
 
       // 3. Atomically decrement stock for each item
+      const stockChanges: { field: string; before: number; after: number; name: string }[] = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         const prodSnap = productSnapshots[i];
         const reqQty = Number(item.quantity ?? 1);
-        const newStock = Math.max(0, Number(prodSnap.data()?.stock ?? 0) - reqQty);
+        const currentStock = Number(prodSnap.data()?.stock ?? 0);
+        const threshold = Number(prodSnap.data()?.lowStockThreshold ?? 5);
+        const newStock = Math.max(0, currentStock - reqQty);
 
         transaction.update(prodSnap.ref, {
           stock: newStock,
-          isLowStock: newStock <= 5,
+          isLowStock: newStock > 0 && newStock <= threshold,
+          isOutOfStock: newStock === 0,
           updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        stockChanges.push({
+          field: `stock_${item.productId}`,
+          before: currentStock,
+          after: newStock,
+          name: item.name || item.productId,
         });
       }
 
@@ -100,6 +111,17 @@ export const onOrderCreatedInventory = onDocumentCreated("orders/{orderId}", asy
         inventoryDeducted: true,
         inventoryDeductedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      // 5. Append-only server audit log
+      const auditRef = db.collection("audit_logs").doc();
+      transaction.set(auditRef, {
+        action: "INVENTORY_DEDUCTED",
+        actor: { uid: "system", role: "system" },
+        target: { collection: "orders", id: orderId, label: `Order #${orderId.slice(-6)}` },
+        summary: `Authoritative stock deducted for ${items.length} items on order placement.`,
+        changes: stockChanges.map(s => ({ field: s.name, before: s.before, after: s.after })),
+        timestamp: FieldValue.serverTimestamp(),
       });
     });
 
@@ -133,6 +155,7 @@ export const onOrderCancelledInventory = onDocumentUpdated("orders/{orderId}", a
 
     try {
       await db.runTransaction(async (transaction) => {
+        const restoredItems: { name: string; before: number; after: number }[] = [];
         for (const item of items) {
           if (!item.productId) continue;
           const prodRef = db.collection("products").doc(item.productId);
@@ -141,12 +164,20 @@ export const onOrderCancelledInventory = onDocumentUpdated("orders/{orderId}", a
           if (prodSnap.exists) {
             const currentStock = Number(prodSnap.data()?.stock ?? 0);
             const restoreQty = Number(item.quantity ?? 1);
+            const threshold = Number(prodSnap.data()?.lowStockThreshold ?? 5);
             const newStock = currentStock + restoreQty;
 
             transaction.update(prodRef, {
               stock: newStock,
-              isLowStock: newStock <= 5,
+              isLowStock: newStock > 0 && newStock <= threshold,
+              isOutOfStock: false,
               updatedAt: FieldValue.serverTimestamp(),
+            });
+
+            restoredItems.push({
+              name: item.name || item.productId,
+              before: currentStock,
+              after: newStock,
             });
           }
         }
@@ -161,6 +192,17 @@ export const onOrderCancelledInventory = onDocumentUpdated("orders/{orderId}", a
             timestamp: new Date().toISOString(),
             note: "Product inventory automatically restored to catalog upon cancellation.",
           }),
+        });
+
+        // Append-only audit log
+        const auditRef = db.collection("audit_logs").doc();
+        transaction.set(auditRef, {
+          action: "INVENTORY_RESTORED",
+          actor: { uid: "system", role: "system" },
+          target: { collection: "orders", id: orderId, label: `Order #${orderId.slice(-6)}` },
+          summary: `Inventory restored to catalog for cancelled order #${orderId.slice(-6)}.`,
+          changes: restoredItems.map(r => ({ field: r.name, before: r.before, after: r.after })),
+          timestamp: FieldValue.serverTimestamp(),
         });
       });
 

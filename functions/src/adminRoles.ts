@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { randomBytes, createHash } from "node:crypto";
 import { sendAdminInvitationEmail } from "./emailService.js";
+import { appendAuditLog } from "./audit.js";
 
 const db = admin.firestore();
 const auth = admin.auth();
@@ -148,6 +149,14 @@ export const grantAdminRole = onCall(async (request) => {
 
     logger.info(`Admin invitation dispatched to ${email}. Email success: ${emailResult.success}`);
 
+    await appendAuditLog(db, {
+      action: "ADMIN_INVITED",
+      actor: { uid: callerUid || "superadmin", email: callerEmail, role: "superadmin" },
+      target: { collection: "admin_invitations", id: email, label: email },
+      summary: `Admin invitation dispatched to ${email} by ${callerEmail}.`,
+      metadata: { emailSent: emailResult.success },
+    });
+
     return {
       success: true,
       status: "invited",
@@ -207,6 +216,14 @@ export const resendAdminInvitation = onCall(async (request) => {
       expiresInDays: 7,
     });
     logger.info(`Resent invitation email to ${email}: success=${emailResult.success}`);
+
+    await appendAuditLog(db, {
+      action: "ADMIN_INVITATION_RESENT",
+      actor: { uid: request.auth?.uid || "superadmin", email: callerEmail, role: "superadmin" },
+      target: { collection: "admin_invitations", id: email, label: email },
+      summary: `Admin invitation link re-sent to ${email} by ${callerEmail}.`,
+      metadata: { emailSent: emailResult.success },
+    });
 
     return {
       success: true,
@@ -386,6 +403,15 @@ export const acceptAdminInvitation = onCall(async (request) => {
     });
 
     logger.info(`Admin invitation atomically accepted by ${userEmail} (UID: ${uid})`);
+
+    await appendAuditLog(db, {
+      action: "ADMIN_ROLE_GRANTED",
+      actor: { uid, email: userEmail, role: "admin" },
+      target: { collection: "admins", id: uid, label: userEmail },
+      summary: `Admin role successfully claimed and activated for ${userEmail}.`,
+      metadata: { name: userName },
+    });
+
     return {
       success: true,
       message: "Admin role activated successfully! You now have full administrator access.",
@@ -477,6 +503,14 @@ export const revokeAdminRole = onCall(async (request) => {
     }
 
     logger.info(`Admin role revoked for UID: ${targetUid}, Email: ${targetEmail}`);
+
+    await appendAuditLog(db, {
+      action: "ADMIN_ROLE_REVOKED",
+      actor: { uid: request.auth?.uid || "superadmin", email: request.auth?.token.email || "superadmin", role: "superadmin" },
+      target: { collection: "admins", id: targetUid || targetEmail || "unknown", label: targetEmail || targetUid },
+      summary: `Admin role revoked for ${targetEmail || targetUid} by ${request.auth?.token.email || "superadmin"}.`,
+    });
+
     return {
       success: true,
       message: `Admin privileges successfully revoked for ${targetEmail || targetUid}.`,

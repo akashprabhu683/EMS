@@ -829,6 +829,41 @@ export async function executeTransitionOrderStatus(
 
     transaction.update(orderRef, updatePayload);
 
+    // 5. Append-only server audit log
+    const auditRef = db.collection("audit_logs").doc();
+    let auditAction = "ORDER_STATUS_CHANGED";
+    let auditSummary = `Order #${orderId.slice(-6)} transitioned from '${currentStatus}' to '${newStatus}'.`;
+    if (newStatus === "collected") {
+      auditAction = "ORDER_COLLECTED";
+      auditSummary = `Order #${orderId.slice(-6)} collected and verified with 6-digit PIN at dispensary counter by ${actorId}.`;
+    } else if (newStatus === "cancelled") {
+      auditAction = "ORDER_CANCELLED";
+      auditSummary = `Order #${orderId.slice(-6)} was cancelled by ${actorId}. Reason: ${note || "Cancelled"}.`;
+    }
+
+    transaction.set(auditRef, {
+      action: auditAction,
+      actor: {
+        uid: caller.uid,
+        email: caller.email || undefined,
+        role: actorRole,
+      },
+      target: {
+        collection: "orders",
+        id: orderId,
+        label: `Order #${orderId.slice(-6)}`,
+      },
+      summary: auditSummary,
+      changes: [
+        { field: "orderStatus", before: currentStatus, after: newStatus },
+      ],
+      metadata: {
+        pickupVerified,
+        note: note || undefined,
+      },
+      timestamp: FieldValue.serverTimestamp(),
+    });
+
     return {
       success: true,
       orderId,
@@ -923,12 +958,134 @@ export async function executeRecordPayment(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
+    // Append-only server audit log
+    const auditRef = db.collection("audit_logs").doc();
+    transaction.set(auditRef, {
+      action: "PAYMENT_RECORDED",
+      actor: {
+        uid: caller.uid,
+        email: caller.email || undefined,
+        role: "admin",
+      },
+      target: {
+        collection: "orders",
+        id: orderId,
+        label: `Order #${orderId.slice(-6)}`,
+      },
+      summary: `In-person payment of ₹${((order.total || 0) / 100).toFixed(2)} confirmed received at counter by ${actorId}.`,
+      changes: [
+        { field: "paymentStatus", before: order.paymentStatus || "unpaid", after: "paid" },
+      ],
+      metadata: {
+        totalPaise: order.total || 0,
+        paidAt: nowIso,
+        note: note || undefined,
+      },
+      timestamp: FieldValue.serverTimestamp(),
+    });
+
     return {
       success: true,
       orderId,
       paymentStatus: "paid",
       paidAt: nowIso,
       paidConfirmedBy: actorId,
+    };
+  });
+}
+
+export interface CorrectPaymentParams {
+  db: FirebaseFirestore.Firestore;
+  caller: {
+    uid: string;
+    email?: string;
+    isAdmin: boolean;
+  };
+  orderId: string;
+  correctedStatus: "paid" | "unpaid";
+  correctionReason: string;
+}
+
+/**
+ * Records an authorized in-person payment correction (e.g. counter cash error / reconciliation).
+ */
+export async function executeCorrectPayment(params: CorrectPaymentParams) {
+  const { db, caller, orderId, correctedStatus, correctionReason } = params;
+
+  if (!caller.isAdmin) {
+    throw new HttpsError("permission-denied", "Only authorized dispensary staff can record payment corrections.");
+  }
+
+  if (!orderId || typeof orderId !== "string") {
+    throw new HttpsError("invalid-argument", "orderId is required.");
+  }
+
+  if (!correctionReason || correctionReason.trim().length < 5) {
+    throw new HttpsError("invalid-argument", "A valid reason (minimum 5 characters) is required for payment correction.");
+  }
+
+  const orderRef = db.collection("orders").doc(orderId);
+
+  return await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(orderRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", `Order ${orderId} does not exist.`);
+    }
+
+    const order = snap.data() || {};
+    const previousPaymentStatus = order.paymentStatus || "unpaid";
+    const actorId = caller.email || caller.uid;
+    const nowIso = new Date().toISOString();
+
+    const historyEntry = {
+      paymentStatus: correctedStatus,
+      timestamp: nowIso,
+      actor: "admin",
+      actorId,
+      note: `Payment Correction: ${correctionReason}`,
+    };
+
+    transaction.update(orderRef, {
+      paymentStatus: correctedStatus,
+      paymentCorrectionReason: correctionReason,
+      paymentCorrectedAt: FieldValue.serverTimestamp(),
+      paymentCorrectedBy: actorId,
+      statusHistory: FieldValue.arrayUnion(historyEntry),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Append-only audit log
+    const auditRef = db.collection("audit_logs").doc();
+    transaction.set(auditRef, {
+      action: "PAYMENT_CORRECTED",
+      actor: {
+        uid: caller.uid,
+        email: caller.email || undefined,
+        role: "admin",
+      },
+      target: {
+        collection: "orders",
+        id: orderId,
+        label: `Order #${orderId.slice(-6)}`,
+      },
+      summary: `Payment status for Order #${orderId.slice(-6)} corrected from '${previousPaymentStatus}' to '${correctedStatus}'. Reason: ${correctionReason}`,
+      changes: [
+        { field: "paymentStatus", before: previousPaymentStatus, after: correctedStatus },
+      ],
+      metadata: {
+        totalPaise: order.total || 0,
+        correctionReason,
+      },
+      timestamp: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      success: true,
+      orderId,
+      previousPaymentStatus,
+      correctedStatus,
+      correctionReason,
+      correctedBy: actorId,
     };
   });
 }
@@ -1016,6 +1173,45 @@ export const recordOrderPayment = onCall(
       if (err instanceof HttpsError) throw err;
       logger.error("recordOrderPayment failure:", err);
       throw new HttpsError("internal", "An error occurred while recording payment.");
+    }
+  }
+);
+
+export interface CorrectPaymentRequestData {
+  orderId: string;
+  correctedStatus: "paid" | "unpaid";
+  correctionReason: string;
+}
+
+export const correctOrderPayment = onCall(
+  { cors: true, invoker: "public" },
+  async (request: CallableRequest<CorrectPaymentRequestData>) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "Authentication required to correct order payment.");
+    }
+
+    const uid = request.auth.uid;
+    const email = request.auth.token.email;
+    const db = admin.firestore();
+
+    let isAdmin = Boolean(request.auth.token.admin);
+    if (!isAdmin) {
+      const adminSnap = await db.collection("admins").doc(uid).get();
+      if (adminSnap.exists) isAdmin = true;
+    }
+
+    try {
+      return await executeCorrectPayment({
+        db,
+        caller: { uid, email, isAdmin },
+        orderId: request.data.orderId,
+        correctedStatus: request.data.correctedStatus,
+        correctionReason: request.data.correctionReason,
+      });
+    } catch (err: unknown) {
+      if (err instanceof HttpsError) throw err;
+      logger.error("correctOrderPayment failure:", err);
+      throw new HttpsError("internal", "An error occurred while recording payment correction.");
     }
   }
 );

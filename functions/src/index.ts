@@ -12,6 +12,7 @@ export {
   createOrder,
   updateOrderStatus,
   recordOrderPayment,
+  correctOrderPayment,
 } from "./orders.js";
 
 // 2. Automated Inventory Deduction & Restoration
@@ -36,3 +37,14 @@ export {
   revokeAdminRole,
   checkAndActivatePendingAdmin,
 } from "./adminRoles.js";
+
+// 5. Append-Only Server Audit Trail
+export {
+  getAuditLogs,
+  onProductWrittenAudit,
+} from "./audit.js";
+
+// 6. Operational & Financial Reporting Engine
+export {
+  getOperationalReport,
+} from "./reports.js";

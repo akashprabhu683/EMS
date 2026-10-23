@@ -13,6 +13,8 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { CustomersPage } from './pages/CustomersPage';
 import { AdminProfilePage } from './pages/AdminProfilePage';
+import { OperationalReportsPage } from './pages/OperationalReportsPage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export default function App() {
@@ -30,6 +32,8 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route index element={<DashboardOverviewPage />} />
                 <Route path="/orders" element={<OrdersListPage />} />
+                <Route path="/reports" element={<OperationalReportsPage />} />
+                <Route path="/audit-logs" element={<AuditLogsPage />} />
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/products" element={<ProductsListPage />} />
                 <Route path="/categories" element={<CategoriesListPage />} />

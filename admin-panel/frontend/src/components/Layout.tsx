@@ -12,6 +12,8 @@ import {
   ShoppingCart,
   Users,
   User,
+  BarChart3,
+  History,
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import clsx from 'clsx';
@@ -22,6 +24,8 @@ const ROUTE_TITLES: Record<string, string> = {
   '/customers': 'Customer Directory — EMS Dispensary Admin',
   '/products': 'Product Management — EMS Dispensary Admin',
   '/categories': 'Category Management — EMS Dispensary Admin',
+  '/reports': 'Operational & Financial Reports — EMS Dispensary Admin',
+  '/audit-logs': 'Administrative Audit Trail — EMS Dispensary Admin',
   '/admins': 'Admin Team & Roles — EMS Dispensary Admin',
   '/profile': 'My Profile — EMS Dispensary Admin',
 };
@@ -48,6 +52,8 @@ export function Layout() {
     { label: 'Customers', to: '/customers', icon: Users },
     { label: 'Products', to: '/products', icon: Package },
     { label: 'Categories', to: '/categories', icon: Layers },
+    { label: 'Reports', to: '/reports', icon: BarChart3 },
+    { label: 'Audit Trail', to: '/audit-logs', icon: History },
     { label: 'Admin Roles', to: '/admins', icon: ShieldCheck },
     { label: 'My Profile', to: '/profile', icon: User },
   ];

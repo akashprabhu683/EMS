@@ -52,6 +52,7 @@ export function ProductsListPage() {
     priceRupees: '',
     imageUrl: '',
     stock: '0',
+    lowStockThreshold: '5',
     isActive: true,
   });
 
@@ -159,6 +160,7 @@ export function ProductsListPage() {
       priceRupees: '',
       imageUrl: '',
       stock: '10',
+      lowStockThreshold: '5',
       isActive: true,
     });
     setIsModalOpen(true);
@@ -175,6 +177,7 @@ export function ProductsListPage() {
       priceRupees: paiseToRupees(prod.price),
       imageUrl: prod.imageUrl || '',
       stock: prod.stock.toString(),
+      lowStockThreshold: (prod.lowStockThreshold !== undefined ? prod.lowStockThreshold : 5).toString(),
       isActive: prod.isActive,
     });
     setIsModalOpen(true);
@@ -390,17 +393,30 @@ export function ProductsListPage() {
 
                       {/* Stock */}
                       <td className="py-3.5 px-4 font-medium">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
-                            p.stock === 0
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : p.stock <= 5
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'text-slate-700'
-                          }`}
-                        >
-                          {p.stock === 0 ? 'Out of stock' : `${p.stock} units`}
-                        </span>
+                        {(() => {
+                          const threshold = p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5;
+                          if (p.stock === 0) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                <AlertCircle size={12} />
+                                <span>Out of stock</span>
+                              </span>
+                            );
+                          }
+                          if (p.stock <= threshold) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <AlertCircle size={12} />
+                                <span>Low stock ({p.stock} left)</span>
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
+                              {p.stock} units
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Status */}
@@ -576,6 +592,27 @@ export function ProductsListPage() {
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 font-mono"
                   />
                 </div>
+              </div>
+
+              {/* Low-Stock Alert Threshold */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Low-Stock Alert Threshold (Units) *
+                </label>
+                <input
+                  id="modal-product-threshold"
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={formData.lowStockThreshold}
+                  onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
+                  placeholder="5"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 font-mono"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Triggers low-stock warning banners in operational reports when inventory falls to or below this quantity. Default: 5.
+                </span>
               </div>
 
               {/* Image URL & File Upload */}

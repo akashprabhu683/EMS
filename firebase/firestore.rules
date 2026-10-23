@@ -101,6 +101,21 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 5. Append-Only Server Audit Trail & Operational Reports
+    // ─────────────────────────────────────────────────────────────
+    match /audit_logs/{logId} {
+      // Only authenticated dispensary administrators can read audit trails
+      allow read: if isAdmin();
+      // Immutable append-only: Clients CANNOT create, update or delete audit records
+      allow create, update, delete: if false;
+    }
+
+    match /operational_reports/{reportId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     // Deny any other access
     match /{document=**} {
       allow read, write: if false;

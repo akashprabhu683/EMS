@@ -17,6 +17,8 @@ import {
   Phone,
   RefreshCw,
   ExternalLink,
+  BarChart3,
+  History,
 } from 'lucide-react';
 import { getAllProducts } from '../services/adminProductService';
 import { getAllCategories } from '../services/adminCategoryService';
@@ -138,7 +140,11 @@ export function DashboardOverviewPage() {
   /* ── Catalog Metrics ────────────────────────────────────────────── */
   const totalProducts = products.length;
   const activeProducts = products.filter((p) => p.isActive).length;
-  const lowStockProducts = products.filter((p) => p.stock > 0 && p.stock <= 5).length;
+  const lowStockProducts = products.filter((p) => {
+    const threshold = p.lowStockThreshold ?? 5;
+    return p.stock > 0 && p.stock <= threshold;
+  }).length;
+  const outOfStockProducts = products.filter((p) => p.stock <= 0).length;
   const totalCategories = categories.length;
   const activeCategories = categories.filter((c) => c.isActive).length;
 
@@ -185,6 +191,20 @@ export function DashboardOverviewPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <Link
+            to="/reports"
+            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-2xs transition-colors"
+          >
+            <BarChart3 size={15} />
+            <span>Reports</span>
+          </Link>
+          <Link
+            to="/audit-logs"
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-2xs transition-colors"
+          >
+            <History size={15} className="text-slate-600" />
+            <span>Audit Trail</span>
+          </Link>
           <Link
             to="/orders"
             className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-semibold rounded-xl flex items-center gap-2 shadow-2xs transition-colors"
@@ -490,21 +510,28 @@ export function DashboardOverviewPage() {
             </p>
           </div>
 
-          {/* Low Stock */}
+          {/* Low & Out of Stock Alerts */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Low Stock Alerts
+                Stock Alerts
               </span>
               <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
                 <AlertTriangle size={17} />
               </div>
             </div>
-            <div className="text-3xl font-extrabold text-amber-600 font-display tracking-tight">
-              {lowStockProducts}
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold text-amber-600 font-display tracking-tight">
+                {lowStockProducts}
+              </span>
+              {outOfStockProducts > 0 && (
+                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                  {outOfStockProducts} out of stock
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 mt-1.5">
-              ≤ 5 items remaining in stock
+              ≤ configured threshold per item
             </p>
           </div>
 
