@@ -155,11 +155,21 @@ export const onOrderCancelledInventory = onDocumentUpdated("orders/{orderId}", a
 
     try {
       await db.runTransaction(async (transaction) => {
+        const validItems = items.filter((it: any) => Boolean(it && it.productId));
+        const productReads = validItems.map((it: any) => {
+          const prodRef = db.collection("products").doc(it.productId);
+          return transaction.get(prodRef);
+        });
+
+        // 1. ALL READS: Read all products before any updates
+        const productSnapshots = await Promise.all(productReads);
+
+        // 2. ALL WRITES: Update restored product stock
         const restoredItems: { name: string; before: number; after: number }[] = [];
-        for (const item of items) {
-          if (!item.productId) continue;
-          const prodRef = db.collection("products").doc(item.productId);
-          const prodSnap = await transaction.get(prodRef);
+        for (let i = 0; i < validItems.length; i++) {
+          const item = validItems[i];
+          const prodSnap = productSnapshots[i];
+          const prodRef = prodSnap.ref;
 
           if (prodSnap.exists) {
             const currentStock = Number(prodSnap.data()?.stock ?? 0);
