@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Globe, Camera, Users, Play, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '../context/ToastContext';
+import { openCookiePreferences } from './CookieConsent';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -188,8 +189,12 @@ export function Footer() {
             </Link>
             <button
               type="button"
-              onClick={(e) => handleComingSoon(e, 'Cookie Preferences')}
-              className="hover:text-slate-900 transition-colors"
+              id="footer-cookie-preferences-btn"
+              onClick={(e) => {
+                e.preventDefault();
+                openCookiePreferences();
+              }}
+              className="hover:text-slate-900 transition-colors cursor-pointer"
             >
               Cookie Preferences
             </button>

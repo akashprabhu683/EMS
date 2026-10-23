@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">THANGAM STORES</string>
-    <string name="retry">Try Again</string>
-    <string name="no_connection_title">No Connection</string>
-    <string name="no_connection_message">Please check your internet connection and try again.</string>
+    <string name="retry">Retry Connection</string>
+    <string name="no_connection_title">Connection Offline</string>
+    <string name="no_connection_message">Cannot connect to the store server. To protect order integrity and ensure accurate stock, transactions require an active connection.</string>
     <string name="loading">Loading store…</string>
+    <string name="store_name_full">Thangam Stores &amp; Ayurvedic Dispensary</string>
+    <string name="store_location">Main Road Dispensary Counter, Tamil Nadu</string>
+    <string name="store_hours">Dispensary Hours: Mon – Sat, 9:00 AM – 8:00 PM</string>
+    <string name="store_phone_display">Call Store Counter</string>
+    <string name="store_phone_number">+919840000000</string>
+    <string name="go_back">Go to Previous Page</string>
 </resources>

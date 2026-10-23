@@ -206,8 +206,21 @@ export function CheckoutPage() {
         }
       } catch (fnErr: any) {
         console.warn('[CheckoutPage] Cloud Function createOrder failed, checking backend API:', fnErr);
-        // If Cloud Function returned a business error (e.g. out of stock), throw it directly
-        if (fnErr.code && fnErr.code !== 'internal' && fnErr.code !== 'unavailable') {
+        const errorCode = String(fnErr?.code || '').toLowerCase();
+        const errorMessage = String(fnErr?.message || '').toLowerCase();
+        const isInfraOrCorsError =
+          errorCode.includes('internal') ||
+          errorCode.includes('unavailable') ||
+          errorCode.includes('deadline-exceeded') ||
+          errorCode.includes('unknown') ||
+          errorMessage.includes('internal [0]') ||
+          errorMessage.includes('internal') ||
+          errorMessage.includes('cors') ||
+          errorMessage.includes('failed to fetch') ||
+          errorMessage.includes('network');
+
+        // Only re-throw if it's a specific domain validation error (e.g. out-of-stock, invalid-argument)
+        if (!isInfraOrCorsError && fnErr?.code && !errorCode.includes('functions/')) {
           throw new Error(fnErr.message || 'Failed to place order.');
         }
       }
@@ -241,16 +254,25 @@ export function CheckoutPage() {
             subtotalPaise = data.subtotal || calculatedTotalPaise;
             orderStatus = data.orderStatus || 'placed';
             paymentStatus = data.paymentStatus || 'unpaid';
+            pickupCode = data.pickupCode || '';
             itemCount = data.itemCount || items.length;
             orderPlaced = true;
+          } else {
+            const errData = await resp.json().catch(() => ({}));
+            if (errData?.error) {
+              throw new Error(errData.error);
+            }
           }
-        } catch (apiErr) {
+        } catch (apiErr: any) {
           console.warn('[CheckoutPage] Backend API /api/orders failed:', apiErr);
+          if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
+            throw apiErr;
+          }
         }
       }
 
       if (!orderPlaced || !orderId) {
-        throw new Error('Could not place order through secure server validation. Please check your network and try again.');
+        throw new Error('Could not place order at this time. Please check your connection and try again.');
       }
 
       // Save phone to user profile document if entered
@@ -280,7 +302,11 @@ export function CheckoutPage() {
 
 
     } catch (err: any) {
-      toast.error(err.message || 'Failed to place order. Please try again.');
+      let displayMsg = err.message || 'Failed to place order. Please try again.';
+      if (displayMsg.includes('internal [0]') || displayMsg.trim() === 'internal') {
+        displayMsg = 'Service is temporarily busy. Please retry placing your order.';
+      }
+      toast.error(displayMsg);
     } finally {
       setPlacing(false);
     }

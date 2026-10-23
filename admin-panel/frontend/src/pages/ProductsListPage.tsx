@@ -9,7 +9,11 @@ import {
   X,
   ExternalLink,
   AlertCircle,
+  Upload,
+  Loader2,
 } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase';
 import { useToast } from '../context/ToastContext';
 import {
   getAllProducts,
@@ -38,6 +42,7 @@ export function ProductsListPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState<ProductFormData>({
@@ -49,6 +54,44 @@ export function ProductsListPage() {
     stock: '0',
     isActive: true,
   });
+
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setModalError('Please select a valid image file (JPEG, PNG, WebP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setModalError('Image size exceeds 5MB limit.');
+      return;
+    }
+
+    setUploadingImage(true);
+    setModalError(null);
+    try {
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storageRef = ref(storage, `products/${timestamp}_${safeName}`);
+      await uploadBytes(storageRef, file, { contentType: file.type });
+      const downloadUrl = await getDownloadURL(storageRef);
+      setFormData(prev => ({ ...prev, imageUrl: downloadUrl }));
+    } catch (err: any) {
+      console.warn('Storage upload note:', err);
+      // Fallback: If Firebase Storage rules or bucket are pending, read data URL for preview
+      const reader = new FileReader();
+      reader.onload = (loadEvt: ProgressEvent<FileReader>) => {
+        const result = loadEvt.target?.result;
+        if (result) {
+          setFormData(prev => ({ ...prev, imageUrl: String(result) }));
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   // Deactivation confirmation modal
   const [deactivateProduct, setDeactivateProduct] = useState<Product | null>(null);
@@ -535,20 +578,42 @@ export function ProductsListPage() {
                 </div>
               </div>
 
-              {/* Image URL */}
+              {/* Image URL & File Upload */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Image URL (HTTPS link)
+                  Product Image (HTTPS link or Device Upload)
                 </label>
-                <input
-                  id="modal-product-image"
-                  type="url"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-                />
-                {formData.imageUrl && formData.imageUrl.startsWith('https://') && (
+                <div className="flex items-center gap-2">
+                  <input
+                    id="modal-product-image"
+                    type="url"
+                    value={formData.imageUrl}
+                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                    placeholder="https://images.unsplash.com/... or upload photo"
+                    className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <label className="cursor-pointer px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 flex items-center gap-1.5 transition-colors whitespace-nowrap">
+                    {uploadingImage ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Uploading…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Photo</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingImage}
+                      onChange={handleImageFileUpload}
+                    />
+                  </label>
+                </div>
+                {formData.imageUrl && (
                   <div className="mt-2 flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
                     <img
                       src={formData.imageUrl}
@@ -558,7 +623,10 @@ export function ProductsListPage() {
                         (e.currentTarget as HTMLImageElement).style.display = 'none';
                       }}
                     />
-                    <span className="text-[11px] text-slate-500 truncate flex-1">Image preview</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] text-slate-700 font-medium block">Selected Product Photo</span>
+                      <span className="text-[10px] text-slate-400 truncate block">{formData.imageUrl.substring(0, 50)}...</span>
+                    </div>
                   </div>
                 )}
               </div>

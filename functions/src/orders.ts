@@ -604,6 +604,7 @@ export async function executeCreateOrder(
 export const createOrder = onCall(
   {
     cors: true,
+    invoker: "public",
   },
   async (request: CallableRequest<CreateOrderRequestData>): Promise<CreateOrderResponse> => {
     // 1. Enforce authenticated caller
@@ -944,7 +945,7 @@ export interface UpdateOrderStatusRequestData {
 }
 
 export const updateOrderStatus = onCall(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (request: CallableRequest<UpdateOrderStatusRequestData>): Promise<TransitionOrderStatusResult> => {
     if (!request.auth || !request.auth.uid) {
       throw new HttpsError("unauthenticated", "Authentication required to update order status.");
@@ -986,7 +987,7 @@ export interface RecordPaymentRequestData {
 }
 
 export const recordOrderPayment = onCall(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (request: CallableRequest<RecordPaymentRequestData>): Promise<RecordPaymentResult> => {
     if (!request.auth || !request.auth.uid) {
       throw new HttpsError("unauthenticated", "Authentication required to record order payment.");

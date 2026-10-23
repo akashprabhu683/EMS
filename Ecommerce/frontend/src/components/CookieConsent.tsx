@@ -5,22 +5,34 @@ import { initAnalytics } from '../utils/analytics';
 
 const STORAGE_KEY = 'ems_cookie_consent_v1';
 
+export function openCookiePreferences() {
+  window.dispatchEvent(new CustomEvent('ems-open-cookie-preferences'));
+}
+
 export function CookieConsent() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const handleOpen = () => setVisible(true);
+    window.addEventListener('ems-open-cookie-preferences', handleOpen);
+
     try {
       const consent = localStorage.getItem(STORAGE_KEY);
       if (!consent) {
         // Small delay so it appears smoothly after page load
         const timer = setTimeout(() => setVisible(true), 1200);
-        return () => clearTimeout(timer);
+        return () => {
+          clearTimeout(timer);
+          window.removeEventListener('ems-open-cookie-preferences', handleOpen);
+        };
       } else if (consent === 'all') {
         initAnalytics();
       }
     } catch {
       // LocalStorage access restricted in private mode
     }
+
+    return () => window.removeEventListener('ems-open-cookie-preferences', handleOpen);
   }, []);
 
   const handleAcceptAll = () => {
