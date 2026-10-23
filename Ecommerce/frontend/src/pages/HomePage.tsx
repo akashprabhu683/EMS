@@ -10,8 +10,10 @@ import {
   FlaskConical,
   AlertCircle,
   Package,
+  Sparkles,
 } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
+import { SEO } from '../components/SEO';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { getActiveProducts } from '../services/productService';
 import { getActiveCategories } from '../services/categoryService';
@@ -184,7 +186,13 @@ export function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-12">
-      <div className="page-container pt-6 sm:pt-8 pb-4">
+      <SEO
+        title="Authentic Natural Healthcare & Herbal Remedies"
+        description="Shop authentic herbal and Ayurvedic formulations, pure extracts, vitality tonics, and natural health remedies at THANGAM STORES with in-store Click & Collect pickup."
+        canonical="https://ecommerce-storefront-client.vercel.app/"
+      />
+
+      <div className="page-container pt-4 sm:pt-6 pb-4">
 
         {/* ── UNCOLLECTED / OVERDUE ORDER NOTIFICATION BANNER ── */}
         {overdueOrders.length > 0 && (
@@ -219,6 +227,73 @@ export function HomePage() {
             </div>
           </div>
         )}
+
+        {/* ── ABOVE-THE-FOLD HERO SECTION & PRIMARY CTA ─────────── */}
+        <section aria-label="Welcome and Store Overview" className="mb-8 relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-900 text-white p-6 sm:p-10 md:p-12 shadow-lg">
+          {/* Subtle decorative background circles */}
+          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute bottom-0 left-1/3 -mb-12 w-64 h-64 bg-emerald-400/10 rounded-full blur-xl pointer-events-none" />
+
+          <div className="relative z-10 max-w-2xl">
+            {/* Eyebrow badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-600/60 border border-emerald-400/30 text-emerald-100 text-[11px] font-bold tracking-wide uppercase mb-4 backdrop-blur-xs">
+              <Sparkles size={13} className="text-emerald-300" />
+              <span>Authentic Botanical Dispensary • Click &amp; Collect</span>
+            </div>
+
+            {/* Headline */}
+            <h1 className="font-display font-extrabold text-2xl sm:text-4xl md:text-5xl text-white tracking-tight leading-[1.15]">
+              Pure Botanical Remedies &amp; Natural Healthcare
+            </h1>
+
+            {/* Subtitle */}
+            <p className="mt-3.5 text-xs sm:text-base text-emerald-100/90 leading-relaxed font-normal max-w-xl">
+              Authentic Ayurvedic formulations, classical extracts, vitality churnas, and herbal tonics. Reserve your remedies online with <strong>zero advance payment</strong> — inspect and settle in person at our dispensary counter.
+            </p>
+
+            {/* Above-the-fold Call To Actions */}
+            <div className="mt-6 sm:mt-8 flex flex-wrap items-center gap-3">
+              <a
+                href="#catalog-section"
+                id="hero-primary-browse-cta"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-emerald-900 hover:bg-emerald-50 active:bg-emerald-100 text-xs sm:text-sm font-bold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+              >
+                <Leaf size={16} className="text-emerald-700" />
+                <span>Shop Herbal Formulations</span>
+                <ArrowRight size={15} className="text-emerald-700" />
+              </a>
+
+              <a
+                href="#how-it-works"
+                id="hero-secondary-guide-cta"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-700/60 hover:bg-emerald-700/80 active:bg-emerald-800 text-white border border-emerald-400/30 text-xs sm:text-sm font-semibold transition-colors backdrop-blur-xs cursor-pointer"
+              >
+                <span>How Click &amp; Collect Works</span>
+                <ChevronRight size={15} />
+              </a>
+            </div>
+
+            {/* Trust highlights */}
+            <div className="mt-8 pt-6 border-t border-emerald-600/50 grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] sm:text-xs text-emerald-100">
+              <div className="flex items-center gap-2">
+                <Leaf size={14} className="text-emerald-300 shrink-0" />
+                <span>100% Pure Botanical</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={14} className="text-emerald-300 shrink-0" />
+                <span>Store Verified Quality</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FlaskConical size={14} className="text-emerald-300 shrink-0" />
+                <span>Lab Standardized</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin size={14} className="text-emerald-300 shrink-0" />
+                <span>Counter Pay &amp; Collect</span>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ── TOP SEARCH BAR ─────────────────────────────────── */}
         <div className="mb-6 sm:mb-8">

@@ -152,6 +152,9 @@ export function CartDrawer() {
                     <img
                       src={item.product.images[0]}
                       alt={item.product.name}
+                      width={64}
+                      height={64}
+                      loading="lazy"
                       className="w-16 h-16 object-cover rounded-xl bg-slate-100 border border-slate-100"
                     />
                   </Link>

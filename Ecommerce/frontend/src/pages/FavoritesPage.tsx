@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
+import { SEO } from '../components/SEO';
 import { getActiveProducts } from '../services/productService';
 import type { Product } from '../types';
 
@@ -156,6 +157,11 @@ export function FavoritesPage() {
   // ── 2. AUTHENTICATED USER STATE ──
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 overflow-x-clip">
+      <SEO
+        title="Saved Remedies & Favorites"
+        description="View your saved herbal remedies and favorites at THANGAM STORES."
+        noindex={true}
+      />
       <div className="page-container py-8 sm:py-12">
 
         {/* Breadcrumb Navigation */}

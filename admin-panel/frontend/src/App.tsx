@@ -13,6 +13,7 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { CustomersPage } from './pages/CustomersPage';
 import { AdminProfilePage } from './pages/AdminProfilePage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 export default function App() {
   return (
@@ -38,7 +39,7 @@ export default function App() {
             </Route>
 
             {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </ToastProvider>
       </AdminAuthProvider>

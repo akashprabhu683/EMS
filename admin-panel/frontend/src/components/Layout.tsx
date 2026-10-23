@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -16,10 +16,26 @@ import {
 import { useAdminAuth } from '../context/AdminAuthContext';
 import clsx from 'clsx';
 
+const ROUTE_TITLES: Record<string, string> = {
+  '/': 'Dashboard Overview — EMS Dispensary Admin',
+  '/orders': 'Order Queue & Verification — EMS Dispensary Admin',
+  '/customers': 'Customer Directory — EMS Dispensary Admin',
+  '/products': 'Product Management — EMS Dispensary Admin',
+  '/categories': 'Category Management — EMS Dispensary Admin',
+  '/admins': 'Admin Team & Roles — EMS Dispensary Admin',
+  '/profile': 'My Profile — EMS Dispensary Admin',
+};
+
 export function Layout() {
   const { user, logout } = useAdminAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const title = ROUTE_TITLES[location.pathname] || 'EMS Dispensary Admin Portal';
+    document.title = title;
+  }, [location.pathname]);
 
   const handleSignOut = async () => {
     await logout();

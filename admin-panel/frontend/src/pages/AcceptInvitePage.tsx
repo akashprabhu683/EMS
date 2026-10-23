@@ -23,6 +23,7 @@ export function AcceptInvitePage() {
   const [acceptedSuccess, setAcceptedSuccess] = useState(false);
 
   useEffect(() => {
+    document.title = 'Accept Admin Invitation — EMS Dispensary Admin';
     async function checkToken() {
       if (!token) {
         setErrorMsg('Invalid or incomplete invitation link. Missing token parameter.');

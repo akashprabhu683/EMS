@@ -12,6 +12,8 @@ import clsx from 'clsx';
 import { collection, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '../firebase';
+import { SEO } from '../components/SEO';
+import { trackBeginCheckout, trackOrderPlaced } from '../utils/analytics';
 
 const STEPS = ['Cart Review', 'Pickup Details', 'Confirm & Place'];
 
@@ -34,6 +36,12 @@ export function CheckoutPage() {
 
   // Reset idempotency key when cart changes
   useEffect(() => { idempotencyKeyRef.current = null; }, [items]);
+
+  useEffect(() => {
+    if (items.length > 0) {
+      trackBeginCheckout(items.length, totalPrice);
+    }
+  }, []);
 
   // Pickup contact form
   const [form, setForm] = useState({
@@ -253,6 +261,7 @@ export function CheckoutPage() {
         });
       }
 
+      trackOrderPlaced(orderId, totalPaise / 100, itemCount);
       clearCart();
 
       navigate('/order-confirmation', {
@@ -309,6 +318,11 @@ export function CheckoutPage() {
   /* ══════════════════════════════════════════════════════════════════ */
   return (
     <main className="min-h-screen bg-slate-50 pb-16 sm:pb-24">
+      <SEO
+        title="Review & Place In-Store Collection"
+        description="Review your bag and confirm pickup details for in-store collection at THANGAM STORES."
+        noindex={true}
+      />
       <div className="page-container px-3.5 sm:px-6 pt-3 sm:pt-6 max-w-4xl lg:max-w-5xl mx-auto">
 
         {/* ── Back + Title ── */}

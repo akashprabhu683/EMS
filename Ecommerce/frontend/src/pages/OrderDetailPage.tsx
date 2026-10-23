@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink, Trash2, AlertTriangle, X } from 'lucide-react';
 import { getOrderById, deleteOrder, subscribeOrderDetail, cancelCustomerOrder } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
+import { SEO } from '../components/SEO';
 import type { Order } from '../types';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
@@ -119,6 +120,11 @@ export function OrderDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 overflow-x-clip">
+      <SEO
+        title={`Order #${order.id} — Pickup Details`}
+        description="Track your Click & Collect order preparation and counter collection PIN."
+        noindex={true}
+      />
       <div className="page-container py-8 sm:py-12">
 
         {/* Back navigation & breadcrumb */}

@@ -22,10 +22,13 @@ import { FaqPage }               from './pages/FaqPage';
 import { ContactPage }           from './pages/ContactPage';
 import { ProfilePage }           from './pages/ProfilePage';
 import { FavoritesPage }         from './pages/FavoritesPage';
+import { NotFoundPage }          from './pages/NotFoundPage';
+import { CookieConsent }         from './components/CookieConsent';
 import { WishlistProvider }      from './context/WishlistContext';
 import { useCart } from './context/CartContext';
 import { Home, Package, ShoppingBag, ClipboardList, User } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
+import { trackPageView } from './utils/analytics';
 import clsx from 'clsx';
 
 function ScrollToTop() {
@@ -43,21 +46,12 @@ function ScrollToTop() {
       }
     }
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    // Track page view event
+    setTimeout(() => {
+      trackPageView(document.title, pathname);
+    }, 100);
   }, [pathname, hash]);
   return null;
-}
-
-function NotFoundPage() {
-  return (
-    <main className="min-h-[70vh] bg-slate-50 flex flex-col items-center justify-center gap-4 px-4 py-20 text-center">
-      <span className="text-7xl font-display font-extrabold text-slate-900">404</span>
-      <h2 className="text-xl sm:text-2xl text-slate-800 font-bold">Page Not Found</h2>
-      <p className="text-xs sm:text-sm text-slate-500 max-w-sm">The destination page does not exist or may have been relocated.</p>
-      <a href="/" className="mt-2 py-2.5 px-6 rounded-xl text-xs sm:text-sm shadow-2xs inline-flex items-center gap-2 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">
-        Return to Home
-      </a>
-    </main>
-  );
 }
 
 /* ── Android-style Mobile Bottom Navigation Bar ── */
@@ -160,6 +154,7 @@ function AppLayout() {
       </div>
       <Footer />
       <MobileBottomNav />
+      <CookieConsent />
     </div>
   );
 }

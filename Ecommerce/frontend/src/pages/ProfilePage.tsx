@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { SEO } from '../components/SEO';
 
 export function ProfilePage() {
   const { user, isAuthenticated, isLoading: authLoading, updateProfile } = useAuth();
@@ -90,6 +91,11 @@ export function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-12">
+      <SEO
+        title="My Dispensary Profile"
+        description="Manage your contact details and dispensary pickup preferences."
+        noindex={true}
+      />
       <div className="page-container pt-8 sm:pt-10 max-w-4xl mx-auto">
 
         {/* Page Header */}

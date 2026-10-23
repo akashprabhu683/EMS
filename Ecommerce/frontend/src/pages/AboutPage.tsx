@@ -1,9 +1,15 @@
 import { Leaf, ShieldCheck, MapPin, Clock, FlaskConical, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SEO } from '../components/SEO';
 
 export function AboutPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-8">
+      <SEO
+        title="About Our Botanical Philosophy & Heritage"
+        description="Learn about THANGAM STORES' heritage, authentic Ayurvedic practitioner sourcing, GMP quality standards, and patient-first philosophy."
+        canonical="https://ecommerce-storefront-client.vercel.app/about"
+      />
       <div className="page-container pt-10 pb-16 max-w-3xl mx-auto">
 
         {/* Header */}

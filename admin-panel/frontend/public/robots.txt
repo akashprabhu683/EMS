@@ -1,0 +1,5 @@
+# EMS Admin Dispensary Portal — Private Operational System
+# Disallow all public search engine crawlers and bots.
+
+User-agent: *
+Disallow: /

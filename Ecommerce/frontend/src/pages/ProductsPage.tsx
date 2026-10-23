@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { SlidersHorizontal, X, ChevronDown, Grid3X3, List, Search, Star, ArrowRight, Package } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
+import { SEO } from '../components/SEO';
 import type { FilterState, SortOption, Category, Product } from '../types';
 import clsx from 'clsx';
 import { useCart } from '../context/CartContext';
@@ -129,6 +130,17 @@ export function ProductsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+      <SEO
+        title={
+          filters.search
+            ? `Search: "${filters.search}" — Herbal Catalog`
+            : activeCategoryName
+              ? `${activeCategoryName} Formulations`
+              : 'All Herbal Formulations & Natural Remedies'
+        }
+        description="Browse authentic Ayurvedic churnas, herbal tonics, single-herb powders, and dietary extracts. Reserve online for counter pickup at THANGAM STORES."
+        canonical="https://ecommerce-storefront-client.vercel.app/products"
+      />
       <div className="page-container pt-6 sm:pt-8 pb-4">
 
         {/* Page Header */}

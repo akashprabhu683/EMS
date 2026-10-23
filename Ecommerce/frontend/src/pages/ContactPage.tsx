@@ -2,6 +2,7 @@ import { MapPin, Clock, Phone, Mail, MessageSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useToast } from '../context/ToastContext';
+import { SEO } from '../components/SEO';
 
 export function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', message: '' });
@@ -10,15 +11,22 @@ export function ContactPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.name.trim() && form.email.trim() && form.message.trim()) {
-      setSent(true);
-      toast.success('Your message has been noted. We\'ll get back to you shortly.');
-      setForm({ name: '', email: '', message: '' });
+    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
+      toast.warning('Please fill in all contact form fields.');
+      return;
     }
+    setSent(true);
+    toast.success('Your message has been noted. We\'ll get back to you shortly.');
+    setForm({ name: '', email: '', message: '' });
   };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-8">
+      <SEO
+        title="Contact Dispensary Counter"
+        description="Get in touch with THANGAM STORES dispensary counter. Find our store address, opening hours (Mon-Sat 9AM-7PM), and customer support."
+        canonical="https://ecommerce-storefront-client.vercel.app/contact"
+      />
       <div className="page-container pt-10 pb-16 max-w-3xl mx-auto">
         <div className="mb-10">
           <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">Get in touch</span>

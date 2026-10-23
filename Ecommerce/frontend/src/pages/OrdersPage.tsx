@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Package, Search, ChevronRight, CheckCircle2, Clock, ArrowRight, ShieldCheck, MapPin, Store, AlertCircle, Trash2, AlertTriangle, X } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+import { SEO } from '../components/SEO';
 import {
   getUserOrders,
   subscribeUserOrders,
@@ -195,6 +196,11 @@ export function OrdersPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 overflow-x-clip">
+      <SEO
+        title="My Orders & Collection Status"
+        description="View your order status, preparation history, and 6-digit collection verification code."
+        noindex={true}
+      />
       <div className="page-container py-8 sm:py-12">
 
         {/* Breadcrumb Navigation */}

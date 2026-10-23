@@ -1,0 +1,26 @@
+# THANGAM STORES (EMS Dispensary) — robots.txt
+# Public Storefront: Allow indexing of public catalog and information pages;
+# disallow private authenticated customer accounts, checkout, and order tracking.
+
+User-agent: *
+Allow: /
+Allow: /products
+Allow: /product/*
+Allow: /about
+Allow: /contact
+Allow: /click-collect
+Allow: /faq
+Allow: /privacy
+Allow: /terms
+
+# Private, authenticated, and order-specific routes
+Disallow: /orders
+Disallow: /orders/*
+Disallow: /checkout
+Disallow: /order-confirmation
+Disallow: /profile
+Disallow: /favorites
+Disallow: /wishlist
+
+# Authoritative Sitemap
+Sitemap: https://ecommerce-storefront-client.vercel.app/sitemap.xml

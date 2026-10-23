@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { User, Lock, Mail, Eye, EyeOff, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { SEO } from '../components/SEO';
 import clsx from 'clsx';
 
 interface LoginPageProps {
@@ -63,6 +64,11 @@ export function LoginPage({ initialMode }: LoginPageProps) {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center px-4 pt-16 pb-16">
+      <SEO
+        title={mode === 'login' ? 'Customer Sign In' : 'Create Account'}
+        description="Sign in or register for Click & Collect herbal medicine reservations."
+        noindex={true}
+      />
       <div className="w-full max-w-md">
         {/* Card */}
         <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xs space-y-6">

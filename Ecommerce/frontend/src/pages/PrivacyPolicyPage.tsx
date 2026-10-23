@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { SEO } from '../components/SEO';
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="mb-8">
@@ -10,6 +11,11 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 export function PrivacyPolicyPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-8">
+      <SEO
+        title="Privacy Policy — Data Protection & Consent"
+        description="Read how THANGAM STORES protects customer data, user authentication via Firebase, order details, and privacy-respecting practices."
+        canonical="https://ecommerce-storefront-client.vercel.app/privacy"
+      />
       <div className="page-container pt-10 pb-16 max-w-3xl mx-auto">
         <div className="mb-10">
           <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">Legal</span>
@@ -18,30 +24,33 @@ export function PrivacyPolicyPage() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8">
-          <Section title="Information we collect">
-            <p>When you sign in with Google, we receive your name, email address, and profile photo to identify your account. We also store orders you place so you can track them.</p>
-            <p>We do not collect payment information — all payments happen in person at our dispensary counter.</p>
+          <Section title="1. Information We Collect">
+            <p>When you sign in using Google Authentication or create an account, we receive your name, email address, and profile avatar to maintain your authenticated customer account.</p>
+            <p>When placing Click &amp; Collect orders, we record the recipient pickup name and contact phone number. We generate a private 6-digit collection verification PIN to safeguard counter order pickups.</p>
+            <p><strong>Zero Online Payment Data:</strong> We do NOT collect credit card numbers, debit card details, CVVs, or online banking credentials. All payments occur in person at our physical dispensary counter via Cash or UPI.</p>
           </Section>
 
-          <Section title="How we use your information">
-            <p>Your information is used solely to manage your Click &amp; Collect orders and communicate dispensary updates if you subscribe to our newsletter.</p>
-            <p>We do not sell, rent, or share your personal data with third parties for marketing purposes.</p>
+          <Section title="2. How We Use Your Information">
+            <p>Your details are used solely to fulfill Click &amp; Collect orders, update you on preparation status, and prevent duplicate order submissions.</p>
+            <p>We do not sell, rent, monetize, or trade your personal data with third-party advertisers or data brokers under any circumstances.</p>
           </Section>
 
-          <Section title="Data storage">
-            <p>Your data is stored securely on Google Firebase (Cloud Firestore) infrastructure, which is compliant with industry-standard security practices.</p>
+          <Section title="3. Data Infrastructure & Security">
+            <p>Customer account records and order logs are stored on Google Cloud Firebase (Cloud Firestore &amp; Firebase Authentication) infrastructure with granular role-based security rules.</p>
+            <p>Only verified dispensary administrators and staff can access order queues for preparation and collection verification.</p>
           </Section>
 
-          <Section title="Cookies">
-            <p>We use Firebase Authentication session cookies to keep you signed in. No advertising or tracking cookies are used.</p>
+          <Section title="4. Cookies & Local Storage">
+            <p>We use essential browser local storage and session tokens to maintain your login session and preserve items in your shopping bag.</p>
+            <p>Optional, privacy-preserving analytics may be enabled solely to understand catalog popularity and improve dispensary operations. No personally identifiable information (PII), passwords, or 6-digit pickup PINs are ever sent to analytics.</p>
           </Section>
 
-          <Section title="Your rights">
-            <p>You may request deletion of your account data at any time by contacting us at our dispensary counter or via email.</p>
+          <Section title="5. Your Rights & Data Access">
+            <p>You have the right to inspect your order history at any time through the Orders section. You may also request deletion of your account and personal details by contacting our dispensary counter or sending an email request.</p>
           </Section>
 
-          <Section title="Contact">
-            <p>For any privacy-related concerns, visit us at the Main Street Dispensary Counter or reach out through our contact page.</p>
+          <Section title="6. Contact Information">
+            <p>For any privacy questions or data requests, contact us at <strong>enquiries@emsdispensary.in</strong> or visit the THANGAM STORES Main Street Dispensary Counter during working hours (Mon–Sat: 9:00 AM – 7:00 PM).</p>
           </Section>
         </div>
 

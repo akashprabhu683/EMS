@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
@@ -9,6 +9,10 @@ export function LoginPage() {
   const { login, loginWithGoogle } = useAdminAuth();
 
   const toast = useToast();
+
+  useEffect(() => {
+    document.title = 'Admin Portal Login — EMS Dispensary Admin';
+  }, []);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

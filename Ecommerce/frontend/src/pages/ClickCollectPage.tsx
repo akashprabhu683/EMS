@@ -1,9 +1,15 @@
 import { MapPin, Clock, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SEO } from '../components/SEO';
 
 export function ClickCollectPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-20 md:pb-8">
+      <SEO
+        title="How Click & Collect Works — Zero Advance Online Payment"
+        description="Understand our Click & Collect pickup process. Reserve authentic herbal remedies online, inspect them at our dispensary counter, and pay on the spot via Cash or UPI."
+        canonical="https://ecommerce-storefront-client.vercel.app/click-collect"
+      />
       <div className="page-container pt-10 pb-16 max-w-3xl mx-auto">
         <div className="mb-10">
           <span className="text-xs font-bold text-emerald-700 tracking-wider uppercase">How it works</span>

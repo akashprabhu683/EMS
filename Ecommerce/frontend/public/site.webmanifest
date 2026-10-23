@@ -1,0 +1,17 @@
+{
+  "name": "THANGAM STORES — Authentic Natural Healthcare",
+  "short_name": "THANGAM STORES",
+  "description": "Authentic herbal and Ayurvedic medicines with Click & Collect in-store pickup.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#047857",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

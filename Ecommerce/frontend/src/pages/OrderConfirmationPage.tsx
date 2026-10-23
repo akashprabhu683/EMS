@@ -4,6 +4,7 @@ import {
   Clock, ShieldCheck, Phone, FileText, Leaf, Banknote,
 } from 'lucide-react';
 import { useState } from 'react';
+import { SEO } from '../components/SEO';
 
 interface OrderConfirmationState {
   orderId?: string;
@@ -45,6 +46,11 @@ export function OrderConfirmationPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pt-10 pb-24 md:pb-12 px-4">
+      <SEO
+        title="Order Confirmed & Pickup PIN"
+        description="Your Click & Collect reservation is confirmed. Present your 6-digit PIN at the counter."
+        noindex={true}
+      />
       <div className="max-w-4xl mx-auto">
 
         {/* Page Header */}

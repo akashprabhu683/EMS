@@ -20,6 +20,8 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
+import { SEO } from '../components/SEO';
+import { trackViewItem, trackAddToCart } from '../utils/analytics';
 import clsx from 'clsx';
 import { getActiveProducts, getActiveProductById } from '../services/productService';
 import type { Product } from '../types';
@@ -154,9 +156,22 @@ export function ProductDetailPage() {
     }
   }, [product?.id, user?.name]);
 
+  // Track product view in analytics
+  useEffect(() => {
+    if (product) {
+      trackViewItem({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+      });
+    }
+  }, [product?.id]);
+
   if (!product && (productsLoading || directLoading)) {
     return (
       <main className="min-h-screen bg-slate-50 pt-28 text-center px-4">
+        <SEO title="Loading Product" noindex={true} />
         <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-8 space-y-4 shadow-xs">
           <div className="w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-slate-900 font-bold text-lg">Loading Product...</p>
@@ -169,6 +184,7 @@ export function ProductDetailPage() {
   if (!product) {
     return (
       <main className="min-h-screen bg-slate-50 pt-28 text-center px-4">
+        <SEO title="Product Not Found" noindex={true} />
         <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-2xl p-8 space-y-4 shadow-xs">
           <p className="text-slate-900 font-bold text-lg">Product Not Found</p>
           <p className="text-slate-500 text-xs">The requested product could not be located in our catalog.</p>
@@ -184,6 +200,12 @@ export function ProductDetailPage() {
     if (product.stock === 0 || adding) return;
     setAdding(true);
     addItem(product, quantity, selectedColor, selectedSize);
+    trackAddToCart({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      quantity,
+    });
     await new Promise(r => setTimeout(r, 350));
     setAdding(false);
     openCart();
@@ -192,6 +214,12 @@ export function ProductDetailPage() {
   const handleBuyNow = () => {
     if (product.stock === 0) return;
     addItem(product, quantity, selectedColor, selectedSize);
+    trackAddToCart({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      quantity,
+    });
     navigate('/checkout');
   };
 
@@ -236,7 +264,31 @@ export function ProductDetailPage() {
     : product.rating.toFixed(1);
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 pt-6 pb-20 md:pb-12">
+    <main className="min-h-screen bg-slate-50 text-slate-900 pt-6 pb-28 md:pb-12">
+      <SEO
+        title={`${product.name} — Authentic Herbal Formulation`}
+        description={product.description?.slice(0, 160) || `Reserve ${product.name} at THANGAM STORES with in-store Click & Collect pickup.`}
+        image={activeImg}
+        type="product"
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: product.name,
+          description: product.description,
+          image: product.images,
+          offers: {
+            '@type': 'Offer',
+            price: product.price,
+            priceCurrency: 'INR',
+            availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            priceValidUntil: '2027-12-31',
+            seller: {
+              '@type': 'Pharmacy',
+              name: 'THANGAM STORES',
+            },
+          },
+        }}
+      />
       <div className="page-container">
 
         {/* Breadcrumb Navigation */}
@@ -705,6 +757,44 @@ export function ProductDetailPage() {
           </button>
         </div>
 
+      </div>
+
+      {/* Sticky Mobile Add to Cart Bar */}
+      <div
+        role="region"
+        aria-label="Quick Order Action"
+        className="md:hidden fixed bottom-14 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2.5 shadow-lg flex items-center justify-between gap-3 safe-area-pb"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-bold text-slate-900 truncate">{product.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-extrabold text-emerald-700">₹{product.price}</span>
+            {product.stock > 0 ? (
+              <span className="text-[10px] text-emerald-600 font-semibold">• In stock</span>
+            ) : (
+              <span className="text-[10px] text-rose-600 font-semibold">• Out of stock</span>
+            )}
+          </div>
+        </div>
+
+        <button
+          id="sticky-mobile-add-to-cart-btn"
+          onClick={handleAddToCart}
+          disabled={adding || product.stock === 0}
+          className="btn-primary py-2.5 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
+        >
+          {adding ? (
+            <>
+              <Check size={14} />
+              <span>Added!</span>
+            </>
+          ) : (
+            <>
+              <ShoppingBag size={14} />
+              <span>Add to Cart</span>
+            </>
+          )}
+        </button>
       </div>
     </main>
   );

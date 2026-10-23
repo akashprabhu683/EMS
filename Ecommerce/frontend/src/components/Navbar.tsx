@@ -239,7 +239,9 @@ export function Navbar() {
               >
                 <img
                   src={user?.avatar}
-                  alt={user?.name}
+                  alt={user?.name || 'Customer profile avatar'}
+                  width={28}
+                  height={28}
                   className="w-7 h-7 rounded-full border border-slate-300 object-cover"
                 />
               </button>
