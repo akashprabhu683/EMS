@@ -167,6 +167,11 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const cred = await signInWithPopup(auth, googleProvider);
       await verifyAdminClaims(cred.user);
+    } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user') {
+        return;
+      }
+      throw err;
     } finally {
       setIsLoading(false);
     }

@@ -9,6 +9,10 @@ export function AppInstallBanner() {
 
   useEffect(() => {
     try {
+      if ((window as any).isEMSApp || (window as any).EMS_NATIVE_APP) {
+        setDismissed(true);
+        return;
+      }
       const isDismissed = localStorage.getItem(STORAGE_KEY) === 'true';
       setDismissed(isDismissed);
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
@@ -27,7 +31,8 @@ export function AppInstallBanner() {
     setDismissed(true);
   };
 
-  if (dismissed) return null;
+  const isNativeApp = typeof window !== 'undefined' && Boolean((window as any).isEMSApp || (window as any).EMS_NATIVE_APP);
+  if (dismissed || isNativeApp) return null;
 
   return (
     <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-emerald-700/60 relative overflow-hidden mb-6">

@@ -13,6 +13,8 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.provider.MediaStore;
 import android.util.Log;
@@ -147,7 +149,9 @@ public class MainActivity extends AppCompatActivity {
         // Clean modern mobile Chrome User-Agent without WebView indicators (; wv, Version/4.0)
         // Ensures Google OAuth permits in-app authentication without 403 disallowed_useragent
         String rawUa = settings.getUserAgentString();
-        String cleanUa = rawUa.replaceAll(";\\s*wv", "").replaceAll("Version/\\d+\\.\\d+\\s*", "");
+        String cleanUa = rawUa.replaceAll(";\\s*wv", "")
+                .replaceAll("Version/\\d+\\.\\d+\\s*", "")
+                .replaceAll(";\\s*U;", ";");
         settings.setUserAgentString(cleanUa);
 
         webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
@@ -157,41 +161,13 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                Uri uri = request.getUrl();
-                String host = uri.getHost();
-                String scheme = uri.getScheme();
+                return handleUrlLoading(view, request.getUrl());
+            }
 
-                // 1. Internal storefront / admin domain navigation
-                if (host != null && (host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST))) {
-                    return false; // let WebView handle it internally
-                }
-
-                // 2. Allow Google OAuth and Firebase Auth domains to proceed inside WebView / popup
-                // Ensures window.opener and postMessage authentication exchange stays alive
-                if (host != null && (
-                        host.equals("accounts.google.com") ||
-                        host.endsWith(".google.com") ||
-                        host.equals("firebaseapp.com") ||
-                        host.endsWith(".firebaseapp.com"))) {
-                    return false;
-                }
-
-                // 3. Handle device telephony and mail protocols
-                if ("tel".equals(scheme) || "mailto".equals(scheme)) {
-                    try {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-                        startActivity(intent);
-                    } catch (Exception ignored) {}
-                    return true;
-                }
-
-                // 4. Open external third-party links safely via Chrome Custom Tabs or browser
-                if ("https".equals(scheme) || "http".equals(scheme)) {
-                    openInCustomTabOrBrowser(uri);
-                    return true;
-                }
-
-                return false;
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url == null) return false;
+                return handleUrlLoading(view, Uri.parse(url));
             }
 
             @Override
@@ -213,6 +189,8 @@ public class MainActivity extends AppCompatActivity {
                     hideError();
                 }
                 updateSwipeRefreshState(url);
+                // Signal to web app that it is running inside the native Android wrapper
+                view.evaluateJavascript("window.isEMSApp = true; window.EMS_NATIVE_APP = true;", null);
             }
 
             @Override
@@ -285,7 +263,13 @@ public class MainActivity extends AppCompatActivity {
                 popupWebView.setWebViewClient(new WebViewClient() {
                     @Override
                     public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                        return false;
+                        return handleUrlLoading(view, request.getUrl());
+                    }
+
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        if (url == null) return false;
+                        return handleUrlLoading(view, Uri.parse(url));
                     }
 
                     @Override
@@ -316,12 +300,11 @@ public class MainActivity extends AppCompatActivity {
 
                 popupDialog = new Dialog(MainActivity.this, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
                 popupDialog.setContentView(popupContainer);
+                if (popupDialog.getWindow() != null) {
+                    popupDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                }
                 popupDialog.setOnDismissListener(dialog -> {
-                    if (popupWebView != null) {
-                        popupWebView.destroy();
-                        popupWebView = null;
-                    }
-                    popupProgressBar = null;
+                    dismissPopup();
                 });
                 popupDialog.show();
 
@@ -546,13 +529,86 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // ── Internal and Auth Domain Classification ──────────────────
+    private boolean isInternalOrAuthUrl(Uri uri) {
+        if (uri == null) return false;
+        String host = uri.getHost();
+        if (host == null) return false;
+        host = host.toLowerCase();
+
+        // 1. Internal storefront / admin domains & Vercel deployments
+        if (host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST)) {
+            return true;
+        }
+        if (host.endsWith(".vercel.app")) {
+            return true;
+        }
+
+        // 2. Google OAuth & Identity authentication endpoints
+        if (host.equals("accounts.google.com") ||
+            host.endsWith(".accounts.google.com") ||
+            host.equals("google.com") ||
+            host.endsWith(".google.com") ||
+            host.contains(".google.co.") ||
+            host.contains("googleusercontent.com") ||
+            host.equals("googleapis.com") ||
+            host.endsWith(".googleapis.com") ||
+            host.equals("gstatic.com") ||
+            host.endsWith(".gstatic.com")) {
+            return true;
+        }
+
+        // 3. Firebase Auth & Hosting handler domains
+        if (host.equals("firebaseapp.com") ||
+            host.endsWith(".firebaseapp.com") ||
+            host.equals("web.app") ||
+            host.endsWith(".web.app")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean handleUrlLoading(WebView view, Uri uri) {
+        if (uri == null) return false;
+        String scheme = uri.getScheme();
+
+        // 1. Telephony and mail schemes
+        if ("tel".equalsIgnoreCase(scheme) || "mailto".equalsIgnoreCase(scheme)) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                startActivity(intent);
+            } catch (Exception ignored) {}
+            return true;
+        }
+
+        // 2. Internal app navigation & Google/Firebase Auth flows — strictly keep inside WebView / popup WebView
+        if (isInternalOrAuthUrl(uri)) {
+            return false; // let the WebView load it internally
+        }
+
+        // 3. Open third-party external links safely in Custom Tabs / system browser
+        if ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) {
+            openInCustomTabOrBrowser(uri);
+            return true;
+        }
+
+        return false;
+    }
+
     private void dismissPopup() {
         if (popupDialog != null && popupDialog.isShowing()) {
             popupDialog.dismiss();
         }
         if (popupWebView != null) {
-            popupWebView.destroy();
+            final WebView webViewToDestroy = popupWebView;
             popupWebView = null;
+            // Delay destruction slightly to allow pending window.opener.postMessage to dispatch
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    webViewToDestroy.destroy();
+                } catch (Exception ignored) {}
+            }, 500);
         }
         popupProgressBar = null;
     }
