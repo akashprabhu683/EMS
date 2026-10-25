@@ -25,6 +25,7 @@ import {
 } from '../services/adminRoleService';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useToast } from '../context/ToastContext';
+import { copyToClipboard } from '../utils/clipboard';
 
 export function AdminUsersPage() {
   const { user: currentUser } = useAdminAuth();
@@ -50,6 +51,9 @@ export function AdminUsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [createdInviteUrl, setCreatedInviteUrl] = useState<string | null>(null);
+  const [createdInviteEmail, setCreatedInviteEmail] = useState<string | null>(null);
+  const [cachedLinks, setCachedLinks] = useState<Record<string, string>>({});
 
   // Revoke confirmation modal state
   const [revokeTarget, setRevokeTarget] = useState<{ uid?: string; email: string } | null>(null);
@@ -123,27 +127,30 @@ export function AdminUsersPage() {
 
   const handleGrant = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetEmail = emailInput.trim();
+    const targetEmail = emailInput.trim().toLowerCase();
     if (!targetEmail) return;
 
     setActionLoading(true);
     try {
       const res = await grantAdmin(targetEmail);
-      if ((res as any).emailSent === false) {
-        toast.warning(res.message || `Admin invitation created for ${targetEmail}, but email could not be sent. Please copy and share the invitation link.`);
-        if (res.acceptUrl) {
-          try {
-            await navigator.clipboard.writeText(res.acceptUrl);
-            toast.info(`Invitation link copied to clipboard for ${targetEmail}`);
-          } catch {
-            // Ignore clipboard write rejection
-          }
+      const url = res.acceptUrl || (res as any).url;
+
+      if (url) {
+        setCreatedInviteUrl(url);
+        setCreatedInviteEmail(targetEmail);
+        setCachedLinks((prev) => ({ ...prev, [targetEmail]: url }));
+
+        const copied = await copyToClipboard(url);
+        if (copied) {
+          toast.success(`Invitation link created and copied to clipboard for ${targetEmail}!`);
+        } else {
+          toast.info(`Invitation link created for ${targetEmail}. Please copy it below.`);
         }
       } else {
-        toast.success(res.message || `Admin invitation email sent to ${targetEmail}!`);
+        toast.success(`Admin privileges generated for ${targetEmail}!`);
+        setIsModalOpen(false);
       }
       setEmailInput('');
-      setIsModalOpen(false);
       await loadData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to grant admin privileges. Please try again.');
@@ -169,22 +176,36 @@ export function AdminUsersPage() {
   };
 
   const handleCopyLink = async (inv: AdminInvitation) => {
-    let url = inv.acceptUrl;
+    const emailKey = inv.email.toLowerCase().trim();
+    let url = inv.acceptUrl || cachedLinks[emailKey];
     if (!url && inv.token) {
       url = `${window.location.origin}/accept-invite?token=${inv.token}&email=${encodeURIComponent(inv.email)}`;
     }
 
     if (!url) {
-      toast.info('The direct invitation link was delivered via email upon creation. If needed, please cancel and re-invite the user.');
+      try {
+        const res = await grantAdmin(inv.email);
+        if (res.acceptUrl) {
+          url = res.acceptUrl;
+          setCachedLinks((prev) => ({ ...prev, [emailKey]: url }));
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'Could not retrieve invitation link.');
+        return;
+      }
+    }
+
+    if (!url) {
+      toast.error('Could not retrieve invitation link.');
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(url);
+    const copied = await copyToClipboard(url);
+    if (copied) {
       setCopiedEmail(inv.email);
-      toast.info(`Invitation link copied to clipboard for ${inv.email}`);
+      toast.success(`Invitation link copied to clipboard for ${inv.email}`);
       setTimeout(() => setCopiedEmail(null), 3000);
-    } catch {
+    } else {
       toast.error('Could not access clipboard. Please copy the link manually.');
     }
   };
@@ -242,7 +263,7 @@ export function AdminUsersPage() {
           </div>
           <div className="text-2xl font-black text-slate-900 font-display">{invitations.length}</div>
           <p className="text-xs text-slate-500 mt-1">
-            {invitations.length === 0 ? 'All sent invitations have been accepted' : 'Waiting for the invitee to accept via email'}
+            {invitations.length === 0 ? 'All sent invitations have been accepted' : 'Waiting for the invitee to accept via invite link'}
           </p>
         </div>
 
@@ -513,56 +534,126 @@ export function AdminUsersPage() {
                 <h3 className="font-bold text-slate-900 text-base font-display">Grant Admin Privileges</h3>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setCreatedInviteUrl(null);
+                  setCreatedInviteEmail(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 text-lg font-bold"
               >
                 ×
               </button>
             </div>
 
-            <form onSubmit={handleGrant} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Google Account Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 text-slate-400" size={16} />
-                  <input
-                    type="email"
-                    required
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="user@gmail.com"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:border-emerald-700"
-                  />
+            {createdInviteUrl ? (
+              <div className="space-y-4">
+                <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 text-xs">
+                  <div className="flex items-center gap-2 font-bold mb-1">
+                    <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
+                    <span>Invitation Link Generated</span>
+                  </div>
+                  <p className="text-slate-600">
+                    Share this invitation link with <strong className="font-mono text-slate-900">{createdInviteEmail}</strong>. They can open it in their browser to activate their administrator role.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Direct Invitation Link
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={createdInviteUrl}
+                      className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-300 text-xs font-mono text-slate-700 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (createdInviteUrl) {
+                          await copyToClipboard(createdInviteUrl);
+                          setCopiedEmail(createdInviteEmail || 'modal');
+                          toast.success('Invitation link copied to clipboard!');
+                          setTimeout(() => setCopiedEmail(null), 3000);
+                        }
+                      }}
+                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shrink-0 transition-colors"
+                    >
+                      {copiedEmail === (createdInviteEmail || 'modal') ? (
+                        <>
+                          <CheckCircle2 size={14} />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} />
+                          <span>Copy Link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setCreatedInviteUrl(null);
+                      setCreatedInviteEmail(null);
+                    }}
+                    className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors"
+                  >
+                    Done
+                  </button>
                 </div>
               </div>
+            ) : (
+              <form onSubmit={handleGrant} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Google Account Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 text-slate-400" size={16} />
+                    <input
+                      type="email"
+                      required
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="user@gmail.com"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:border-emerald-700"
+                    />
+                  </div>
+                </div>
 
-              <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 text-emerald-900 text-xs flex gap-2">
-                <Info size={16} className="text-emerald-700 shrink-0 mt-0.5" />
-                <p>
-                  An invitation email will be sent to this address. The recipient must click the link in the email to accept and activate their admin privileges.
-                </p>
-              </div>
+                <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 text-emerald-900 text-xs flex gap-2">
+                  <Info size={16} className="text-emerald-700 shrink-0 mt-0.5" />
+                  <p>
+                    A secure invitation link will be created and copied to your clipboard so you can share it directly with the team member to activate their admin privileges.
+                  </p>
+                </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading || !emailInput.trim()}
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50"
-                >
-                  {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                  <span>Send Invitation</span>
-                </button>
-              </div>
-            </form>
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading || !emailInput.trim()}
+                    className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50"
+                  >
+                    {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                    <span>Generate Invite Link</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -721,7 +721,8 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
       success: true,
       status: 'invited',
       acceptUrl,
-      message: `Invitation generated for ${cleanEmail}. Link: ${acceptUrl}`,
+      emailSent: false,
+      message: `Admin invitation link created for ${cleanEmail}.`,
     });
   } catch (err: any) {
     console.error('Failed to create invitation:', err);

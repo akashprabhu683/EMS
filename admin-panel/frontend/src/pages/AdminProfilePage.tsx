@@ -19,6 +19,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useToast } from '../context/ToastContext';
+import { copyToClipboard } from '../utils/clipboard';
 
 export function AdminProfilePage() {
   const { user, rawUser, logout, isAdmin } = useAdminAuth();
@@ -26,9 +27,9 @@ export function AdminProfilePage() {
   const navigate = useNavigate();
   const [copiedUid, setCopiedUid] = useState(false);
 
-  const handleCopyUid = () => {
+  const handleCopyUid = async () => {
     if (user?.uid) {
-      navigator.clipboard.writeText(user.uid);
+      await copyToClipboard(user.uid);
       setCopiedUid(true);
       toast.success('Admin UID copied to clipboard!');
       setTimeout(() => setCopiedUid(false), 2000);

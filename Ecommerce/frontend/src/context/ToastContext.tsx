@@ -45,7 +45,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* Toast Notification Container */}
       <div
-        className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
+        className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 sm:max-w-md z-50 flex flex-col gap-2.5 pointer-events-none"
         aria-live="polite"
         role="region"
       >
@@ -58,7 +58,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={toast.id}
-              className={`pointer-events-auto flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl shadow-xl border backdrop-blur-md animate-fade-in transition-all ${
+              className={`pointer-events-auto flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl shadow-xl border backdrop-blur-md w-full max-w-full overflow-hidden animate-fade-in transition-all ${
                 isSuccess
                   ? 'bg-white/98 border-emerald-300 text-slate-800'
                   : isWarning
@@ -74,7 +74,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 {isWarning && <AlertTriangle size={18} className="text-amber-500" />}
                 {isError && <XCircle size={18} className="text-rose-600" />}
               </div>
-              <div className="flex-1 text-xs sm:text-sm font-medium leading-snug">
+              <div className="flex-1 min-w-0 text-xs sm:text-sm font-medium leading-snug break-words [overflow-wrap:anywhere]">
                 {toast.message}
               </div>
               <button

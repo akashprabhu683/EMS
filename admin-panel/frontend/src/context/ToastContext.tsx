@@ -46,7 +46,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastItem; onRemove: (id: strin
     <div
       className={`
         pointer-events-auto flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl
-        shadow-xl border bg-white backdrop-blur-md
+        shadow-xl border bg-white backdrop-blur-md w-full max-w-full overflow-hidden
         transition-all duration-300 ease-out
         ${borderColor}
         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}
@@ -54,7 +54,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastItem; onRemove: (id: strin
       role="alert"
     >
       {iconEl}
-      <p className="flex-1 text-xs sm:text-sm font-medium text-slate-800 leading-snug">
+      <p className="flex-1 min-w-0 text-xs sm:text-sm font-medium text-slate-800 leading-snug break-words [overflow-wrap:anywhere]">
         {toast.message}
       </p>
       <button
@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast, success, info, warning, error }}>
       {children}
       <div
-        className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
+        className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 sm:max-w-md z-[9999] flex flex-col gap-2.5 pointer-events-none"
         aria-live="polite"
         role="region"
         aria-label="Notifications"
