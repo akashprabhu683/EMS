@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSuperadmin() {
+      return isAuthenticated() && request.auth.token.email.lower() == 'akashprabhu0302@gmail.com';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        isSuperadmin() ||
+        request.auth.token.admin == true ||
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. Product Images
+    // ─────────────────────────────────────────────────────────────
+    match /products/{imageName} {
+      // Public read access for customer storefront and catalog browsing
+      allow read: if true;
+
+      // Only authenticated dispensary admins can upload product images
+      // Enforces image content type and max size 5MB
+      allow write: if isAdmin()
+                   && request.resource.size <= 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Only admins can delete product images
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. Default Lockdown
+    // ─────────────────────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
