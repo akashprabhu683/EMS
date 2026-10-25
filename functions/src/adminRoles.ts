@@ -32,12 +32,12 @@ const auth = new Proxy({} as admin.auth.Auth, {
   },
 });
 
-function getCanonicalPortalUrl(): string {
+export function getCanonicalPortalUrl(): string {
   const url = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://ems-admin-panel-provider.vercel.app";
   return url.replace(/\/$/, "");
 }
 
-function hashToken(rawToken: string): string {
+export function hashToken(rawToken: string): string {
   return createHash("sha256").update(rawToken).digest("hex");
 }
 
@@ -105,19 +105,38 @@ export const listAdmins = onCall(async (request) => {
       db.collection("admin_invitations").get(),
     ]);
 
-    const admins: any[] = [];
+    const adminsMap = new Map<string, any>();
     adminsSnap.forEach((doc) => {
       const data = doc.data();
-      admins.push({
+      const email = (data.email || "").toLowerCase().trim();
+      if (!email) return;
+
+      const record = {
         uid: doc.id,
         email: data.email,
-        displayName: data.displayName || data.email?.split("@")[0] || "Admin",
+        displayName: data.displayName || data.name || data.email?.split("@")[0] || "Admin",
         role: data.role || "admin",
         grantedBy: data.grantedBy || "system",
-        grantedAt: data.grantedAt?.toDate?.() ? data.grantedAt.toDate().toISOString() : data.grantedAt || null,
+        grantedAt: data.grantedAt?.toDate?.()
+          ? data.grantedAt.toDate().toISOString()
+          : data.grantedAt || (data.createdAt?.toDate?.() ? data.createdAt.toDate().toISOString() : data.createdAt || null),
         photoURL: data.photoURL || null,
-      });
+      };
+
+      if (adminsMap.has(email)) {
+        const existing = adminsMap.get(email);
+        // Deduplicate: prefer canonical record with explicit grantedAt or non-synthetic UID
+        if (!existing.grantedAt && record.grantedAt) {
+          adminsMap.set(email, record);
+        } else if (existing.uid.startsWith("legit_") || existing.uid.startsWith("test_")) {
+          adminsMap.set(email, record);
+        }
+      } else {
+        adminsMap.set(email, record);
+      }
     });
+
+    const admins = Array.from(adminsMap.values());
 
     const invitations: any[] = [];
     invitesSnap.forEach((doc) => {
@@ -225,87 +244,6 @@ export const grantAdminRole = onCall({ secrets: ["RESEND_API_KEY"] }, async (req
   } catch (err: any) {
     logger.error(`grantAdminRole failed for ${email}:`, err);
     throw new HttpsError("internal", err.message || "Failed to grant admin role.");
-  }
-});
-
-/**
- * Callable: resendAdminInvitation
- * Resends the invitation email to a pending administrator.
- * Only the site owner (akashprabhu0302@gmail.com) has authority to resend invitations.
- */
-export const resendAdminInvitation = onCall({ secrets: ["RESEND_API_KEY"] }, async (request) => {
-  await assertSuperadminOwner(request);
-
-  const emailRaw = request.data?.email;
-  if (!emailRaw || typeof emailRaw !== "string") {
-    throw new HttpsError("invalid-argument", "Valid email address is required.");
-  }
-
-  const email = emailRaw.trim().toLowerCase();
-  const callerEmail = request.auth?.token.email || request.auth?.uid || "admin";
-
-  try {
-    const inviteDoc = await db.collection("admin_invitations").doc(email).get();
-    if (!inviteDoc.exists) {
-      throw new HttpsError("not-found", `No pending invitation found for ${email}.`);
-    }
-
-    // Refresh token, tokenHash, and expiration
-    const token = randomBytes(32).toString("hex");
-    const tokenHash = hashToken(token);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const portalUrl = getCanonicalPortalUrl();
-    const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
-
-    await inviteDoc.ref.update({
-      tokenHash,
-      status: "pending",
-      expiresAt: Timestamp.fromDate(expiresAt),
-      lastResentAt: FieldValue.serverTimestamp(),
-      token: FieldValue.delete(),
-      acceptUrl: FieldValue.delete(),
-    });
-
-    const emailResult = await sendAdminInvitationEmail({
-      toEmail: email,
-      invitedBy: callerEmail,
-      acceptUrl,
-      expiresInDays: 7,
-    });
-    logger.info(`Resent invitation email to ${email}: success=${emailResult.success}`);
-
-    await appendAuditLog(db, {
-      action: "ADMIN_INVITATION_RESENT",
-      actor: { uid: request.auth?.uid || "superadmin", email: callerEmail, role: "superadmin" },
-      target: { collection: "admin_invitations", id: email, label: email },
-      summary: `Admin invitation link refreshed for ${email} by ${callerEmail}. Email dispatched: ${emailResult.success}.`,
-      metadata: {
-        emailSent: emailResult.success,
-        emailError: emailResult.error || null,
-        resendId: emailResult.resendId || null,
-      },
-    });
-
-    if (!emailResult.success) {
-      return {
-        success: true,
-        emailSent: false,
-        emailError: emailResult.error || "Email delivery failed",
-        acceptUrl,
-        message: `Invitation link refreshed for ${email}, but email delivery failed (${emailResult.error || "provider unreachable"}). You may copy and share the link directly.`,
-      };
-    }
-
-    return {
-      success: true,
-      emailSent: true,
-      resendId: emailResult.resendId,
-      acceptUrl,
-      message: `Invitation email resent to ${email}.`,
-    };
-  } catch (err: any) {
-    logger.error(`resendAdminInvitation failed for ${email}:`, err);
-    throw new HttpsError("internal", err.message || "Failed to resend invitation.");
   }
 });
 
@@ -561,6 +499,18 @@ export const revokeAdminRole = onCall(async (request) => {
       });
 
       await db.collection("admins").doc(targetUid).delete();
+
+      // Clean up any FCM device tokens registered under the admin record
+      try {
+        const tokensSnap = await db.collection("admins").doc(targetUid).collection("fcm_tokens").get();
+        if (!tokensSnap.empty) {
+          const tokenBatch = db.batch();
+          tokensSnap.forEach((doc) => tokenBatch.delete(doc.ref));
+          await tokenBatch.commit();
+        }
+      } catch (tokenErr) {
+        logger.warn(`Could not clean up FCM tokens for revoked admin ${targetUid}:`, tokenErr);
+      }
 
       // Write immediate real-time revocation marker document
       await db.collection("admin_revocations").doc(targetUid).set({

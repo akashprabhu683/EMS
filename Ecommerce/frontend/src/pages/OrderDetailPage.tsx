@@ -187,7 +187,7 @@ export function OrderDetailPage() {
 
           {/* Action CTAs */}
           <div className="flex flex-wrap items-center gap-3">
-            {order.status === 'placed' && (
+            {order.status === 'placed' && order.paymentStatus !== 'paid' && (
               <button
                 onClick={() => setShowCancelModal(true)}
                 className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-2xs"
@@ -196,13 +196,15 @@ export function OrderDetailPage() {
                 <span>Cancel Order</span>
               </button>
             )}
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs"
-            >
-              <Trash2 size={15} />
-              <span>Remove Order</span>
-            </button>
+            {(order.status === 'collected' || order.status === 'cancelled') && (
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="inline-flex items-center gap-1.5 py-2.5 px-4 text-xs sm:text-sm rounded-xl font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs"
+              >
+                <Trash2 size={15} />
+                <span>Remove Order</span>
+              </button>
+            )}
             <button
               id="download-order-invoice-btn"
               onClick={handleDownloadInvoice}
@@ -228,19 +230,31 @@ export function OrderDetailPage() {
           <div className="lg:col-span-8 space-y-6">
 
             {/* 6-Digit Counter Collection PIN Banner */}
-            {order.pickupCode && (
-              <div className="bg-emerald-50/90 border-2 border-dashed border-emerald-400 rounded-2xl p-5 text-center shadow-xs">
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block mb-1">
-                  Order Collection Verification Code (Show at Counter)
-                </span>
-                <div className="font-mono text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-950 my-1">
-                  {order.pickupCode}
+            {(order.status === 'ready_for_pickup' || order.status === 'collected') ? (
+              order.pickupCode ? (
+                <div className="bg-emerald-50/90 border-2 border-dashed border-emerald-400 rounded-2xl p-5 text-center shadow-xs">
+                  <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block mb-1">
+                    Order Collection Verification Code (Show at Counter)
+                  </span>
+                  <div className="font-mono text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-950 my-1">
+                    {order.pickupCode}
+                  </div>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Show this 6-digit verification code to the dispensary pharmacist to complete pickup. (This is unique to your order and separate from the store postal code 560001).
+                  </p>
                 </div>
-                <p className="text-xs text-emerald-700 mt-1">
-                  Show this 6-digit verification code to the dispensary pharmacist to complete pickup. (This is unique to your order and separate from the store postal code 560001).
+              ) : null
+            ) : order.status !== 'cancelled' ? (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center shadow-xs">
+                <div className="inline-flex items-center gap-1.5 text-slate-700 font-bold text-xs uppercase tracking-wider mb-1">
+                  <Clock size={14} className="text-amber-600" />
+                  <span>Pickup Verification PIN</span>
+                </div>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Your unique 6-digit collection verification PIN will appear here once the dispensary accepts, prepares, and marks your remedies ready for counter pickup.
                 </p>
               </div>
-            )}
+            ) : null}
 
             {/* Preparation & Pickup Progress Timeline */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">

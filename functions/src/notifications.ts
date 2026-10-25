@@ -3,6 +3,7 @@ import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
+import { verifyAuditAdminCaller } from "./audit.js";
 
 const db = new Proxy({} as admin.firestore.Firestore, {
   get(_target, prop) {
@@ -331,7 +332,14 @@ export const registerFcmToken = onCall(
     const cleanToken = token.trim();
     const uid = request.auth.uid;
     const now = FieldValue.serverTimestamp();
-    const isAdmin = Boolean(request.auth.token.admin);
+
+    // Verify whether the caller possesses active administrator privileges
+    // (includes real-time /admin_revocations check and verified email requirements)
+    const email = request.auth.token.email;
+    const emailVerified = Boolean(request.auth.token.email_verified);
+    const hasAdminClaim = Boolean(request.auth.token.admin);
+    const adminStatus = await verifyAuditAdminCaller(db, uid, email, hasAdminClaim, emailVerified);
+    const isAdmin = adminStatus.isAdmin;
 
     // Save in user profile tokens
     const userTokenRef = db.collection("users").doc(uid).collection("fcm_tokens").doc(cleanToken);
@@ -342,15 +350,18 @@ export const registerFcmToken = onCall(
       createdAt: now,
     }, { merge: true });
 
-    // If administrator, also register in admins collection
+    // If active administrator, also register in admins collection.
+    // Otherwise, proactively clean up any lingering admin token document for this token.
+    const adminTokenRef = db.collection("admins").doc(uid).collection("fcm_tokens").doc(cleanToken);
     if (isAdmin) {
-      const adminTokenRef = db.collection("admins").doc(uid).collection("fcm_tokens").doc(cleanToken);
       await adminTokenRef.set({
         token: cleanToken,
         platform,
         updatedAt: now,
         createdAt: now,
       }, { merge: true });
+    } else {
+      await adminTokenRef.delete().catch(() => {});
     }
 
     return { success: true, registered: true };

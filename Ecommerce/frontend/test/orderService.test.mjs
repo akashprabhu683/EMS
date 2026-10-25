@@ -104,3 +104,61 @@ test('Order Service 4: Default pickup location uses Postal Code: 560001 (not amb
   assert.match(order.pickupLocation, /Postal Code: 560001/);
   assert.doesNotMatch(order.pickupLocation, /Pin:\s*560001/);
 });
+
+test('Order Service 5: Pickup PIN visibility is restricted to ready_for_pickup and collected states', () => {
+  function shouldShowPickupPin(status, pickupCode) {
+    if (!pickupCode) return false;
+    return status === 'ready_for_pickup' || status === 'collected';
+  }
+
+  // Pre-collection / preparation states: PIN must NOT be displayed
+  assert.equal(shouldShowPickupPin('placed', '849201'), false);
+  assert.equal(shouldShowPickupPin('accepted', '849201'), false);
+  assert.equal(shouldShowPickupPin('preparing', '849201'), false);
+  assert.equal(shouldShowPickupPin('cancelled', '849201'), false);
+
+  // Ready and collected states: PIN IS displayed
+  assert.equal(shouldShowPickupPin('ready_for_pickup', '849201'), true);
+  assert.equal(shouldShowPickupPin('collected', '849201'), true);
+});
+
+test('Order Service 6: Cancel Order button is displayed only for unpaid placed orders', () => {
+  function shouldShowCancelOrder(status, paymentStatus) {
+    return status === 'placed' && paymentStatus !== 'paid';
+  }
+
+  // Unpaid placed order: can cancel
+  assert.equal(shouldShowCancelOrder('placed', 'unpaid'), true);
+
+  // Paid placed order: cannot cancel online
+  assert.equal(shouldShowCancelOrder('placed', 'paid'), false);
+
+  // Processed orders: cannot cancel online
+  assert.equal(shouldShowCancelOrder('accepted', 'unpaid'), false);
+  assert.equal(shouldShowCancelOrder('preparing', 'unpaid'), false);
+  assert.equal(shouldShowCancelOrder('ready_for_pickup', 'unpaid'), false);
+  assert.equal(shouldShowCancelOrder('collected', 'paid'), false);
+  assert.equal(shouldShowCancelOrder('cancelled', 'unpaid'), false);
+});
+
+test('Order Service 7: Admin In-Person Payment is removed before collected/ready status', () => {
+  function canMarkPaid(orderStatus, paymentStatus) {
+    return paymentStatus === 'unpaid' &&
+      orderStatus !== 'cancelled' &&
+      (orderStatus === 'ready_for_pickup' || orderStatus === 'collected');
+  }
+
+  // Early statuses before readiness: button MUST NOT be shown
+  assert.equal(canMarkPaid('placed', 'unpaid'), false);
+  assert.equal(canMarkPaid('accepted', 'unpaid'), false);
+  assert.equal(canMarkPaid('preparing', 'unpaid'), false);
+  assert.equal(canMarkPaid('cancelled', 'unpaid'), false);
+
+  // Once ready for collection or collected: button is shown
+  assert.equal(canMarkPaid('ready_for_pickup', 'unpaid'), true);
+  assert.equal(canMarkPaid('collected', 'unpaid'), true);
+
+  // Already paid: button is not shown
+  assert.equal(canMarkPaid('ready_for_pickup', 'paid'), false);
+  assert.equal(canMarkPaid('collected', 'paid'), false);
+});

@@ -17,11 +17,13 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useAdminAuth } from '../context/AdminAuthContext';
 import { getAuditTrail, exportAuditLogsCsv } from '../services/adminAuditService';
 import type { AuditLogEntry, AuditAction } from '../types';
 
 export function AuditLogsPage() {
   const toast = useToast();
+  const { refreshClaims } = useAdminAuth();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
@@ -32,11 +34,18 @@ export function AuditLogsPage() {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadLogs = async (isInitial = true) => {
+  const loadLogs = async (isInitial = true, forceRefresh = false) => {
     setLoading(true);
     if (isInitial) {
       setPermissionDenied(false);
       setErrorMessage(null);
+    }
+    if (forceRefresh) {
+      try {
+        await refreshClaims();
+      } catch (e) {
+        console.warn('Refreshing claims during retry failed:', e);
+      }
     }
     try {
       const lastDocId = !isInitial && logs.length > 0 ? logs[logs.length - 1].id : undefined;
@@ -263,7 +272,7 @@ export function AuditLogsPage() {
               Your account does not have verified administrative access to read the audit log stream. Contact a store super admin or re-authenticate.
             </p>
             <button
-              onClick={() => loadLogs(true)}
+              onClick={() => loadLogs(true, true)}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold transition-colors"
             >
               <RefreshCw size={13} />

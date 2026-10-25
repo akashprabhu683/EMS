@@ -13,6 +13,12 @@
     "build:admin:frontend": "npm --prefix admin-panel/frontend run build",
     "build:admin:backend": "npm --prefix admin-panel/backend run build",
     "build:all": "npm run build:ecommerce:backend && npm run build:ecommerce:frontend && npm run build:admin:backend && npm run build:admin:frontend",
-    "deploy:firebase:rules": "firebase deploy --only firestore:rules,firestore:indexes"
+    "build:functions": "npm --prefix functions run build",
+    "test:functions": "npm --prefix functions test",
+    "deploy:firebase:functions": "firebase deploy --project ems-store-6a342 --only functions",
+    "deploy:firebase:firestore": "firebase deploy --project ems-store-6a342 --only firestore:rules,firestore:indexes",
+    "deploy:firebase:storage": "firebase deploy --project ems-store-6a342 --only storage:rules",
+    "deploy:firebase:rules": "firebase deploy --project ems-store-6a342 --only firestore:rules,firestore:indexes,storage:rules",
+    "deploy:firebase:all": "firebase deploy --project ems-store-6a342 --only functions,firestore:rules,firestore:indexes,storage:rules"
   }
 }

@@ -1,7 +1,19 @@
 {
   "projects": {
-    "default": "ems-store-6a342"
+    "default": "ems-store-6a342",
+    "production": "ems-store-6a342"
   },
-  "targets": {},
+  "targets": {
+    "ems-store-6a342": {
+      "hosting": {
+        "ecommerce": [
+          "ecommerce-storefront-client"
+        ],
+        "admin": [
+          "ems-admin-portal"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

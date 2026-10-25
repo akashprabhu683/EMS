@@ -240,11 +240,70 @@ export const onProductWrittenAudit = onDocumentWritten("products/{productId}", a
    CALLABLE API: QUERY AUDIT LOGS (ADMIN ONLY)
    ═══════════════════════════════════════════════════════════════════════ */
 
+export const PRIMARY_SUPERADMIN_EMAIL = "akashprabhu0302@gmail.com";
+
 export interface GetAuditLogsRequest {
   action?: string;
   targetCollection?: string;
   limit?: number;
   startAfterId?: string;
+}
+
+export interface ResolvedAuditAdminStatus {
+  isAdmin: boolean;
+  isRevoked: boolean;
+  isSuperadmin: boolean;
+}
+
+/**
+ * Verifies audit trail caller authorization with real-time revocation checks
+ * and mandatory email verification for superadmin / email fallback identities.
+ */
+export async function verifyAuditAdminCaller(
+  db: FirebaseFirestore.Firestore,
+  uid: string,
+  email?: string,
+  hasAdminClaim?: boolean,
+  emailVerified?: boolean
+): Promise<ResolvedAuditAdminStatus> {
+  const cleanEmail = email ? email.toLowerCase().trim() : "";
+  const isEmailVerified = Boolean(emailVerified);
+  const isSuperadmin = isEmailVerified && cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+
+  // 1. Superadmin always has admin privileges and is immune to rogue revocation markers
+  if (isSuperadmin) {
+    return { isAdmin: true, isRevoked: false, isSuperadmin: true };
+  }
+
+  // 2. Real-time revocation check against /admin_revocations/{uid}
+  const revocationDoc = await db.collection("admin_revocations").doc(uid).get();
+  if (revocationDoc.exists) {
+    return { isAdmin: false, isRevoked: true, isSuperadmin: false };
+  }
+
+  // 3. Check canonical /admins/{uid}
+  const adminDoc = await db.collection("admins").doc(uid).get();
+  if (adminDoc.exists) {
+    if (adminDoc.data()?.isActive === false) {
+      return { isAdmin: false, isRevoked: false, isSuperadmin: false };
+    }
+    return { isAdmin: true, isRevoked: false, isSuperadmin: false };
+  }
+
+  // 4. Fallback: Check /admins by verified email
+  if (cleanEmail && isEmailVerified) {
+    const querySnap = await db.collection("admins").where("email", "==", cleanEmail).limit(1).get();
+    if (!querySnap.empty && querySnap.docs[0].data()?.isActive !== false) {
+      return { isAdmin: true, isRevoked: false, isSuperadmin: false };
+    }
+  }
+
+  // 5. Token claim fallback (only if not revoked)
+  if (Boolean(hasAdminClaim)) {
+    return { isAdmin: true, isRevoked: false, isSuperadmin: false };
+  }
+
+  return { isAdmin: false, isRevoked: false, isSuperadmin: false };
 }
 
 export const getAuditLogs = onCall(
@@ -255,17 +314,40 @@ export const getAuditLogs = onCall(
     }
 
     const uid = request.auth.uid;
+    const email = request.auth.token.email;
+    const emailVerified = Boolean(request.auth.token.email_verified);
     const db = admin.firestore();
 
-    // Verify admin privileges
-    let isAdmin = Boolean(request.auth.token.admin);
-    if (!isAdmin) {
-      const adminSnap = await db.collection("admins").doc(uid).get();
-      if (adminSnap.exists) isAdmin = true;
+    const { isAdmin, isRevoked, isSuperadmin } = await verifyAuditAdminCaller(
+      db,
+      uid,
+      email,
+      Boolean(request.auth.token.admin),
+      emailVerified
+    );
+
+    if (isRevoked) {
+      throw new HttpsError("permission-denied", "Administrator privilege has been revoked for this account.");
     }
 
     if (!isAdmin) {
       throw new HttpsError("permission-denied", "Only authorized administrators can access audit trails.");
+    }
+
+    if (isSuperadmin) {
+      const adminRef = db.collection("admins").doc(uid);
+      const snap = await adminRef.get();
+      if (!snap.exists) {
+        await adminRef.set({
+          uid,
+          email: (email || "").toLowerCase().trim(),
+          name: request.auth.token.name || "Dispensary Superadmin",
+          role: "superadmin",
+          isActive: true,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
     }
 
     const queryLimit = Math.min(request.data.limit || 50, 100);

@@ -110,15 +110,18 @@ function OrderCard({
   const contact = order?.pickupContact || { fullName: 'Valued Customer', phone: '—', notes: '' };
   const itemsList = Array.isArray(order?.items) ? order.items : [];
   const totalPaise = Number(order?.totalPaise ?? order?.subtotalPaise ?? 0);
+  const [markPaidOnVerify, setMarkPaidOnVerify] = useState(true);
 
   const canMarkPaid =
     order.paymentStatus === 'unpaid' &&
-    statusKey !== 'cancelled';
+    statusKey !== 'cancelled' &&
+    (statusKey === 'ready_for_pickup' || statusKey === 'collected');
 
   const handleStatusClick = (newStatus: OrderStatus) => {
     if (newStatus === 'collected') {
       setEnteredPickupCode('');
       setVerifyError('');
+      setMarkPaidOnVerify(true);
       setShowVerifyModal(true);
       return;
     }
@@ -155,6 +158,13 @@ function OrderCard({
       return;
     }
     await executeStatusChange('collected', clean);
+    if (markPaidOnVerify && order.paymentStatus === 'unpaid') {
+      try {
+        await onMarkPaid(order.id);
+      } catch (err: any) {
+        console.warn('Payment recording during collection verification deferred:', err);
+      }
+    }
   };
 
   const handleMarkPaid = async () => {
@@ -401,6 +411,25 @@ function OrderCard({
                   </p>
                 )}
               </div>
+
+              {order.paymentStatus === 'unpaid' && (
+                <label className="flex items-start gap-2.5 text-xs text-slate-700 bg-amber-50/90 p-3 rounded-xl border border-amber-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={markPaidOnVerify}
+                    onChange={(e) => setMarkPaidOnVerify(e.target.checked)}
+                    className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                  />
+                  <div>
+                    <span className="font-bold text-amber-950 block">
+                      Record in-person payment (₹{paiseToRupees(totalPaise)}) received
+                    </span>
+                    <span className="text-[11px] text-amber-800 block mt-0.5">
+                      Confirm Cash / UPI settled at counter upon customer collection
+                    </span>
+                  </div>
+                </label>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button

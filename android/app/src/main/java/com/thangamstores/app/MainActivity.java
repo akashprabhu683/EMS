@@ -37,6 +37,9 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import android.content.SharedPreferences;
+import android.webkit.JavascriptInterface;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.core.content.FileProvider;
@@ -44,8 +47,11 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.material.snackbar.Snackbar;
 
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -60,6 +66,9 @@ public class MainActivity extends AppCompatActivity {
     private View loadingOverlay;
     private View errorOverlay;
     private boolean hasError = false;
+
+    // Weak reference to the active activity for live background-to-foreground FCM token dispatch
+    private static WeakReference<MainActivity> activeInstance;
 
     // Multi-window popup dialog for Google OAuth / Firebase Auth popups
     private Dialog popupDialog;
@@ -125,6 +134,9 @@ public class MainActivity extends AppCompatActivity {
         setupNetworkMonitoring();
         requestNotificationPermissionIfRequired();
         initializeFcmToken();
+
+        // Register secure native bridge for asynchronous and on-demand FCM token retrieval
+        webView.addJavascriptInterface(new EMSNativeBridge(this), "EMSAndroid");
 
         // Configure cookies — essential for Firebase Auth session persistence
         CookieManager cookieManager = CookieManager.getInstance();
@@ -201,8 +213,15 @@ public class MainActivity extends AppCompatActivity {
                     hideError();
                 }
                 updateSwipeRefreshState(url);
-                // Signal to web app that it is running inside the native Android wrapper
-                view.evaluateJavascript("window.isEMSApp = true; window.EMS_NATIVE_APP = true;", null);
+                if (isTrustedAppUrl(url)) {
+                    // Signal to web app that it is running inside the native Android wrapper
+                    view.evaluateJavascript("window.isEMSApp = true; window.EMS_NATIVE_APP = true;", null);
+                    // Deliver cached FCM device token to WebView upon initial navigation
+                    String cachedToken = getSharedPreferences("ems_preferences", Context.MODE_PRIVATE).getString("fcm_token", null);
+                    if (cachedToken != null) {
+                        dispatchTokenToWebView(cachedToken);
+                    }
+                }
             }
 
             @Override
@@ -476,6 +495,9 @@ public class MainActivity extends AppCompatActivity {
 
             String orderIdExtra = intent.getStringExtra("orderId");
             if (orderIdExtra != null && !orderIdExtra.trim().isEmpty()) {
+                if (BuildConfig.IS_ADMIN) {
+                    return STOREFRONT_URL.replaceAll("/$", "") + "/orders";
+                }
                 return STOREFRONT_URL.replaceAll("/$", "") + "/orders/" + orderIdExtra.trim();
             }
 
@@ -531,10 +553,101 @@ public class MainActivity extends AppCompatActivity {
                                     .apply();
                             String safePrefix = token.length() > 8 ? token.substring(0, 8) + "..." : "[redacted]";
                             Log.i(TAG, "Initial FCM token retrieved: " + safePrefix);
+                            dispatchTokenToWebView(token);
                         }
                     });
         } catch (Exception e) {
             Log.w(TAG, "FirebaseMessaging initialization skipped or unavailable", e);
+        }
+    }
+
+    /**
+     * Strictly verifies whether a URL belongs to authorized internal EMS application domains
+     * (Customer Storefront or Admin Portal), excluding external OAuth providers or third-party origins.
+     */
+    public boolean isTrustedAppUrl(String url) {
+        if (url == null || url.trim().isEmpty()) return false;
+        try {
+            Uri uri = Uri.parse(url);
+            String scheme = uri.getScheme();
+            if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+                return false;
+            }
+            String host = uri.getHost();
+            if (host == null) return false;
+            host = host.toLowerCase();
+
+            return host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST) ||
+                    host.equals("ecommerce-storefront-client.vercel.app") ||
+                    host.equals("ecommerce-storefront-client.netlify.app") ||
+                    host.equals("ems-admin-portal.vercel.app") ||
+                    host.equals("ems-admin-panel-provider.vercel.app") ||
+                    host.equals("ems-admin-panel-provider.netlify.app");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Dispatches an FCM device registration token to the active WebView instance.
+     * Uses JSONObject.quote to guarantee that unescaped tokens cannot break out of JavaScript string literals.
+     * Restricts execution strictly to trusted internal EMS application origins.
+     */
+    public void dispatchTokenToWebView(String token) {
+        if (token == null || token.trim().isEmpty() || webView == null) return;
+        final String safeToken = token.trim();
+        final String quotedToken = JSONObject.quote(safeToken);
+        runOnUiThread(() -> {
+            if (webView != null) {
+                String currentUrl = webView.getUrl();
+                if (!isTrustedAppUrl(currentUrl)) {
+                    Log.d(TAG, "Skipping token dispatch: current WebView origin is not trusted: " + currentUrl);
+                    return;
+                }
+                String script = "window.EMS_FCM_TOKEN = " + quotedToken + ";" +
+                        "try { window.dispatchEvent(new CustomEvent('ems_fcm_token', { detail: { token: " + quotedToken + " } })); } catch (e) {}";
+                webView.evaluateJavascript(script, null);
+            }
+        });
+    }
+
+    /**
+     * Static callback invoked by FcmNotificationService when a new token is generated or rotated while the activity is alive.
+     */
+    public static void dispatchNewTokenIfActive(String token) {
+        if (activeInstance != null) {
+            MainActivity activity = activeInstance.get();
+            if (activity != null) {
+                activity.dispatchTokenToWebView(token);
+            }
+        }
+    }
+
+    /**
+     * Native JavaScript bridge providing synchronous, secured access to the cached FCM token.
+     * Strictly verifies that the calling WebView frame origin is an authorized internal EMS application domain.
+     */
+    public static class EMSNativeBridge {
+        private final WeakReference<MainActivity> activityRef;
+
+        public EMSNativeBridge(MainActivity activity) {
+            this.activityRef = new WeakReference<>(activity);
+        }
+
+        @JavascriptInterface
+        public String getFcmToken() {
+            MainActivity activity = activityRef.get();
+            if (activity == null || activity.webView == null) {
+                return null;
+            }
+            // Strict origin check: only permit trusted internal EMS app domains
+            String currentUrl = activity.webView.getUrl();
+            if (!activity.isTrustedAppUrl(currentUrl)) {
+                Log.w(TAG, "EMSNativeBridge.getFcmToken blocked for untrusted URL: " + currentUrl);
+                return null;
+            }
+            SharedPreferences prefs = activity.getSharedPreferences("ems_preferences", Context.MODE_PRIVATE);
+            return prefs.getString("fcm_token", null);
         }
     }
 
@@ -759,13 +872,21 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        activeInstance = new WeakReference<>(this);
         webView.onResume();
         CookieManager.getInstance().flush();
+        String cachedToken = getSharedPreferences("ems_preferences", Context.MODE_PRIVATE).getString("fcm_token", null);
+        if (cachedToken != null) {
+            dispatchTokenToWebView(cachedToken);
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        if (activeInstance != null && activeInstance.get() == this) {
+            activeInstance = null;
+        }
         webView.onPause();
         CookieManager.getInstance().flush();
     }

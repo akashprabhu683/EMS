@@ -10,7 +10,8 @@ import {
   deleteDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions, auth } from '../firebase';
 
 export interface InAppNotification {
   id: string;
@@ -21,6 +22,59 @@ export interface InAppNotification {
   read: boolean;
   createdAt?: string;
 }
+
+/**
+ * Safely queries the native Android wrapper for the cached FCM token.
+ * Checks both the global window property and the secured EMSAndroid JS bridge.
+ */
+export function getNativeFcmToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as any;
+  if (typeof win.EMS_FCM_TOKEN === 'string' && win.EMS_FCM_TOKEN.trim().length >= 10) {
+    return win.EMS_FCM_TOKEN.trim();
+  }
+  if (win.EMSAndroid && typeof win.EMSAndroid.getFcmToken === 'function') {
+    try {
+      const token = win.EMSAndroid.getFcmToken();
+      if (typeof token === 'string' && token.trim().length >= 10) {
+        return token.trim();
+      }
+    } catch (err) {
+      console.warn('[NotificationService] Error querying EMSAndroid bridge:', err);
+    }
+  }
+  return null;
+}
+
+/**
+ * Attaches a listener for asynchronous FCM token delivery from the native Android app.
+ */
+export function setupFcmTokenListener(onToken: (token: string) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  // Check immediately if already present
+  const immediateToken = getNativeFcmToken();
+  if (immediateToken) {
+    onToken(immediateToken);
+  }
+
+  const handler = (event: Event) => {
+    const customEvent = event as CustomEvent<{ token?: string }>;
+    const token = customEvent.detail?.token || (window as any).EMS_FCM_TOKEN;
+    if (typeof token === 'string' && token.trim().length >= 10) {
+      onToken(token.trim());
+    }
+  };
+
+  window.addEventListener('ems_fcm_token', handler);
+  return () => {
+    window.removeEventListener('ems_fcm_token', handler);
+  };
+}
+
+// In-memory deduplication cache to prevent repeated network calls on re-renders
+let lastRegisteredCustomerToken: string | null = null;
+let lastRegisteredCustomerUid: string | null = null;
 
 /**
  * Listens in real-time to the authenticated user's in-app notification feed.
@@ -89,24 +143,47 @@ export async function markNotificationAsRead(uid: string, notifId: string): Prom
 }
 
 /**
- * Registers an FCM device token for the current customer (used by Android wrapper or browser push).
+ * Registers an FCM device token for the current customer.
+ * Uses authoritative registerFcmToken Cloud Function with direct Firestore fallback.
  */
 export async function registerDeviceToken(
   uid: string,
   token: string,
-  platform: 'android' | 'web' = 'web'
+  platform: 'android' | 'web' = 'android'
 ): Promise<void> {
-  if (!uid || !token) return;
+  if (!uid || !token || token.trim().length < 10) return;
+  const cleanToken = token.trim();
+
+  // Deduplication check: do not re-register the same token for the same user in current session
+  if (lastRegisteredCustomerToken === cleanToken && lastRegisteredCustomerUid === uid) {
+    return;
+  }
+
   try {
-    const tokenRef = doc(db, 'users', uid, 'fcm_tokens', token);
-    await setDoc(tokenRef, {
-      token,
-      platform,
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    }, { merge: true });
-  } catch (err) {
-    console.warn('[NotificationService] Failed to register device token:', err);
+    // 1. Authoritative Cloud Function callable
+    const registerFn = httpsCallable<{ token: string; platform: string }, { success: boolean }>(
+      functions,
+      'registerFcmToken'
+    );
+    await registerFn({ token: cleanToken, platform });
+    lastRegisteredCustomerToken = cleanToken;
+    lastRegisteredCustomerUid = uid;
+  } catch (callableErr) {
+    console.warn('[NotificationService] registerFcmToken callable error, attempting direct Firestore:', callableErr);
+    // 2. Direct Firestore fallback to users/{uid}/fcm_tokens/{token}
+    try {
+      const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
+      await setDoc(tokenRef, {
+        token: cleanToken,
+        platform,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+      lastRegisteredCustomerToken = cleanToken;
+      lastRegisteredCustomerUid = uid;
+    } catch (docErr) {
+      console.warn('[NotificationService] Direct Firestore token registration failed:', docErr);
+    }
   }
 }
 
@@ -114,11 +191,27 @@ export async function registerDeviceToken(
  * Removes an FCM token upon sign-out to prevent stale or unauthorized alerts.
  */
 export async function unregisterDeviceToken(uid: string, token: string): Promise<void> {
-  if (!uid || !token) return;
+  if (!token) return;
+  const cleanToken = token.trim();
+
+  lastRegisteredCustomerToken = null;
+  lastRegisteredCustomerUid = null;
+
   try {
-    const tokenRef = doc(db, 'users', uid, 'fcm_tokens', token);
-    await deleteDoc(tokenRef);
-  } catch (err) {
-    console.warn('[NotificationService] Failed to unregister device token:', err);
+    const unregisterFn = httpsCallable<{ token: string }, { success: boolean }>(
+      functions,
+      'unregisterFcmToken'
+    );
+    await unregisterFn({ token: cleanToken });
+  } catch (callableErr) {
+    console.warn('[NotificationService] unregisterFcmToken callable error, attempting direct Firestore:', callableErr);
+    if (uid) {
+      try {
+        const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
+        await deleteDoc(tokenRef);
+      } catch (docErr) {
+        console.warn('[NotificationService] Direct Firestore token deletion failed:', docErr);
+      }
+    }
   }
 }

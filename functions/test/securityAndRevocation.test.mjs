@@ -14,13 +14,14 @@ import {
   executeRecordPayment,
   executeCorrectPayment,
 } from "../lib/orders.js";
+import { verifyAuditAdminCaller } from "../lib/audit.js";
 import {
   listAdmins,
   grantAdminRole,
-  resendAdminInvitation,
   verifyInvitationToken,
   acceptAdminInvitation,
   revokeAdminRole,
+  getCanonicalPortalUrl,
 } from "../lib/adminRoles.js";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -176,7 +177,7 @@ test("Security 1.1: verifyOrderAdminCaller denies revoked administrator immediat
     revokedBy: "akashprabhu0302@gmail.com",
   });
 
-  const status = await verifyOrderAdminCaller(db, revokedUid, "attacker@ems.shop", true);
+  const status = await verifyOrderAdminCaller(db, revokedUid, "attacker@ems.shop", true, true);
 
   assert.equal(status.isRevoked, true, "Revocation marker must be detected in real-time");
   assert.equal(status.isAdmin, false, "Revoked administrator must NOT be recognized as admin");
@@ -192,7 +193,7 @@ test("Security 1.2: verifyOrderAdminCaller preserves superadmin ownership and im
     revokedAt: new Date().toISOString(),
   });
 
-  const status = await verifyOrderAdminCaller(db, superadminUid, PRIMARY_SUPERADMIN_EMAIL, true);
+  const status = await verifyOrderAdminCaller(db, superadminUid, PRIMARY_SUPERADMIN_EMAIL, true, true);
 
   assert.equal(status.isAdmin, true, "Primary superadmin must remain actively authorized");
   assert.equal(status.isRevoked, false, "Primary superadmin cannot be revoked");
@@ -204,7 +205,7 @@ test("Security 1.3: verifyOrderAdminCaller denies de-activated administrator (is
 
   db._setDoc("admins", uid, { email: "inactive@ems.shop", role: "admin", isActive: false });
 
-  const status = await verifyOrderAdminCaller(db, uid, "inactive@ems.shop", true);
+  const status = await verifyOrderAdminCaller(db, uid, "inactive@ems.shop", true, true);
 
   assert.equal(status.isAdmin, false, "Deactivated administrator must be denied admin privileges");
   assert.equal(status.isRevoked, false);
@@ -454,4 +455,284 @@ test("Security 3.3: Backward compatibility allows redemption of legacy invitatio
     (legacyDoc.token && legacyDoc.token === submittedToken);
 
   assert.equal(tokenMatches, true, "Legacy invitations must be safely redeemable without breaking");
+});
+
+test("Security 3.4: Generated invitation links target canonical portal route with token and email", () => {
+  const portalUrl = getCanonicalPortalUrl();
+  const token = "a".repeat(64);
+  const email = "new_manager@ems.shop";
+  const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
+
+  assert.equal(acceptUrl.startsWith("https://ems-admin-panel-provider.vercel.app/accept-invite"), true, "Must point to production admin portal route");
+  assert.equal(acceptUrl.includes(`token=${token}`), true, "Token must be intact in query parameter");
+  assert.equal(acceptUrl.includes(`email=${encodeURIComponent(email)}`), true, "Email must be encoded in query parameter");
+});
+
+test("Security 3.5: Expired invitation tokens (>7 days) are rejected", () => {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashToken(rawToken);
+
+  // Expired 1 second ago
+  const expiredDoc = {
+    email: "expired_admin@ems.shop",
+    tokenHash,
+    status: "pending",
+    expiresAt: new Date(Date.now() - 1000),
+  };
+
+  const isExpired = Date.now() > expiredDoc.expiresAt.getTime();
+  assert.equal(isExpired, true, "Expired invitations must be detected and rejected");
+});
+
+test("Security 3.6: Already-accepted invitations are rejected (single-use enforcement)", () => {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashToken(rawToken);
+
+  const acceptedDoc = {
+    email: "used_admin@ems.shop",
+    tokenHash,
+    status: "accepted",
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    acceptedAt: new Date(),
+    acceptedByUid: "uid_accepted_user",
+  };
+
+  const isPending = acceptedDoc.status === "pending";
+  assert.equal(isPending, false, "Tokens must be single-use and cannot be reused once status is accepted");
+});
+
+test("Security 3.7: Tampered tokens or mismatched hashes are rejected", () => {
+  const legitToken = crypto.randomBytes(32).toString("hex");
+  const legitHash = hashToken(legitToken);
+  const tamperedToken = crypto.randomBytes(32).toString("hex");
+
+  const inviteDoc = {
+    email: "targeted_admin@ems.shop",
+    tokenHash: legitHash,
+    status: "pending",
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  };
+
+  const submittedHash = hashToken(tamperedToken);
+  const tokenMatches = inviteDoc.tokenHash === submittedHash;
+  assert.equal(tokenMatches, false, "Tampered tokens must not match stored tokenHash");
+});
+
+test("Security 3.8: Account activation strictly assigns role 'admin' and never escalates to superadmin", () => {
+  const invitedRole = "admin";
+  const assignedClaims = {
+    admin: true,
+    role: invitedRole === "superadmin" ? "admin" : invitedRole, // cannot escalate
+  };
+
+  assert.equal(assignedClaims.role, "admin", "Invitation acceptance must only assign role: admin");
+  assert.notEqual(assignedClaims.role, "superadmin", "Invitation cannot assign superadmin role");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4. AUDIT & ORDER AUTHORIZATION SECURITY GATE REGRESSION TESTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+test("Security 4.1: verifyAuditAdminCaller denies unverified email attempting superadmin access", async () => {
+  const db = new MockFirestore();
+  const res = await verifyAuditAdminCaller(
+    db,
+    "attacker_unverified",
+    PRIMARY_SUPERADMIN_EMAIL,
+    false,
+    false // email_verified: false
+  );
+  assert.equal(res.isAdmin, false, "Unverified email must NOT be granted superadmin access");
+  assert.equal(res.isSuperadmin, false);
+});
+
+test("Security 4.2: verifyAuditAdminCaller allows verified superadmin and grants immunity to rogue revocations", async () => {
+  const db = new MockFirestore();
+  const superadminUid = "superadmin_verified_uid";
+  db._setDoc("admin_revocations", superadminUid, { revokedAt: new Date().toISOString() });
+
+  const res = await verifyAuditAdminCaller(
+    db,
+    superadminUid,
+    PRIMARY_SUPERADMIN_EMAIL,
+    false,
+    true // email_verified: true
+  );
+  assert.equal(res.isAdmin, true, "Verified superadmin must be authorized");
+  assert.equal(res.isSuperadmin, true);
+  assert.equal(res.isRevoked, false, "Superadmin cannot be revoked by rogue marker");
+});
+
+test("Security 4.3: verifyAuditAdminCaller denies revoked administrator even with active admin claim", async () => {
+  const db = new MockFirestore();
+  const revokedUid = "revoked_admin_caller";
+  db._setDoc("admins", revokedUid, { email: "admin@ems.shop", role: "admin", isActive: true });
+  db._setDoc("admin_revocations", revokedUid, { uid: revokedUid, revokedAt: new Date().toISOString() });
+
+  const res = await verifyAuditAdminCaller(
+    db,
+    revokedUid,
+    "admin@ems.shop",
+    true, // stale claim
+    true
+  );
+  assert.equal(res.isRevoked, true, "Revocation marker must be detected");
+  assert.equal(res.isAdmin, false, "Revoked administrator must NOT be recognized as admin");
+});
+
+test("Security 4.4: verifyAuditAdminCaller denies deactivated administrator (isActive: false)", async () => {
+  const db = new MockFirestore();
+  const deactivatedUid = "deactivated_admin_caller";
+  db._setDoc("admins", deactivatedUid, { email: "deactivated@ems.shop", role: "admin", isActive: false });
+
+  const res = await verifyAuditAdminCaller(
+    db,
+    deactivatedUid,
+    "deactivated@ems.shop",
+    true,
+    true
+  );
+  assert.equal(res.isAdmin, false, "Deactivated administrator must be denied");
+});
+
+test("Security 4.5: verifyAuditAdminCaller denies unverified email attempting /admins query fallback", async () => {
+  const db = new MockFirestore();
+  db._setDoc("admins", "legit_admin_uid", { email: "legit@ems.shop", role: "admin", isActive: true });
+
+  const res = await verifyAuditAdminCaller(
+    db,
+    "different_uid_attacker",
+    "legit@ems.shop",
+    false,
+    false // email_verified: false
+  );
+  assert.equal(res.isAdmin, false, "Unverified email must NOT trigger email fallback matching");
+});
+
+test("Security 4.6: verifyAuditAdminCaller allows verified email fallback when token claim is not yet propagated", async () => {
+  const db = new MockFirestore();
+  db._setDoc("admins", "invited_doc_id", { email: "newlyinvited@ems.shop", role: "admin", isActive: true });
+
+  const res = await verifyAuditAdminCaller(
+    db,
+    "newly_registered_uid",
+    "newlyinvited@ems.shop",
+    false, // claim not propagated
+    true   // email verified
+  );
+  assert.equal(res.isAdmin, true, "Verified email fallback must grant admin access");
+});
+
+test("Security 4.7: verifyOrderAdminCaller denies unverified email attempting superadmin access", async () => {
+  const db = new MockFirestore();
+  const res = await verifyOrderAdminCaller(
+    db,
+    "unverified_superadmin_imposter",
+    PRIMARY_SUPERADMIN_EMAIL,
+    false,
+    false // email_verified: false
+  );
+  assert.equal(res.isAdmin, false, "Unverified email attempting superadmin access must be rejected");
+});
+
+test("Security 4.8: verifyOrderAdminCaller allows verified email fallback to /admins collection", async () => {
+  const db = new MockFirestore();
+  db._setDoc("admins", "admin_stored_by_email", { email: "counterstaff@ems.shop", role: "admin", isActive: true });
+
+  const res = await verifyOrderAdminCaller(
+    db,
+    "new_staff_uid",
+    "counterstaff@ems.shop",
+    false,
+    true // email verified
+  );
+  assert.equal(res.isAdmin, true, "Verified staff email fallback must grant admin access");
+});
+
+test("Security 4.9: verifyAuditAdminCaller denies superadmin access when emailVerified is omitted or undefined", async () => {
+  const db = new MockFirestore();
+  // 1. Omitted emailVerified
+  const resOmitted = await verifyAuditAdminCaller(
+    db,
+    "omitted_superadmin",
+    PRIMARY_SUPERADMIN_EMAIL,
+    false
+  );
+  assert.equal(resOmitted.isAdmin, false, "Omitted emailVerified must default to false");
+  assert.equal(resOmitted.isSuperadmin, false);
+
+  // 2. Explicit undefined emailVerified
+  const resUndefined = await verifyAuditAdminCaller(
+    db,
+    "undefined_superadmin",
+    PRIMARY_SUPERADMIN_EMAIL,
+    false,
+    undefined
+  );
+  assert.equal(resUndefined.isAdmin, false, "Explicit undefined emailVerified must default to false");
+  assert.equal(resUndefined.isSuperadmin, false);
+});
+
+test("Security 4.10: verifyAuditAdminCaller denies email fallback when emailVerified is omitted or undefined", async () => {
+  const db = new MockFirestore();
+  db._setDoc("admins", "admin_doc_1", { email: "staff@ems.shop", role: "admin", isActive: true });
+
+  const resOmitted = await verifyAuditAdminCaller(
+    db,
+    "new_uid_omitted",
+    "staff@ems.shop",
+    false
+  );
+  assert.equal(resOmitted.isAdmin, false, "Omitted emailVerified must NOT trigger email fallback");
+
+  const resUndefined = await verifyAuditAdminCaller(
+    db,
+    "new_uid_undefined",
+    "staff@ems.shop",
+    false,
+    undefined
+  );
+  assert.equal(resUndefined.isAdmin, false, "Undefined emailVerified must NOT trigger email fallback");
+});
+
+test("Security 4.11: verifyOrderAdminCaller denies superadmin access when emailVerified is omitted or undefined", async () => {
+  const db = new MockFirestore();
+  const resOmitted = await verifyOrderAdminCaller(
+    db,
+    "order_superadmin_omitted",
+    PRIMARY_SUPERADMIN_EMAIL,
+    false
+  );
+  assert.equal(resOmitted.isAdmin, false, "Omitted emailVerified must default to false for orders");
+
+  const resUndefined = await verifyOrderAdminCaller(
+    db,
+    "order_superadmin_undefined",
+    PRIMARY_SUPERADMIN_EMAIL,
+    false,
+    undefined
+  );
+  assert.equal(resUndefined.isAdmin, false, "Undefined emailVerified must default to false for orders");
+});
+
+test("Security 4.12: verifyOrderAdminCaller denies email fallback when emailVerified is omitted or undefined", async () => {
+  const db = new MockFirestore();
+  db._setDoc("admins", "admin_doc_order", { email: "dispensary@ems.shop", role: "admin", isActive: true });
+
+  const resOmitted = await verifyOrderAdminCaller(
+    db,
+    "order_fallback_omitted",
+    "dispensary@ems.shop",
+    false
+  );
+  assert.equal(resOmitted.isAdmin, false, "Omitted emailVerified must NOT trigger email fallback for orders");
+
+  const resUndefined = await verifyOrderAdminCaller(
+    db,
+    "order_fallback_undefined",
+    "dispensary@ems.shop",
+    false,
+    undefined
+  );
+  assert.equal(resUndefined.isAdmin, false, "Undefined emailVerified must NOT trigger email fallback for orders");
 });

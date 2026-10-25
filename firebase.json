@@ -10,13 +10,16 @@
     {
       "source": "functions",
       "codebase": "default",
-      "disallowLegacyRuntimeConfig": true
+      "disallowLegacyRuntimeConfig": true,
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
     }
   ],
   "hosting": [
     {
       "target": "ecommerce",
-      "public": "Ecommerce/dist",
+      "public": "Ecommerce/frontend/dist",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -31,7 +34,7 @@
     },
     {
       "target": "admin",
-      "public": "admin-panel/dist",
+      "public": "admin-panel/frontend/dist",
       "ignore": [
         "firebase.json",
         "**/.*",

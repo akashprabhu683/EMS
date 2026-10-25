@@ -33,7 +33,6 @@ export {
 export {
   listAdmins,
   grantAdminRole,
-  resendAdminInvitation,
   verifyInvitationToken,
   acceptAdminInvitation,
   revokeAdminRole,

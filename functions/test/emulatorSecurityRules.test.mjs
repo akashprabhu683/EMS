@@ -376,6 +376,76 @@ test("Emulator Gate 5: User & Cart Document Isolation", async () => {
   // 4. Bob CANNOT read or modify Charlie's cart
   const resBobCharlieCart = await firestoreRequest({ path: "/carts/customer_charlie", token: tokenCustomerBob });
   assert.equal(resBobCharlieCart.status, 403, "Bob cannot read Charlie's cart");
+
+  // 5. FCM Device Token Isolation: Bob can register his own token
+  const resBobTokenCreate = await firestoreRequest({
+    path: "/users/customer_bob/fcm_tokens/token_bob_123456",
+    method: "PATCH",
+    token: tokenCustomerBob,
+    body: { fields: { token: { stringValue: "token_bob_123456" }, platform: { stringValue: "android" } } },
+  });
+  assert.equal(resBobTokenCreate.status, 200, "Bob can register his own FCM device token");
+
+  // 6. FCM Device Token Isolation: Bob CANNOT register or alter Charlie's token
+  const resBobCharlieToken = await firestoreRequest({
+    path: "/users/customer_charlie/fcm_tokens/token_charlie_123456",
+    method: "PATCH",
+    token: tokenCustomerBob,
+    body: { fields: { token: { stringValue: "token_charlie_123456" }, platform: { stringValue: "android" } } },
+  });
+  assert.equal(resBobCharlieToken.status, 403, "Bob CANNOT register or alter Charlie's FCM token");
+
+  // 7. FCM Device Token Isolation: Bob CANNOT read Charlie's tokens
+  const resBobCharlieTokenRead = await firestoreRequest({
+    path: "/users/customer_charlie/fcm_tokens/token_charlie_123456",
+    token: tokenCustomerBob,
+  });
+  assert.equal(resBobCharlieTokenRead.status, 403, "Bob CANNOT read Charlie's FCM tokens");
+
+  // 8. FCM Device Token Isolation: Bob CANNOT delete Charlie's tokens
+  const resBobCharlieTokenDelete = await firestoreRequest({
+    path: "/users/customer_charlie/fcm_tokens/token_charlie_123456",
+    method: "DELETE",
+    token: tokenCustomerBob,
+  });
+  assert.equal(resBobCharlieTokenDelete.status, 403, "Bob CANNOT delete Charlie's FCM tokens");
+
+  // 9. Admin token access: Customer CANNOT register or read in /admins/{uid}/fcm_tokens
+  const resBobAdminToken = await firestoreRequest({
+    path: "/admins/admin_alice/fcm_tokens/token_alice_123",
+    method: "PATCH",
+    token: tokenCustomerBob,
+    body: { fields: { token: { stringValue: "token_alice_123" } } },
+  });
+  assert.equal(resBobAdminToken.status, 403, "Customer CANNOT write to another admin's FCM tokens");
+
+  // 9b. Tightened rule enforcement: Customer Bob CANNOT write to /admins/customer_bob/fcm_tokens even with matching UID
+  const resBobSelfAdminToken = await firestoreRequest({
+    path: "/admins/customer_bob/fcm_tokens/token_bob_123",
+    method: "PATCH",
+    token: tokenCustomerBob,
+    body: { fields: { token: { stringValue: "token_bob_123" } } },
+  });
+  assert.equal(resBobSelfAdminToken.status, 403, "Non-admin Bob CANNOT create or write to /admins/customer_bob/fcm_tokens");
+
+  // 9c. Revoked admin CANNOT write to /admins/admin_revoked/fcm_tokens
+  const tokenRevokedAdmin = createToken({ uid: "admin_revoked", email: "revoked@ems.shop", admin: true });
+  const resRevokedAdminToken = await firestoreRequest({
+    path: "/admins/admin_revoked/fcm_tokens/token_revoked_123",
+    method: "PATCH",
+    token: tokenRevokedAdmin,
+    body: { fields: { token: { stringValue: "token_revoked_123" } } },
+  });
+  assert.equal(resRevokedAdminToken.status, 403, "Revoked admin CANNOT write to admin FCM tokens");
+
+  // 10. Active Admin Alice can register her own admin device token
+  const resAliceAdminToken = await firestoreRequest({
+    path: "/admins/admin_alice/fcm_tokens/token_alice_123",
+    method: "PATCH",
+    token: tokenActiveAdmin,
+    body: { fields: { token: { stringValue: "token_alice_123" }, platform: { stringValue: "android" } } },
+  });
+  assert.equal(resAliceAdminToken.status, 200, "Active Admin Alice can register her admin FCM token");
 });
 
 test("Emulator Gate 6: Superadmin & Real-Time Revocation Visibility", async () => {

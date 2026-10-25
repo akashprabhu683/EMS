@@ -912,7 +912,28 @@ test("22. Payment and fulfilment separation: recording in-person payment does NO
   assert.equal(db._getDoc("orders", orderRes.orderId).data.orderStatus, "placed");
   assert.equal(db._getDoc("orders", orderRes.orderId).data.paymentStatus, "unpaid");
 
-  // Admin records in-person cash payment
+  // Attempting to record payment on placed order is rejected
+  await assert.rejects(
+    async () => {
+      await executeRecordPayment({
+        db,
+        caller: adminCaller,
+        orderId: orderRes.orderId,
+        note: "Customer paid in full via counter cash",
+      });
+    },
+    /In-person payment can only be accepted once the order has been prepared and is ready for pickup or collected/
+  );
+
+  // Advance order: accepted -> preparing -> ready_for_pickup
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "accepted" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "preparing" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "ready_for_pickup" });
+
+  assert.equal(db._getDoc("orders", orderRes.orderId).data.orderStatus, "ready_for_pickup");
+  assert.equal(db._getDoc("orders", orderRes.orderId).data.paymentStatus, "unpaid");
+
+  // Admin records in-person cash payment once ready
   const payResult = await executeRecordPayment({
     db,
     caller: adminCaller,
@@ -922,10 +943,10 @@ test("22. Payment and fulfilment separation: recording in-person payment does NO
 
   assert.equal(payResult.paymentStatus, "paid");
 
-  // Verify doc: paymentStatus is 'paid', but orderStatus is STILL 'placed' (not altered to collected!)
+  // Verify doc: paymentStatus is 'paid', but orderStatus is STILL 'ready_for_pickup' (not altered to collected!)
   const updatedOrder = db._getDoc("orders", orderRes.orderId).data;
   assert.equal(updatedOrder.paymentStatus, "paid");
-  assert.equal(updatedOrder.orderStatus, "placed", "Fulfilment status must remain strictly separate from payment status");
+  assert.equal(updatedOrder.orderStatus, "ready_for_pickup", "Fulfilment status must remain strictly separate from payment status");
   assert.equal(updatedOrder.paidConfirmedBy, "bob@ems.dispensary");
 });
 
@@ -1116,6 +1137,11 @@ test("27. executeRecordPayment is idempotent on retries and prevents duplicate p
 
   const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
 
+  // Advance order to ready_for_pickup before payment
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "accepted" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "preparing" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "ready_for_pickup" });
+
   // First payment recording
   const firstPay = await executeRecordPayment({
     db,
@@ -1172,6 +1198,38 @@ test("28. executeTransitionOrderStatus includes explicit eventType: ORDER_STATUS
   const acceptedEntry = orderDoc.statusHistory.find(h => h.status === "accepted");
   assert.ok(acceptedEntry);
   assert.equal(acceptedEntry.eventType, "ORDER_STATUS_CHANGED");
+});
+
+test("29. Customer order cancellation is rejected if order has already been marked paid", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_cancel_paid",
+  });
+
+  const customerCaller = { uid: "customer_alice", email: "alice@example.com", isAdmin: false };
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Advance to ready_for_pickup and pay
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "accepted" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "preparing" });
+  await executeTransitionOrderStatus({ db, caller: adminCaller, orderId: orderRes.orderId, newStatus: "ready_for_pickup" });
+  await executeRecordPayment({ db, caller: adminCaller, orderId: orderRes.orderId });
+
+  // Customer attempts to cancel paid order
+  await assert.rejects(
+    async () => {
+      await executeTransitionOrderStatus({
+        db,
+        caller: customerCaller,
+        orderId: orderRes.orderId,
+        newStatus: "cancelled",
+      });
+    },
+    /cannot be cancelled online/
+  );
 });
 
 

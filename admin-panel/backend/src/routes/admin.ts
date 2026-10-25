@@ -63,13 +63,16 @@ export async function requireAdminAuth(
   try {
     const decoded = await adminAuth.verifyIdToken(token);
     const email = (decoded.email || '').toLowerCase().trim();
-    const isSuperadmin = email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+    const isEmailVerified = Boolean(decoded.email_verified);
+    const isSuperadmin = isEmailVerified && email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
 
-    // 1. Real-time revocation check: Revoked administrators are strictly blocked
-    const revocationDoc = await adminDb.collection('admin_revocations').doc(decoded.uid).get();
-    if (revocationDoc.exists) {
-      res.status(403).json({ error: 'Forbidden: Admin privilege has been revoked.' });
-      return;
+    // 1. Real-time revocation check: Revoked administrators are strictly blocked (superadmin immune)
+    if (!isSuperadmin) {
+      const revocationDoc = await adminDb.collection('admin_revocations').doc(decoded.uid).get();
+      if (revocationDoc.exists) {
+        res.status(403).json({ error: 'Forbidden: Admin privilege has been revoked.' });
+        return;
+      }
     }
 
     // 2. Real-time active admin check in /admins/{uid}
@@ -81,11 +84,34 @@ export async function requireAdminAuth(
         return;
       }
       hasAdmin = true;
+    } else if (!isSuperadmin && email && isEmailVerified) {
+      const emailSnap = await adminDb.collection('admins').where('email', '==', email).limit(1).get();
+      if (!emailSnap.empty && emailSnap.docs[0].data()?.isActive !== false) {
+        hasAdmin = true;
+      }
     }
 
-    if (!hasAdmin || (!adminDoc.exists && !isSuperadmin)) {
+    if (!hasAdmin) {
       res.status(403).json({ error: 'Forbidden: Admin privilege required.' });
       return;
+    }
+
+    if (isSuperadmin && !adminDoc.exists) {
+      // Prevent creating duplicate admin documents if an admin record for this email already exists
+      const existingEmailSnap = await adminDb.collection('admins').where('email', '==', email).limit(1).get();
+      if (existingEmailSnap.empty) {
+        adminDb.collection('admins').doc(decoded.uid).set({
+          uid: decoded.uid,
+          email,
+          displayName: decoded.name || 'Dispensary Superadmin',
+          role: 'superadmin',
+          isActive: true,
+          grantedBy: 'initial_setup',
+          grantedAt: FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(console.warn);
+      }
     }
 
     req.adminUser = {
@@ -466,6 +492,12 @@ adminRouter.patch('/orders/:orderId/payment', requireAdminAuth, async (req: Admi
 
       if (currentOrder.orderStatus === 'cancelled') {
         const err: any = new Error('Cannot record payment on a cancelled order.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (currentOrder.orderStatus !== 'ready_for_pickup' && currentOrder.orderStatus !== 'collected') {
+        const err: any = new Error('In-person payment can only be accepted once the order has been prepared and is ready for pickup or collected.');
         err.statusCode = 400;
         throw err;
       }

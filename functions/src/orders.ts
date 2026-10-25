@@ -782,6 +782,13 @@ export async function executeTransitionOrderStatus(
           "This order has already been processed by the dispensary and cannot be cancelled online. Please contact dispensary staff."
         );
       }
+
+      if (order.paymentStatus === "paid") {
+        throw new HttpsError(
+          "failed-precondition",
+          "This order has already been paid and cannot be cancelled online. Please contact dispensary staff."
+        );
+      }
     }
 
     // 5. Collection verification workflow (when advancing to 'collected')
@@ -982,6 +989,13 @@ export async function executeRecordPayment(
       throw new HttpsError("failed-precondition", "Cannot record payment on a cancelled order.");
     }
 
+    if (order.orderStatus !== "ready_for_pickup" && order.orderStatus !== "collected") {
+      throw new HttpsError(
+        "failed-precondition",
+        "In-person payment can only be accepted once the order has been prepared and is ready for pickup or collected."
+      );
+    }
+
     const actorId = caller.email || caller.uid;
     const nowIso = new Date().toISOString();
 
@@ -1174,10 +1188,12 @@ export async function verifyOrderAdminCaller(
   db: FirebaseFirestore.Firestore,
   uid: string,
   email?: string,
-  hasAdminClaim?: boolean
+  hasAdminClaim?: boolean,
+  emailVerified?: boolean
 ): Promise<ResolvedOrderAdminStatus> {
   const cleanEmail = email ? email.toLowerCase().trim() : "";
-  const isSuperadmin = cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+  const isEmailVerified = Boolean(emailVerified);
+  const isSuperadmin = isEmailVerified && cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
 
   // 1. Superadmin always has admin privileges and can never be revoked
   if (isSuperadmin) {
@@ -1192,17 +1208,27 @@ export async function verifyOrderAdminCaller(
 
   // 3. Verify active administrator record in /admins/{uid}
   const adminDoc = await db.collection("admins").doc(uid).get();
-  if (!adminDoc.exists) {
-    return { isAdmin: false, isRevoked: false };
+  if (adminDoc.exists) {
+    const adminData = adminDoc.data();
+    if (adminData?.isActive === false) {
+      return { isAdmin: false, isRevoked: false };
+    }
+    return { isAdmin: true, isRevoked: false };
   }
 
-  const adminData = adminDoc.data();
-  if (adminData?.isActive === false) {
-    return { isAdmin: false, isRevoked: false };
+  // 4. Fallback: Check /admins by verified email
+  if (cleanEmail && isEmailVerified) {
+    const querySnap = await db.collection("admins").where("email", "==", cleanEmail).limit(1).get();
+    if (!querySnap.empty && querySnap.docs[0].data()?.isActive !== false) {
+      return { isAdmin: true, isRevoked: false };
+    }
   }
 
-  const hasClaimOrDoc = Boolean(hasAdminClaim) || Boolean(adminDoc.exists);
-  return { isAdmin: hasClaimOrDoc, isRevoked: false };
+  if (Boolean(hasAdminClaim)) {
+    return { isAdmin: true, isRevoked: false };
+  }
+
+  return { isAdmin: false, isRevoked: false };
 }
 
 export const updateOrderStatus = onCall(
@@ -1214,13 +1240,15 @@ export const updateOrderStatus = onCall(
 
     const uid = request.auth.uid;
     const email = request.auth.token.email;
+    const emailVerified = Boolean(request.auth.token.email_verified);
     const db = admin.firestore();
 
     const { isAdmin, isRevoked } = await verifyOrderAdminCaller(
       db,
       uid,
       email,
-      Boolean(request.auth.token.admin)
+      Boolean(request.auth.token.admin),
+      emailVerified
     );
 
     // If caller is revoked and attempting an admin status transition or another user's order, block immediately
@@ -1259,13 +1287,15 @@ export const recordOrderPayment = onCall(
 
     const uid = request.auth.uid;
     const email = request.auth.token.email;
+    const emailVerified = Boolean(request.auth.token.email_verified);
     const db = admin.firestore();
 
     const { isAdmin, isRevoked } = await verifyOrderAdminCaller(
       db,
       uid,
       email,
-      Boolean(request.auth.token.admin)
+      Boolean(request.auth.token.admin),
+      emailVerified
     );
 
     if (isRevoked) {
@@ -1305,13 +1335,15 @@ export const correctOrderPayment = onCall(
 
     const uid = request.auth.uid;
     const email = request.auth.token.email;
+    const emailVerified = Boolean(request.auth.token.email_verified);
     const db = admin.firestore();
 
     const { isAdmin, isRevoked } = await verifyOrderAdminCaller(
       db,
       uid,
       email,
-      Boolean(request.auth.token.admin)
+      Boolean(request.auth.token.admin),
+      emailVerified
     );
 
     if (isRevoked) {

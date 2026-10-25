@@ -17,6 +17,12 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import type { User } from '../types';
 import { auth, db } from '../firebase';
+import {
+  getNativeFcmToken,
+  setupFcmTokenListener,
+  registerDeviceToken,
+  unregisterDeviceToken,
+} from '../services/notificationService';
 
 interface AuthContextType {
   user: User | null;
@@ -77,9 +83,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let unsubscribeTokenListener: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(
       auth,
       async (firebaseUser) => {
+        if (unsubscribeTokenListener) {
+          unsubscribeTokenListener();
+          unsubscribeTokenListener = null;
+        }
+
         if (firebaseUser) {
           await syncUserDocument(firebaseUser);
           const mapped = mapFirebaseUser(firebaseUser);
@@ -96,6 +109,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.warn('[AuthContext] Could not load extended user profile:', err);
           }
           setUser(mapped);
+
+          // Register native mobile FCM token if available or when it arrives
+          const registerCurrentToken = async (token: string) => {
+            try {
+              await registerDeviceToken(firebaseUser.uid, token, 'android');
+            } catch (err) {
+              console.warn('[AuthContext] Failed to register device token:', err);
+            }
+          };
+
+          const existingToken = getNativeFcmToken();
+          if (existingToken) {
+            registerCurrentToken(existingToken);
+          }
+
+          unsubscribeTokenListener = setupFcmTokenListener((token) => {
+            registerCurrentToken(token);
+          });
         } else {
           setUser(null);
         }
@@ -107,7 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     );
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (unsubscribeTokenListener) {
+        unsubscribeTokenListener();
+      }
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -168,6 +204,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const currentUid = auth.currentUser?.uid;
+    const token = getNativeFcmToken();
+    if (currentUid && token) {
+      try {
+        await unregisterDeviceToken(currentUid, token);
+      } catch (err) {
+        console.warn('[AuthContext] Token unregistration failed on logout:', err);
+      }
+    }
     await signOut(auth);
   }, []);
 

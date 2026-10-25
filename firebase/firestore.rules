@@ -110,7 +110,7 @@ service cloud.firestore {
       allow write: if isSuperadmin();
 
       match /fcm_tokens/{tokenId} {
-        allow read, write: if (isAuthenticated() && request.auth.uid == uid) || isAdmin();
+        allow read, write: if isAdmin() && (request.auth.uid == uid || isSuperadmin());
       }
     }
 

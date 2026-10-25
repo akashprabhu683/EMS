@@ -77,19 +77,37 @@ export async function getAdminsAndInvitations(): Promise<{
     getDocs(collection(db, 'admin_invitations')),
   ]);
 
-  const admins: AdminUser[] = [];
+  const adminsMap = new Map<string, AdminUser>();
   adminsSnap.forEach((d) => {
     const data = d.data();
-    admins.push({
+    const email = (data.email || '').toLowerCase().trim();
+    if (!email) return;
+
+    const record: AdminUser = {
       uid: d.id,
       email: data.email || '—',
-      displayName: data.displayName || data.email?.split('@')[0] || 'Admin',
+      displayName: data.displayName || data.name || data.email?.split('@')[0] || 'Admin',
       role: data.role || 'admin',
       grantedBy: data.grantedBy || 'system',
-      grantedAt: data.grantedAt?.toDate?.() ? data.grantedAt.toDate().toISOString() : String(data.grantedAt || ''),
+      grantedAt: data.grantedAt?.toDate?.()
+        ? data.grantedAt.toDate().toISOString()
+        : String(data.grantedAt || (data.createdAt?.toDate?.() ? data.createdAt.toDate().toISOString() : data.createdAt || '')),
       photoURL: data.photoURL || null,
-    });
+    };
+
+    if (adminsMap.has(email)) {
+      const existing = adminsMap.get(email)!;
+      if (!existing.grantedAt && record.grantedAt) {
+        adminsMap.set(email, record);
+      } else if (existing.uid.startsWith('legit_') || existing.uid.startsWith('test_')) {
+        adminsMap.set(email, record);
+      }
+    } else {
+      adminsMap.set(email, record);
+    }
   });
+
+  const admins = Array.from(adminsMap.values());
 
   const invitations: AdminInvitation[] = [];
   const activeAdminEmails = new Set(admins.map((a) => a.email.toLowerCase()));
@@ -166,49 +184,6 @@ export async function grantAdmin(email: string): Promise<{
     console.error('All invitation generation methods failed:', apiErr);
     throw new Error(apiErr.message || 'Could not generate admin invitation.');
   }
-}
-
-/**
- * Resends an invitation email to a pending administrator.
- */
-export async function resendInvitation(email: string): Promise<{ success: boolean; message: string; acceptUrl?: string }> {
-  const currentEmail = auth.currentUser?.email?.toLowerCase().trim();
-  if (currentEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
-    throw new Error('Only the primary site owner (akashprabhu0302@gmail.com) has authority to resend invitations.');
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-
-  // 1. Try Cloud Function
-  try {
-    const resendFn = httpsCallable<{ email: string }, { success: boolean; message: string; acceptUrl?: string }>(
-      functions,
-      'resendAdminInvitation'
-    );
-    const result = await resendFn({ email: cleanEmail });
-    if (result.data) {
-      return result.data;
-    }
-  } catch (err: any) {
-    console.warn('resendAdminInvitation callable failed, trying backend API:', err);
-  }
-
-  // 2. Try Express Backend API (re-invites to refresh token and url)
-  const headers = await getAuthHeader();
-  const res = await fetch(`${API_BASE_URL}/api/admin/invitations`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ email: cleanEmail }),
-  });
-  const data = await res.json();
-  if (res.ok) {
-    return {
-      success: true,
-      message: `Invitation refreshed for ${cleanEmail}.`,
-      acceptUrl: data.acceptUrl,
-    };
-  }
-  throw new Error(data.error || 'Failed to resend invitation.');
 }
 
 /**

@@ -1,0 +1,141 @@
+name: Firebase Production Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Firebase Component to Deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - functions
+          - firestore_rules
+          - storage_rules
+          - firestore_indexes
+          - rules_only
+      confirmation:
+        description: 'Type "DEPLOY-EMS-PROD" to confirm production deployment'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-test:
+    name: Validate Configuration & Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Deployment Authorization
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DEPLOY-EMS-PROD" ]; then
+            echo "::error::Deployment cancelled: Confirmation token mismatch. Expected 'DEPLOY-EMS-PROD'."
+            exit 1
+          fi
+          echo "Authorization confirmed for component: ${{ github.event.inputs.target }}"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'functions/package-lock.json'
+
+      - name: Install Functions Dependencies
+        run: npm --prefix functions ci
+
+      - name: Compile Cloud Functions TypeScript
+        run: npm --prefix functions run build
+
+      - name: Execute Cloud Functions Automated Tests
+        run: npm --prefix functions test
+
+  deploy:
+    name: Deploy to Firebase (ems-store-6a342)
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Functions Dependencies & Build
+        run: |
+          npm --prefix functions ci
+          npm --prefix functions run build
+
+      - name: Deploy Selected Firebase Resources
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EMS_STORE_6A342 }}
+        run: |
+          TARGET="${{ github.event.inputs.target }}"
+          PROJECT_ID="ems-store-6a342"
+
+          echo "Target Firebase Project: $PROJECT_ID"
+          echo "Selected Resource Scope: $TARGET"
+
+          # Determine --only flag based on workflow input
+          case "$TARGET" in
+            "functions")
+              ONLY_FLAG="functions"
+              ;;
+            "firestore_rules")
+              ONLY_FLAG="firestore:rules"
+              ;;
+            "storage_rules")
+              ONLY_FLAG="storage:rules"
+              ;;
+            "firestore_indexes")
+              ONLY_FLAG="firestore:indexes"
+              ;;
+            "rules_only")
+              ONLY_FLAG="firestore:rules,firestore:indexes,storage:rules"
+              ;;
+            "all")
+              ONLY_FLAG="functions,firestore:rules,firestore:indexes,storage:rules"
+              ;;
+            *)
+              echo "::error::Unrecognized deployment target: $TARGET"
+              exit 1
+              ;;
+          esac
+
+          echo "Executing: npx firebase deploy --project $PROJECT_ID --only $ONLY_FLAG"
+
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            # Authenticate via Google Service Account JSON secret
+            echo "$FIREBASE_SERVICE_ACCOUNT" > /tmp/sa-key.json
+            export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json
+            npx firebase deploy --project "$PROJECT_ID" --only "$ONLY_FLAG" --non-interactive
+            rm -f /tmp/sa-key.json
+          elif [ -n "$FIREBASE_TOKEN" ]; then
+            # Authenticate via Firebase CI token secret
+            npx firebase deploy --project "$PROJECT_ID" --only "$ONLY_FLAG" --token "$FIREBASE_TOKEN" --non-interactive
+          else
+            echo "::error::No valid deployment credentials found. Configure either FIREBASE_SERVICE_ACCOUNT_EMS_STORE_6A342 or FIREBASE_TOKEN in GitHub repository secrets."
+            exit 1
+          fi
+
+      - name: Post-Deployment Summary & Verification Checklist
+        run: |
+          echo "### Firebase Production Deployment Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Project**: \`ems-store-6a342\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: \`us-central1\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Resource Scope**: \`${{ github.event.inputs.target }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Verification Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Functions**: Test \`createOrder\` and \`registerFcmToken\` via client apps." >> $GITHUB_STEP_SUMMARY
+          echo "2. **Firestore Rules**: Verify customer isolation and that direct catalog writes return 403." >> $GITHUB_STEP_SUMMARY
+          echo "3. **Storage Rules**: Verify non-admins cannot upload product images." >> $GITHUB_STEP_SUMMARY
+          echo "4. **Indexes**: Confirm Firestore composite indexes display status 'Enabled' in Firebase Console." >> $GITHUB_STEP_SUMMARY

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, NavLink, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { CartProvider } from './context/CartContext';
 import { AuthProvider } from './context/AuthContext';
@@ -112,7 +112,7 @@ function MobileBottomNav() {
       </NavLink>
 
       <NavLink
-        to={isAuthenticated ? '/orders' : '/login'}
+        to={isAuthenticated ? '/profile' : '/login'}
         className={linkClass}
         aria-label="Account"
       >
@@ -147,6 +147,7 @@ function AppLayout() {
           <Route path="/faq"                 element={<FaqPage />} />
           <Route path="/contact"             element={<ContactPage />} />
           <Route path="/profile"             element={<ProfilePage />} />
+          <Route path="/account"             element={<Navigate to="/profile" replace />} />
           <Route path="/favorites"           element={<FavoritesPage />} />
           <Route path="/wishlist"            element={<FavoritesPage />} />
           <Route path="*"                    element={<NotFoundPage />} />

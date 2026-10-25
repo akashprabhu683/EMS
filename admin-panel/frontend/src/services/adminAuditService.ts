@@ -17,6 +17,15 @@ export interface AuditQueryOptions {
 export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ logs: AuditLogEntry[]; hasMore: boolean }> {
   const pageSize = options.pageSize || 30;
 
+  // Refresh user token if signed in
+  if (auth.currentUser) {
+    try {
+      await auth.currentUser.getIdToken(false);
+    } catch (e) {
+      console.warn('[adminAuditService] Token refresh skipped:', e);
+    }
+  }
+
   // 1. Try secure Cloud Function callable
   try {
     const getAuditFn = httpsCallable<any, { logs: AuditLogEntry[]; count: number }>(functions, 'getAuditLogs');
@@ -34,10 +43,7 @@ export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ 
       };
     }
   } catch (fnErr: any) {
-    console.warn('[adminAuditService] getAuditLogs callable unavailable, checking Express API:', fnErr);
-    if (fnErr?.code === 'permission-denied') {
-      throw fnErr;
-    }
+    console.warn('[adminAuditService] getAuditLogs callable unavailable, falling back to Express API:', fnErr?.message || fnErr);
   }
 
   // 2. Try Express backend API (protected by requireAdminAuth and Firebase Admin SDK)
@@ -65,17 +71,8 @@ export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ 
           hasMore: Boolean(data.hasMore),
         };
       }
-      if (res.status === 403 || res.status === 401) {
-        const errJson = await res.json().catch(() => ({}));
-        const err: any = new Error(errJson.error || 'Permission denied: Admin privilege required to view audit trail.');
-        err.code = 'permission-denied';
-        throw err;
-      }
     } catch (apiErr: any) {
-      if (apiErr?.code === 'permission-denied') {
-        throw apiErr;
-      }
-      console.warn('[adminAuditService] Express backend audit API unavailable, checking direct Firestore read:', apiErr);
+      console.warn('[adminAuditService] Express backend audit API unavailable, falling back to direct Firestore read:', apiErr?.message || apiErr);
     }
   }
 

@@ -51,6 +51,9 @@ public class FcmNotificationService extends FirebaseMessagingService {
         // Safe logging without exposing raw full token
         String safePrefix = token.length() > 8 ? token.substring(0, 8) + "..." : "[redacted]";
         Log.i(TAG, "New FCM token registered: " + safePrefix);
+
+        // Notify active MainActivity if currently running
+        MainActivity.dispatchNewTokenIfActive(token);
     }
 
     @Override

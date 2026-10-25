@@ -11,7 +11,6 @@ import {
   ShieldAlert,
   Info,
   Copy,
-  Send,
   CheckCircle2,
   Check,
   Crown,
@@ -20,7 +19,6 @@ import {
   getAdminsAndInvitations,
   grantAdmin,
   revokeAdmin,
-  resendInvitation,
   PRIMARY_SUPERADMIN_EMAIL,
   type AdminUser,
   type AdminInvitation,
@@ -52,7 +50,6 @@ export function AdminUsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
-  const [resendingEmail, setResendingEmail] = useState<string | null>(null);
 
   // Revoke confirmation modal state
   const [revokeTarget, setRevokeTarget] = useState<{ uid?: string; email: string } | null>(null);
@@ -88,9 +85,27 @@ export function AdminUsersPage() {
     setLoading(true);
     try {
       const data = await getAdminsAndInvitations();
-      setAdmins(data.admins);
+
+      // Deduplicate administrators by email to ensure 1 seat per email address
+      const adminsByEmail = new Map<string, AdminUser>();
+      (data.admins || []).forEach((adm) => {
+        const key = adm.email.toLowerCase().trim();
+        if (!adminsByEmail.has(key)) {
+          adminsByEmail.set(key, adm);
+        } else {
+          const existing = adminsByEmail.get(key)!;
+          if (!existing.grantedAt && adm.grantedAt) {
+            adminsByEmail.set(key, adm);
+          } else if (existing.uid.startsWith('legit_') || existing.uid.startsWith('test_')) {
+            adminsByEmail.set(key, adm);
+          }
+        }
+      });
+      const uniqueAdmins = Array.from(adminsByEmail.values());
+      setAdmins(uniqueAdmins);
+
       // Filter out any invitation whose email is already an active administrator
-      const activeAdminEmails = new Set(data.admins.map((a) => a.email.toLowerCase()));
+      const activeAdminEmails = new Set(uniqueAdmins.map((a) => a.email.toLowerCase()));
       const pendingInvites = data.invitations.filter(
         (inv) => inv.status === 'pending' && !activeAdminEmails.has(inv.email.toLowerCase())
       );
@@ -153,23 +168,6 @@ export function AdminUsersPage() {
     }
   };
 
-  const handleResendInvite = async (email: string) => {
-    setResendingEmail(email);
-    try {
-      const res = await resendInvitation(email);
-      if ((res as any).emailSent === false) {
-        toast.warning(res.message || `Invitation refreshed for ${email}, but email delivery failed. You may copy the link below.`);
-      } else {
-        toast.success(res.message || `Invitation email resent to ${email}!`);
-      }
-      await loadData();
-    } catch (err: any) {
-      toast.error(err.message || `Failed to resend invitation to ${email}. Please try again.`);
-    } finally {
-      setResendingEmail(null);
-    }
-  };
-
   const handleCopyLink = async (inv: AdminInvitation) => {
     let url = inv.acceptUrl;
     if (!url && inv.token) {
@@ -177,19 +175,7 @@ export function AdminUsersPage() {
     }
 
     if (!url) {
-      toast.info(`Generating a fresh invitation link for ${inv.email}...`);
-      try {
-        const refreshed = await resendInvitation(inv.email);
-        url = refreshed.acceptUrl;
-        await loadData();
-      } catch {
-        toast.error('Could not generate link. Please use "Resend Invitation".');
-        return;
-      }
-    }
-
-    if (!url) {
-      toast.error('No invitation URL available. Please resend the invitation.');
+      toast.info('The direct invitation link was delivered via email upon creation. If needed, please cancel and re-invite the user.');
       return;
     }
 
@@ -500,27 +486,12 @@ export function AdminUsersPage() {
                           <span>{copiedEmail === inv.email ? 'Copied!' : 'Copy Link'}</span>
                         </button>
                         {isOwner && (
-                          <>
-                            <button
-                              onClick={() => handleResendInvite(inv.email)}
-                              disabled={resendingEmail === inv.email}
-                              title="Resend invitation email via Resend"
-                              className="px-2.5 py-1.5 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                            >
-                              {resendingEmail === inv.email ? (
-                                <Loader2 size={13} className="animate-spin text-emerald-700" />
-                              ) : (
-                                <Send size={13} className="text-emerald-700" />
-                              )}
-                              <span>Resend Email</span>
-                            </button>
-                            <button
-                              onClick={() => setRevokeTarget({ email: inv.email })}
-                              className="px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </>
+                          <button
+                            onClick={() => setRevokeTarget({ email: inv.email })}
+                            className="px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
                         )}
                       </div>
                     </td>
