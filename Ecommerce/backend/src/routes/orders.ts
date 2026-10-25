@@ -38,8 +38,54 @@ export async function authenticateFirebaseToken(
 }
 
 /**
+ * Validates the idempotency key format to prevent malformed or injection keys.
+ */
+export function validateIdempotencyKey(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    throw new Error('idempotencyKey must be a string.');
+  }
+
+  const key = raw.trim();
+  if (key.length < 8 || key.length > 128) {
+    throw new Error('idempotencyKey must be between 8 and 128 characters.');
+  }
+
+  const validKeyRegex = /^[A-Za-z0-9_\-\.:]+$/;
+  if (!validKeyRegex.test(key)) {
+    throw new Error('idempotencyKey contains invalid characters.');
+  }
+
+  return key;
+}
+
+/**
+ * Computes a deterministic SHA-256 fingerprint of the normalized order request.
+ * Matches Cloud Functions implementation for cross-backend idempotency interoperability.
+ */
+export function computeRequestFingerprint(
+  uid: string,
+  items: Array<{ productId: string; quantity: number; selectedColor?: string; selectedSize?: string }>,
+  contact: { fullName: string; phone: string; notes?: string },
+  paymentMethod: string
+): string {
+  const sortedItems = [...items].sort((a, b) => a.productId.localeCompare(b.productId));
+  const payload = JSON.stringify({
+    uid,
+    items: sortedItems,
+    contact: {
+      fullName: contact.fullName,
+      phone: contact.phone,
+      notes: contact.notes || '',
+    },
+    paymentMethod,
+  });
+  return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
+/**
  * POST /api/orders
- * Transactionally creates an order, locks and decrements inventory, and clears user cart.
+ * Transactionally creates an order, locks and decrements inventory, clears user cart,
+ * and maintains cross-backend idempotency records shared with Cloud Functions.
  */
 ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const uid = req.user!.uid;
@@ -62,61 +108,25 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
     return;
   }
 
+  let cleanIdempotencyKey: string | null = null;
+  if (idempotencyKey !== undefined && idempotencyKey !== null) {
+    try {
+      cleanIdempotencyKey = validateIdempotencyKey(idempotencyKey);
+    } catch (keyErr: any) {
+      res.status(400).json({ error: keyErr.message || 'Invalid idempotencyKey.' });
+      return;
+    }
+  }
+
   try {
     const cartRef = adminDb.collection('carts').doc(uid);
-    const cartSnap = await cartRef.get();
-
-    if (!cartSnap.exists || !cartSnap.data()?.items || !Array.isArray(cartSnap.data()?.items) || cartSnap.data()?.items.length === 0) {
-      res.status(400).json({ error: 'Your cart is empty. Please add items before checking out.' });
-      return;
-    }
-
-    const cartItems: any[] = cartSnap.data()!.items;
-
-    // Idempotency check if idempotencyKey was provided
-    if (idempotencyKey && typeof idempotencyKey === 'string') {
-      const existingIdemp = await adminDb.collection('idempotency_keys').doc(idempotencyKey).get();
-      if (existingIdemp.exists) {
-        const data = existingIdemp.data();
-        if (data && data.orderId) {
-          const cachedOrder = await adminDb.collection('orders').doc(data.orderId).get();
-          if (cachedOrder.exists) {
-            res.status(200).json({
-              orderId: cachedOrder.id,
-              ...cachedOrder.data(),
-              isIdempotentReplay: true,
-            });
-            return;
-          }
-        }
-      }
-    }
-
-    // Pre-aggregate product quantities from cart or request body (deduplicates variants)
-    const rawCartList = (cartSnap.exists && Array.isArray(cartSnap.data()?.items) && cartSnap.data()!.items.length > 0)
-      ? cartSnap.data()!.items
-      : (Array.isArray(req.body.items) ? req.body.items : []);
-
-    if (rawCartList.length === 0) {
-      res.status(400).json({ error: 'Your cart is empty. Please add items before checking out.' });
-      return;
-    }
-
-    const productQtyMap = new Map<string, number>();
-    for (const item of rawCartList) {
-      const productId = String(item.productId || item.id || '').trim();
-      const quantity = Number(item.quantity);
-      if (!productId || !Number.isSafeInteger(quantity) || quantity <= 0) {
-        res.status(400).json({ error: `Invalid cart item configuration: productId=${productId}` });
-        return;
-      }
-      productQtyMap.set(productId, (productQtyMap.get(productId) || 0) + quantity);
-    }
-
-    const productIds = Array.from(productQtyMap.keys());
-    const productRefs = productIds.map((pid) => adminDb.collection('products').doc(pid));
-    const idempRef = (idempotencyKey && typeof idempotencyKey === 'string')
-      ? adminDb.collection('idempotency_keys').doc(idempotencyKey)
+    // Standard shared idempotency collection and document naming convention: idempotency_records/${uid}_${idempotencyKey}
+    const idempRef = cleanIdempotencyKey
+      ? adminDb.collection('idempotency_records').doc(`${uid}_${cleanIdempotencyKey}`)
+      : null;
+    // Backward compatibility fallback reference for legacy pre-Phase-6B records
+    const legacyIdempRef = cleanIdempotencyKey
+      ? adminDb.collection('idempotency_keys').doc(cleanIdempotencyKey)
       : null;
 
     // Run ACID transaction with STRICT READS-BEFORE-WRITES execution
@@ -124,16 +134,105 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
       /* ─────────────────────────────────────────────────────────────
          STEP 1: ALL READS (Must execute before any transaction writes)
          ───────────────────────────────────────────────────────────── */
+      const cartSnap = await txn.get(cartRef);
       const idempSnap = idempRef ? await txn.get(idempRef) : null;
-      const productSnaps = await Promise.all(productRefs.map((ref) => txn.get(ref)));
+      const legacyIdempSnap = legacyIdempRef ? await txn.get(legacyIdempRef) : null;
 
-      // If already processed via idempotency, return cached response
+      // Check for existing idempotency record (from Cloud Functions or Express)
+      let existingIdemp: FirebaseFirestore.DocumentData | null = null;
       if (idempSnap && idempSnap.exists) {
-        const idempData = idempSnap.data();
-        if (idempData && idempData.response) {
-          return idempData.response;
+        existingIdemp = idempSnap.data() || null;
+      } else if (legacyIdempSnap && legacyIdempSnap.exists) {
+        const legData = legacyIdempSnap.data();
+        if (legData && (legData.userId === uid || legData.uid === uid)) {
+          existingIdemp = legData;
         }
       }
+
+      if (existingIdemp) {
+        // If cart or body has items, verify request fingerprint has not changed
+        const rawItemsForFp = (cartSnap.exists && Array.isArray(cartSnap.data()?.items) && cartSnap.data()!.items.length > 0)
+          ? cartSnap.data()!.items
+          : (Array.isArray(req.body.items) ? req.body.items : []);
+
+        if (rawItemsForFp.length > 0) {
+          const pMap = new Map<string, { quantity: number; selectedColor?: string; selectedSize?: string }>();
+          for (const item of rawItemsForFp) {
+            const pid = String(item.productId || item.id || '').trim();
+            if (pid) {
+              pMap.set(pid, {
+                quantity: Number(item.quantity) || 1,
+                selectedColor: item.selectedColor,
+                selectedSize: item.selectedSize,
+              });
+            }
+          }
+
+          const currentFp = computeRequestFingerprint(
+            uid,
+            Array.from(pMap.entries()).map(([pid, it]) => ({
+              productId: pid,
+              quantity: it.quantity,
+              selectedColor: it.selectedColor,
+              selectedSize: it.selectedSize,
+            })),
+            { fullName, phone, notes: contactData.notes || '' },
+            'click_and_collect'
+          );
+
+          if (existingIdemp.requestFingerprint && existingIdemp.requestFingerprint !== currentFp) {
+            const err: any = new Error('This idempotency key was previously used with different order details. Please supply a fresh idempotency key.');
+            err.statusCode = 409;
+            throw err;
+          }
+        }
+
+        // Return cached idempotency response
+        if (existingIdemp.response) {
+          return existingIdemp.response;
+        }
+        if (existingIdemp.orderId) {
+          const cachedOrder = await txn.get(adminDb.collection('orders').doc(existingIdemp.orderId));
+          if (cachedOrder.exists) {
+            const cachedData = cachedOrder.data();
+            if (cachedData && cachedData.userId === uid) {
+              return {
+                orderId: cachedOrder.id,
+                ...cachedData,
+                isIdempotentReplay: true,
+              };
+            }
+          }
+        }
+      }
+
+      // New Order Execution: Cart must exist and have items
+      const rawCartList = (cartSnap.exists && Array.isArray(cartSnap.data()?.items) && cartSnap.data()!.items.length > 0)
+        ? cartSnap.data()!.items
+        : (Array.isArray(req.body.items) ? req.body.items : []);
+
+      if (rawCartList.length === 0) {
+        const err: any = new Error('Your cart is empty. Please add items before checking out.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Aggregate product quantities
+      const productQtyMap = new Map<string, number>();
+      for (const item of rawCartList) {
+        const productId = String(item.productId || item.id || '').trim();
+        const quantity = Number(item.quantity);
+        if (!productId || !Number.isSafeInteger(quantity) || quantity <= 0) {
+          const err: any = new Error(`Invalid cart item configuration: productId=${productId}`);
+          err.statusCode = 400;
+          throw err;
+        }
+        productQtyMap.set(productId, (productQtyMap.get(productId) || 0) + quantity);
+      }
+
+      const productIds = Array.from(productQtyMap.keys());
+      const productRefs = productIds.map((pid) => adminDb.collection('products').doc(pid));
+      const productSnaps = await Promise.all(productRefs.map((ref) => txn.get(ref)));
 
       /* ─────────────────────────────────────────────────────────────
          STEP 2: IN-MEMORY VALIDATION & REVENUE COMPUTATION
@@ -144,18 +243,24 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         const pid = productIds[i];
 
         if (!pSnap.exists) {
-          throw new Error(`Product ${pid} not found in catalog.`);
+          const err: any = new Error(`Product ${pid} not found in catalog.`);
+          err.statusCode = 404;
+          throw err;
         }
 
         const pData = pSnap.data()!;
         if (pData.isActive !== true) {
-          throw new Error(`Product "${pData.name || pid}" is no longer available.`);
+          const err: any = new Error(`Product "${pData.name || pid}" is no longer available.`);
+          err.statusCode = 400;
+          throw err;
         }
 
         const currentStock = Number(pData.stock ?? 0);
         const requestedQty = productQtyMap.get(pid)!;
         if (currentStock < requestedQty) {
-          throw new Error(`Insufficient stock for "${pData.name || pid}". Available: ${currentStock}, requested: ${requestedQty}.`);
+          const err: any = new Error(`Insufficient stock for "${pData.name || pid}". Available: ${currentStock}, requested: ${requestedQty}.`);
+          err.statusCode = 400;
+          throw err;
         }
 
         productMap.set(pid, pData);
@@ -188,7 +293,7 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
       const codFeePaise = 0;
       const totalPaise = subtotalPaise;
       const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
-      const pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const pickupCode = crypto.randomInt(100000, 1000000).toString();
 
       const orderRef = adminDb.collection('orders').doc();
       const orderRecord = {
@@ -196,9 +301,13 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         userId: uid,
         items: orderItems,
         subtotal: subtotalPaise,
+        subtotalPaise,
         shippingFee: shippingFeePaise,
+        shippingFeePaise,
         codFee: codFeePaise,
+        codFeePaise,
         total: totalPaise,
+        totalPaise,
         fulfillmentMethod: 'click_and_collect',
         pickupContact: {
           fullName,
@@ -229,9 +338,13 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
 
       const responsePayload = {
         orderId: orderRef.id,
+        subtotal: subtotalPaise,
         subtotalPaise,
+        shippingFee: shippingFeePaise,
         shippingFeePaise,
+        codFee: codFeePaise,
         codFeePaise,
+        total: totalPaise,
         totalPaise,
         subtotalRupees: subtotalPaise / 100,
         totalRupees: totalPaise / 100,
@@ -241,7 +354,21 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         itemCount: orderRecord.itemCount,
         pickupLocation: DEFAULT_PICKUP_LOCATION,
         pickupCode,
+        createdAt: new Date().toISOString(),
       };
+
+      // Compute request fingerprint for the new order
+      const currentFingerprint = computeRequestFingerprint(
+        uid,
+        orderItems.map((it) => ({
+          productId: it.productId,
+          quantity: it.quantity,
+          selectedColor: it.selectedColor || undefined,
+          selectedSize: it.selectedSize || undefined,
+        })),
+        { fullName, phone, notes: contactData.notes || '' },
+        'click_and_collect'
+      );
 
       /* ─────────────────────────────────────────────────────────────
          STEP 3: ALL WRITES (Atomically committed)
@@ -265,11 +392,19 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
         });
       }
 
-      // 3.3 Save idempotency record with cached response
-      if (idempRef) {
+      // 3.3 Save standardized idempotency record with request fingerprint and response cache
+      if (idempRef && cleanIdempotencyKey) {
         txn.set(idempRef, {
+          uid,
+          idempotencyKey: cleanIdempotencyKey,
           orderId: orderRef.id,
-          userId: uid,
+          pickupContact: {
+            fullName,
+            phone,
+            notes: contactData.notes || '',
+          },
+          paymentMethod: 'click_and_collect',
+          requestFingerprint: currentFingerprint,
           response: responsePayload,
           createdAt: FieldValue.serverTimestamp(),
         });
@@ -303,7 +438,7 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
     res.status(201).json(orderResult);
   } catch (err: any) {
     console.error('Order creation failed:', err);
-    res.status(400).json({ error: err.message || 'Order creation failed.' });
+    res.status(err.statusCode || 400).json({ error: err.message || 'Order creation failed.' });
   }
 });
 

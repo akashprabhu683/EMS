@@ -8,30 +8,19 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5002;
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'https://ems-admin-portal.vercel.app',
-  'https://ems-admin-panel-provider.vercel.app',
-  'https://ems-admin-panel-provider.netlify.app',
-  'http://localhost:5174',
-  'http://localhost:3000',
-].filter(Boolean) as string[];
-
-const corsOptions: CorsOptions = {
-  origin: (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void
-  ) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-      callback(null, true);
-    } else {
-      callback(null, true);
-    }
-  },
-  credentials: true,
-};
+import { allowedOrigins, isAllowedOrigin, corsOptions } from './corsConfig.js';
+export { allowedOrigins, isAllowedOrigin, corsOptions };
 
 app.use(cors(corsOptions));
+
+// CORS rejection error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err?.message === 'Not allowed by CORS') {
+    res.status(403).json({ error: 'CORS request rejected: Origin not allowed.' });
+    return;
+  }
+  next(err);
+});
 
 app.use(express.json());
 
@@ -52,8 +41,10 @@ app.use((req, res) => {
   res.status(404).json({ error: `Not found: ${req.method} ${req.path}` });
 });
 
-app.listen(port, () => {
-  console.log(`Admin panel backend listening on port ${port}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(port, () => {
+    console.log(`Admin panel backend listening on port ${port}`);
+  });
+}
 
 export default app;

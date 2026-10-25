@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -31,6 +32,31 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            def keystorePropsFile = rootProject.file("keystore.properties")
+            def props = new Properties()
+            if (keystorePropsFile.exists()) {
+                keystorePropsFile.withInputStream { props.load(it) }
+            }
+
+            def releaseKeystorePath = System.getenv("EMS_RELEASE_KEYSTORE_FILE") ?: props.getProperty("EMS_RELEASE_KEYSTORE_FILE") ?: (project.hasProperty("EMS_RELEASE_KEYSTORE_FILE") ? project.property("EMS_RELEASE_KEYSTORE_FILE") : null)
+            def releaseKeystorePassword = System.getenv("EMS_RELEASE_KEYSTORE_PASSWORD") ?: props.getProperty("EMS_RELEASE_KEYSTORE_PASSWORD") ?: (project.hasProperty("EMS_RELEASE_KEYSTORE_PASSWORD") ? project.property("EMS_RELEASE_KEYSTORE_PASSWORD") : null)
+            def releaseKeyAlias = System.getenv("EMS_RELEASE_KEY_ALIAS") ?: props.getProperty("EMS_RELEASE_KEY_ALIAS") ?: (project.hasProperty("EMS_RELEASE_KEY_ALIAS") ? project.property("EMS_RELEASE_KEY_ALIAS") : null)
+            def releaseKeyPassword = System.getenv("EMS_RELEASE_KEY_PASSWORD") ?: props.getProperty("EMS_RELEASE_KEY_PASSWORD") ?: (project.hasProperty("EMS_RELEASE_KEY_PASSWORD") ? project.property("EMS_RELEASE_KEY_PASSWORD") : null)
+
+            if (releaseKeystorePath) {
+                def kFile = file(releaseKeystorePath)
+                if (kFile.exists()) {
+                    storeFile kFile
+                    storePassword releaseKeystorePassword
+                    keyAlias releaseKeyAlias
+                    keyPassword releaseKeyPassword
+                }
+            }
+        }
+    }
+
     buildTypes {
         debug {
             debuggable true
@@ -38,6 +64,7 @@ android {
             versionNameSuffix "-debug"
         }
         release {
+            signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -62,4 +89,56 @@ dependencies {
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     // Custom Tabs — enables Google Sign-in to work correctly inside the app
     implementation 'androidx.browser:browser:1.8.0'
+    // Firebase Cloud Messaging (FCM)
+    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def releaseTasks = taskGraph.allTasks.findAll {
+        def name = it.name.toLowerCase()
+        (name.contains("release") && (name.startsWith("assemble") || name.startsWith("bundle") || name.startsWith("package")))
+    }
+    if (!releaseTasks.isEmpty()) {
+        def releaseConfig = android.signingConfigs.release
+        def isSigningComplete = releaseConfig.storeFile != null &&
+                                releaseConfig.storeFile.exists() &&
+                                releaseConfig.storePassword &&
+                                releaseConfig.keyAlias &&
+                                releaseConfig.keyPassword
+
+        if (!isSigningComplete) {
+            throw new GradleException(
+                """
+================================================================================
+RELEASE BUILD FAILED: Missing or Incomplete Release Signing Configuration.
+================================================================================
+Production release artifacts (APK/AAB) must be signed with a production keystore
+and will not be generated unsigned.
+
+Required signing configuration:
+  1. Keystore file (must exist on disk)
+  2. Keystore password
+  3. Key alias
+  4. Key password
+
+You can provide these via environment variables:
+  - EMS_RELEASE_KEYSTORE_FILE
+  - EMS_RELEASE_KEYSTORE_PASSWORD
+  - EMS_RELEASE_KEY_ALIAS
+  - EMS_RELEASE_KEY_PASSWORD
+
+Or create a gitignored 'keystore.properties' file in the android/ directory:
+  EMS_RELEASE_KEYSTORE_FILE=/path/to/release.keystore
+  EMS_RELEASE_KEYSTORE_PASSWORD=***
+  EMS_RELEASE_KEY_ALIAS=***
+  EMS_RELEASE_KEY_PASSWORD=***
+
+Never commit keystore files or passwords to version control.
+================================================================================
+""".stripIndent()
+            )
+        }
+    }
+}
+

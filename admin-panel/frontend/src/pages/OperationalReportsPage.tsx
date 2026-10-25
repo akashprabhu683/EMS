@@ -28,7 +28,7 @@ export function OperationalReportsPage() {
   const toast = useToast();
   const [report, setReport] = useState<OperationalReportData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [datePreset, setDatePreset] = useState<'all' | 'today' | '7days' | 'month'>('all');
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | '7days' | 'month'>('7days');
 
   const loadReport = async (preset = datePreset) => {
     setLoading(true);
@@ -176,6 +176,16 @@ export function OperationalReportsPage() {
           </button>
         ))}
       </div>
+
+      {report?.meta?.isTruncated && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-amber-900 flex items-start gap-3 shadow-2xs">
+          <AlertTriangle className="text-amber-600 mt-0.5 shrink-0" size={18} />
+          <div className="text-xs sm:text-sm">
+            <span className="font-bold block mb-0.5">Order Query Ceiling Reached</span>
+            <p>{report.meta.warning || 'Displaying the latest 5,000 orders. Please select a narrower date range (e.g. Today, Last 7 Days, or Last 30 Days) for complete metrics.'}</p>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="py-20 text-center">

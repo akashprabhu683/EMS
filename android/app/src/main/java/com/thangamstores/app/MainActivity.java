@@ -96,6 +96,16 @@ public class MainActivity extends AppCompatActivity {
                 cameraCaptureUri = null;
             });
 
+    // Runtime notification permission launcher for Android 13+ (POST_NOTIFICATIONS)
+    private final ActivityResultLauncher<String> notificationPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    Log.i(TAG, "Notification permission granted by user.");
+                } else {
+                    Log.i(TAG, "Notification permission denied by user. In-app alerts remain active.");
+                }
+            });
+
     // Network connectivity listener for seamless offline-to-online recovery
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
@@ -113,6 +123,8 @@ public class MainActivity extends AppCompatActivity {
 
         setupBackNavigation();
         setupNetworkMonitoring();
+        requestNotificationPermissionIfRequired();
+        initializeFcmToken();
 
         // Configure cookies — essential for Firebase Auth session persistence
         CookieManager cookieManager = CookieManager.getInstance();
@@ -456,25 +468,74 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String resolveDestinationUrl(Intent intent) {
-        if (intent != null && intent.getData() != null) {
-            Uri data = intent.getData();
-            String host = data.getHost();
-            String scheme = data.getScheme();
-
-            // Direct HTTPS match for customer storefront or admin portal
-            if ("https".equalsIgnoreCase(scheme) && host != null &&
-                    (host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST))) {
-                return data.toString();
+        if (intent != null) {
+            String targetUrlExtra = intent.getStringExtra("targetUrl");
+            if (targetUrlExtra != null && !targetUrlExtra.trim().isEmpty()) {
+                return targetUrlExtra.trim();
             }
 
-            // Custom schemes: thangamstores:// or ems-admin://
-            if ("thangamstores".equalsIgnoreCase(scheme) || "ems-admin".equalsIgnoreCase(scheme)) {
-                String path = data.getPath() != null ? data.getPath() : "";
-                String query = data.getQuery() != null ? "?" + data.getQuery() : "";
-                return STOREFRONT_URL.replaceAll("/$", "") + path + query;
+            String orderIdExtra = intent.getStringExtra("orderId");
+            if (orderIdExtra != null && !orderIdExtra.trim().isEmpty()) {
+                return STOREFRONT_URL.replaceAll("/$", "") + "/orders/" + orderIdExtra.trim();
+            }
+
+            if (intent.getData() != null) {
+                Uri data = intent.getData();
+                String host = data.getHost();
+                String scheme = data.getScheme();
+
+                // Direct HTTPS match for customer storefront or admin portal
+                if ("https".equalsIgnoreCase(scheme) && host != null) {
+                    String cleanHost = host.toLowerCase();
+                    if (cleanHost.equals(STOREFRONT_HOST) || cleanHost.endsWith("." + STOREFRONT_HOST) ||
+                        cleanHost.equals("ecommerce-storefront-client.vercel.app") ||
+                        cleanHost.equals("ems-admin-panel-provider.vercel.app") ||
+                        cleanHost.equals("ems-admin-portal.vercel.app")) {
+                        return data.toString();
+                    }
+                }
+
+                // Custom schemes: thangamstores:// or ems-admin://
+                if ("thangamstores".equalsIgnoreCase(scheme) || "ems-admin".equalsIgnoreCase(scheme)) {
+                    String path = data.getPath() != null ? data.getPath() : "";
+                    String query = data.getQuery() != null ? "?" + data.getQuery() : "";
+                    return STOREFRONT_URL.replaceAll("/$", "") + path + query;
+                }
             }
         }
         return STOREFRONT_URL;
+    }
+
+    private void requestNotificationPermissionIfRequired() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                    android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+    }
+
+    private void initializeFcmToken() {
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken()
+                    .addOnCompleteListener(task -> {
+                        if (!task.isSuccessful()) {
+                            Log.w(TAG, "Fetching initial FCM token failed", task.getException());
+                            return;
+                        }
+                        String token = task.getResult();
+                        if (token != null) {
+                            getSharedPreferences("ems_preferences", Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putString("fcm_token", token)
+                                    .apply();
+                            String safePrefix = token.length() > 8 ? token.substring(0, 8) + "..." : "[redacted]";
+                            Log.i(TAG, "Initial FCM token retrieved: " + safePrefix);
+                        }
+                    });
+        } catch (Exception e) {
+            Log.w(TAG, "FirebaseMessaging initialization skipped or unavailable", e);
+        }
     }
 
     private boolean isCriticalInteractivePage(String url) {
@@ -536,11 +597,13 @@ public class MainActivity extends AppCompatActivity {
         if (host == null) return false;
         host = host.toLowerCase();
 
-        // 1. Internal storefront / admin domains & Vercel deployments
-        if (host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST)) {
-            return true;
-        }
-        if (host.endsWith(".vercel.app")) {
+        // 1. Strictly verified internal storefront / admin domains (reject wildcard third-party vercel subdomains)
+        if (host.equals(STOREFRONT_HOST) || host.endsWith("." + STOREFRONT_HOST) ||
+            host.equals("ecommerce-storefront-client.vercel.app") ||
+            host.equals("ecommerce-storefront-client.netlify.app") ||
+            host.equals("ems-admin-portal.vercel.app") ||
+            host.equals("ems-admin-panel-provider.vercel.app") ||
+            host.equals("ems-admin-panel-provider.netlify.app")) {
             return true;
         }
 

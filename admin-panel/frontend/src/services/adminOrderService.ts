@@ -1,15 +1,11 @@
 import {
   collection,
-  doc,
   getDocs,
-  updateDoc,
   query,
   orderBy,
-  serverTimestamp,
   type DocumentData,
   Timestamp,
   onSnapshot,
-  arrayUnion,
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 
@@ -222,39 +218,16 @@ export async function updateOrderStatus(
         throw new Error(err.error);
       }
     } catch (apiErr: any) {
-      console.warn('Admin API /api/admin/orders/:id/status failed, using direct Firestore:', apiErr);
+      console.warn('Admin API /api/admin/orders/:id/status failed:', apiErr);
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('HTTP')) {
         throw apiErr;
       }
     }
   }
 
-  // 3. Fallback: direct Firestore write (admin only)
-  const orderRef = doc(db, 'orders', orderId);
-  const actorId = auth.currentUser?.email || auth.currentUser?.uid || 'admin';
-  const historyEntry: StatusHistoryEntry = {
-    status: newStatus,
-    timestamp: new Date().toISOString(),
-    updatedBy: actorId,
-    note: opts.note || `Order status updated to ${newStatus}`,
-  };
-
-  const updatePayload: Record<string, any> = {
-    orderStatus: newStatus,
-    updatedAt: serverTimestamp(),
-    statusHistory: arrayUnion(historyEntry),
-  };
-
-  if (newStatus === 'collected') {
-    updatePayload.collectedAt = serverTimestamp();
-    updatePayload.collectedBy = actorId;
-  } else if (newStatus === 'cancelled') {
-    updatePayload.cancelledAt = serverTimestamp();
-    updatePayload.cancelledBy = actorId;
-    updatePayload.cancelReason = opts.note || 'Order cancelled by dispensary administrator';
-  }
-
-  await updateDoc(orderRef, updatePayload);
+  // 3. Reject unvalidated client-side direct writes.
+  // Both Cloud Function and Express API failed or were unreachable.
+  throw new Error('Unable to update order status at this time. Trusted backend validation is unreachable. Please check your network connection and retry.');
 }
 
 /**
@@ -273,7 +246,7 @@ export async function markOrderPaid(orderId: string, note?: string): Promise<voi
     });
     return;
   } catch (fnErr: any) {
-    console.warn('recordOrderPayment Cloud Function failed, checking Express / direct fallback:', fnErr);
+    console.warn('recordOrderPayment Cloud Function failed, checking Express fallback:', fnErr);
     const errorCode = String(fnErr?.code || '').toLowerCase();
     const errorMsg = String(fnErr?.message || '').toLowerCase();
     const isDomainError =
@@ -315,27 +288,15 @@ export async function markOrderPaid(orderId: string, note?: string): Promise<voi
         throw new Error(err.error);
       }
     } catch (apiErr: any) {
-      console.warn('Admin API /api/admin/orders/:id/payment failed, using direct Firestore:', apiErr);
+      console.warn('Admin API /api/admin/orders/:id/payment failed:', apiErr);
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('HTTP')) {
         throw apiErr;
       }
     }
   }
 
-  // 3. Fallback: direct Firestore write (preserves fulfilment status intact)
-  const orderRef = doc(db, 'orders', orderId);
-  const actorId = auth.currentUser?.email || auth.currentUser?.uid || 'admin';
-  await updateDoc(orderRef, {
-    paymentStatus: 'paid',
-    paidAt: serverTimestamp(),
-    paidConfirmedBy: actorId,
-    updatedAt: serverTimestamp(),
-    statusHistory: arrayUnion({
-      paymentStatus: 'paid',
-      timestamp: new Date().toISOString(),
-      updatedBy: actorId,
-      note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
-    }),
-  });
+  // 3. Reject unvalidated client-side direct writes.
+  // Both Cloud Function and Express API failed or were unreachable.
+  throw new Error('Unable to record payment at this time. Trusted backend validation is unreachable. Please check your network connection and retry.');
 }
 

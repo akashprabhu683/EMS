@@ -6,8 +6,31 @@ import { randomBytes, createHash } from "node:crypto";
 import { sendAdminInvitationEmail } from "./emailService.js";
 import { appendAuditLog } from "./audit.js";
 
-const db = admin.firestore();
-const auth = admin.auth();
+function getDb(): admin.firestore.Firestore {
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  return admin.firestore();
+}
+
+function getAuth(): admin.auth.Auth {
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  return admin.auth();
+}
+
+const db = new Proxy({} as admin.firestore.Firestore, {
+  get(_target, prop) {
+    return (getDb() as any)[prop];
+  },
+});
+
+const auth = new Proxy({} as admin.auth.Auth, {
+  get(_target, prop) {
+    return (getAuth() as any)[prop];
+  },
+});
 
 function getCanonicalPortalUrl(): string {
   const url = process.env.ADMIN_PORTAL_URL || process.env.FRONTEND_URL || "https://ems-admin-panel-provider.vercel.app";
@@ -21,12 +44,35 @@ function hashToken(rawToken: string): string {
 export const PRIMARY_SUPERADMIN_EMAIL = "akashprabhu0302@gmail.com";
 
 /**
- * Helper: Ensures caller is authenticated and has admin privileges.
+ * Helper: Ensures caller is authenticated, actively authorized in Firestore,
+ * and has not been revoked.
  */
-function assertAdmin(request: any) {
-  if (!request.auth) {
+async function assertAdmin(request: any) {
+  if (!request.auth || !request.auth.uid) {
     throw new HttpsError("unauthenticated", "Authentication required to access admin operations.");
   }
+
+  const uid = request.auth.uid;
+  const callerEmail = (request.auth?.token?.email || "").toLowerCase().trim();
+  const isSuperadmin = callerEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+
+  // 1. Real-time revocation check against /admin_revocations/{uid}
+  const revocationDoc = await db.collection("admin_revocations").doc(uid).get();
+  if (revocationDoc.exists) {
+    throw new HttpsError("permission-denied", "Administrator privilege has been revoked for this account.");
+  }
+
+  // 2. Superadmin has persistent owner authority and cannot be revoked
+  if (isSuperadmin) {
+    return;
+  }
+
+  // 3. Check active administrator record in /admins/{uid}
+  const adminDoc = await db.collection("admins").doc(uid).get();
+  if (!adminDoc.exists || adminDoc.data()?.isActive === false) {
+    throw new HttpsError("permission-denied", "Access restricted to active EMS administrators.");
+  }
+
   if (!request.auth.token || request.auth.token.admin !== true) {
     throw new HttpsError("permission-denied", "Access restricted to EMS administrators.");
   }
@@ -35,8 +81,8 @@ function assertAdmin(request: any) {
 /**
  * Helper: Ensures caller is the primary superadmin owner.
  */
-function assertSuperadminOwner(request: any) {
-  assertAdmin(request);
+async function assertSuperadminOwner(request: any) {
+  await assertAdmin(request);
   const callerEmail = (request.auth?.token?.email || "").toLowerCase().trim();
   if (callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
     throw new HttpsError(
@@ -51,7 +97,7 @@ function assertSuperadminOwner(request: any) {
  * Returns all active administrators and pending admin invitations.
  */
 export const listAdmins = onCall(async (request) => {
-  assertAdmin(request);
+  await assertAdmin(request);
 
   try {
     const [adminsSnap, invitesSnap] = await Promise.all([
@@ -87,8 +133,6 @@ export const listAdmins = onCall(async (request) => {
         invitedBy: data.invitedBy || "Admin",
         invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : data.invitedAt || null,
         expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,
-        token: data.token || null,
-        acceptUrl: data.acceptUrl || null,
       });
     });
 
@@ -104,8 +148,8 @@ export const listAdmins = onCall(async (request) => {
  * Generates an invitation token, saves it to Firestore, and dispatches an invitation email via Resend.
  * Only the site owner (akashprabhu0302@gmail.com) has authority to grant admin roles.
  */
-export const grantAdminRole = onCall(async (request) => {
-  assertSuperadminOwner(request);
+export const grantAdminRole = onCall({ secrets: ["RESEND_API_KEY"] }, async (request) => {
+  await assertSuperadminOwner(request);
 
   const emailRaw = request.data?.email;
   if (!emailRaw || typeof emailRaw !== "string") {
@@ -124,10 +168,9 @@ export const grantAdminRole = onCall(async (request) => {
     const portalUrl = getCanonicalPortalUrl();
     const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
 
-    // Store in admin_invitations collection with token hash and expiration metadata
+    // Store only tokenHash and metadata in Firestore (never plaintext token or raw acceptUrl)
     await db.collection("admin_invitations").doc(email).set({
       email,
-      token, // stored for administrator copy-link convenience
       tokenHash,
       status: "pending",
       invitedBy: callerEmail,
@@ -136,7 +179,6 @@ export const grantAdminRole = onCall(async (request) => {
       expiresAt: Timestamp.fromDate(expiresAt),
       acceptedAt: null,
       acceptedByUid: null,
-      acceptUrl,
     });
 
     // Send invitation email via Resend
@@ -147,20 +189,35 @@ export const grantAdminRole = onCall(async (request) => {
       expiresInDays: 7,
     });
 
-    logger.info(`Admin invitation dispatched to ${email}. Email success: ${emailResult.success}`);
+    logger.info(`Admin invitation processed for ${email}. Email success: ${emailResult.success}`);
 
     await appendAuditLog(db, {
       action: "ADMIN_INVITED",
       actor: { uid: callerUid || "superadmin", email: callerEmail, role: "superadmin" },
       target: { collection: "admin_invitations", id: email, label: email },
-      summary: `Admin invitation dispatched to ${email} by ${callerEmail}.`,
-      metadata: { emailSent: emailResult.success },
+      summary: `Admin invitation processed for ${email} by ${callerEmail}. Email dispatched: ${emailResult.success}.`,
+      metadata: {
+        emailSent: emailResult.success,
+        emailError: emailResult.error || null,
+        resendId: emailResult.resendId || null,
+      },
     });
+
+    if (!emailResult.success) {
+      return {
+        success: true,
+        status: "invited",
+        emailSent: false,
+        emailError: emailResult.error || "Email delivery failed",
+        acceptUrl,
+        message: `Admin invitation created for ${email}, but email delivery could not be completed (${emailResult.error || "provider unavailable"}). You may copy the secure invitation link below and share it directly with the administrator.`,
+      };
+    }
 
     return {
       success: true,
       status: "invited",
-      emailSent: emailResult.success,
+      emailSent: true,
       resendId: emailResult.resendId,
       acceptUrl,
       message: `Invitation email sent to ${email}. They can accept the role using the link in their email!`,
@@ -176,8 +233,8 @@ export const grantAdminRole = onCall(async (request) => {
  * Resends the invitation email to a pending administrator.
  * Only the site owner (akashprabhu0302@gmail.com) has authority to resend invitations.
  */
-export const resendAdminInvitation = onCall(async (request) => {
-  assertSuperadminOwner(request);
+export const resendAdminInvitation = onCall({ secrets: ["RESEND_API_KEY"] }, async (request) => {
+  await assertSuperadminOwner(request);
 
   const emailRaw = request.data?.email;
   if (!emailRaw || typeof emailRaw !== "string") {
@@ -201,12 +258,12 @@ export const resendAdminInvitation = onCall(async (request) => {
     const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
 
     await inviteDoc.ref.update({
-      token,
       tokenHash,
       status: "pending",
       expiresAt: Timestamp.fromDate(expiresAt),
-      acceptUrl,
       lastResentAt: FieldValue.serverTimestamp(),
+      token: FieldValue.delete(),
+      acceptUrl: FieldValue.delete(),
     });
 
     const emailResult = await sendAdminInvitationEmail({
@@ -221,12 +278,28 @@ export const resendAdminInvitation = onCall(async (request) => {
       action: "ADMIN_INVITATION_RESENT",
       actor: { uid: request.auth?.uid || "superadmin", email: callerEmail, role: "superadmin" },
       target: { collection: "admin_invitations", id: email, label: email },
-      summary: `Admin invitation link re-sent to ${email} by ${callerEmail}.`,
-      metadata: { emailSent: emailResult.success },
+      summary: `Admin invitation link refreshed for ${email} by ${callerEmail}. Email dispatched: ${emailResult.success}.`,
+      metadata: {
+        emailSent: emailResult.success,
+        emailError: emailResult.error || null,
+        resendId: emailResult.resendId || null,
+      },
     });
+
+    if (!emailResult.success) {
+      return {
+        success: true,
+        emailSent: false,
+        emailError: emailResult.error || "Email delivery failed",
+        acceptUrl,
+        message: `Invitation link refreshed for ${email}, but email delivery failed (${emailResult.error || "provider unreachable"}). You may copy and share the link directly.`,
+      };
+    }
 
     return {
       success: true,
+      emailSent: true,
+      resendId: emailResult.resendId,
       acceptUrl,
       message: `Invitation email resent to ${email}.`,
     };
@@ -430,7 +503,7 @@ export const acceptAdminInvitation = onCall(async (request) => {
  * and akashprabhu0302@gmail.com can NEVER be revoked by anyone.
  */
 export const revokeAdminRole = onCall(async (request) => {
-  assertSuperadminOwner(request);
+  await assertSuperadminOwner(request);
 
   const { uid, email } = request.data || {};
   if (!uid && !email) {

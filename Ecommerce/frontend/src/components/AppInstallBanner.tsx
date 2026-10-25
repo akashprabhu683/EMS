@@ -58,7 +58,7 @@ export function AppInstallBanner() {
               Stay updated on your herbal remedies
             </p>
             <p className="text-xs text-emerald-100/90 leading-relaxed max-w-xl">
-              Install the EMS mobile app for instant notifications when your order is placed, verified, and ready for counter collection.
+              Install the EMS mobile app for real-time order tracking and in-app status updates when your remedies are prepared and ready for dispensary collection.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">

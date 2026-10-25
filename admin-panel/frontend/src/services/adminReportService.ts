@@ -42,6 +42,13 @@ export async function fetchOperationalReport(filter?: {
   const report: OperationalReportData = {
     generatedAt: new Date().toISOString(),
     timezone: STORE_TIMEZONE,
+    meta: {
+      isTruncated: false,
+      ordersProcessed: 0,
+      maxOrdersCeiling: 5000,
+      startDate: filter?.startDate,
+      endDate: filter?.endDate,
+    },
     orders: {
       totalOrders: 0,
       activeOrders: 0,

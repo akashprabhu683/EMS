@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, doc, getDoc, orderBy, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, orderBy, onSnapshot } from 'firebase/firestore';
 import { db, auth, functions } from '../firebase';
 import { httpsCallable } from 'firebase/functions';
 import type { Order, OrderStatus } from '../types';
@@ -178,6 +178,9 @@ export async function getUserOrders(uid: string): Promise<Order[]> {
     }
   }
 
+  // Local-storage presentation filter: hides dismissed orders from customer view without deleting database records
+  const hiddenIds = new Set(getHiddenOrderIds(uid));
+
   // Fallback to direct Firestore
   try {
     const q = query(
@@ -186,13 +189,17 @@ export async function getUserOrders(uid: string): Promise<Order[]> {
       orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
-    return snap.docs.map(docSnap => formatFirestoreOrder(docSnap.id, docSnap.data()));
+    return snap.docs
+      .filter((docSnap) => !hiddenIds.has(docSnap.id))
+      .map((docSnap) => formatFirestoreOrder(docSnap.id, docSnap.data()));
   } catch (err) {
     // If composite index is pending, query without orderBy
     try {
       const fallbackQ = query(collection(db, 'orders'), where('userId', '==', uid));
       const snap = await getDocs(fallbackQ);
-      return snap.docs.map(docSnap => formatFirestoreOrder(docSnap.id, docSnap.data()));
+      return snap.docs
+        .filter((docSnap) => !hiddenIds.has(docSnap.id))
+        .map((docSnap) => formatFirestoreOrder(docSnap.id, docSnap.data()));
     } catch (fallbackErr) {
       console.error('Failed to load user orders:', fallbackErr);
       return [];
@@ -213,24 +220,75 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
   }
 }
 
-export async function deleteOrder(orderId: string): Promise<void> {
-  if (!orderId) return;
-  const docRef = doc(db, 'orders', orderId);
-  await deleteDoc(docRef);
+const HIDDEN_ORDERS_STORAGE_KEY_PREFIX = 'ems_hidden_orders_';
+
+/**
+ * Retrieves the list of order IDs hidden locally by the customer.
+ * Note: Presentation only; does not affect authoritative backend or admin queues.
+ */
+export function getHiddenOrderIds(uid: string): string[] {
+  if (typeof window === 'undefined' || !uid) return [];
+  try {
+    const raw = localStorage.getItem(`${HIDDEN_ORDERS_STORAGE_KEY_PREFIX}${uid}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 }
 
-export async function clearAllUserOrders(uid: string): Promise<number> {
+/**
+ * Hides a specific order from the customer's browser view without altering or deleting Firestore data.
+ */
+export function hideOrderFromView(uid: string, orderId: string): void {
+  if (typeof window === 'undefined' || !uid || !orderId) return;
+  try {
+    const set = new Set(getHiddenOrderIds(uid));
+    set.add(orderId);
+    localStorage.setItem(`${HIDDEN_ORDERS_STORAGE_KEY_PREFIX}${uid}`, JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn('Failed to save hidden order to localStorage:', err);
+  }
+}
+
+/**
+ * Hides all supplied orders from the customer's browser view without deleting any database records.
+ */
+export function hideAllOrdersFromView(uid: string, orderIds: string[]): void {
+  if (typeof window === 'undefined' || !uid) return;
+  try {
+    const set = new Set(getHiddenOrderIds(uid));
+    orderIds.forEach((id) => set.add(id));
+    localStorage.setItem(`${HIDDEN_ORDERS_STORAGE_KEY_PREFIX}${uid}`, JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn('Failed to save hidden orders to localStorage:', err);
+  }
+}
+
+/**
+ * Safe replacement for physical deletion: Hides order from customer view without deleting database record.
+ */
+export async function deleteOrder(orderId: string, uid?: string): Promise<void> {
+  if (uid && orderId) {
+    hideOrderFromView(uid, orderId);
+  }
+}
+
+/**
+ * Safe replacement for clearing all orders: Hides order history from customer view without deleting database records.
+ */
+export async function clearAllUserOrders(uid: string, orderIds?: string[]): Promise<number> {
   if (!uid) return 0;
-  const q = query(collection(db, 'orders'), where('userId', '==', uid));
-  const snap = await getDocs(q);
-  const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'orders', d.id)));
-  await Promise.all(deletePromises);
-  return snap.docs.length;
+  if (orderIds && orderIds.length > 0) {
+    hideAllOrdersFromView(uid, orderIds);
+    return orderIds.length;
+  }
+  return 0;
 }
 
 /**
  * Subscribes to real-time updates for a customer's orders list.
  * Live changes (e.g. accepted, preparing, ready_for_pickup) stream immediately without refresh.
+ * Filters out locally dismissed/hidden orders from presentation.
  */
 export function subscribeUserOrders(
   uid: string,
@@ -254,7 +312,10 @@ export function subscribeUserOrders(
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const orders = snap.docs.map((d) => formatFirestoreOrder(d.id, d.data()));
+        const hiddenIds = new Set(getHiddenOrderIds(uid));
+        const orders = snap.docs
+          .filter((d) => !hiddenIds.has(d.id))
+          .map((d) => formatFirestoreOrder(d.id, d.data()));
         onOrders(orders);
       },
       (err) => {
@@ -262,7 +323,10 @@ export function subscribeUserOrders(
         fallbackUnsub = onSnapshot(
           query(collection(db, 'orders'), where('userId', '==', uid)),
           (snap) => {
-            const orders = snap.docs.map((d) => formatFirestoreOrder(d.id, d.data()));
+            const hiddenIds = new Set(getHiddenOrderIds(uid));
+            const orders = snap.docs
+              .filter((d) => !hiddenIds.has(d.id))
+              .map((d) => formatFirestoreOrder(d.id, d.data()));
             onOrders(orders);
           },
           onError

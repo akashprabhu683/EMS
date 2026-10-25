@@ -229,17 +229,27 @@ export async function executeCreateOrder(
 
     // 1.1 Read idempotency record
     const idempotencySnap = await transaction.get(idempotencyRef);
+    let existing = idempotencySnap.exists ? idempotencySnap.data() : null;
+
+    if (!existing) {
+      // Backward compatibility check for pre-Phase-6B legacy records stored in idempotency_keys
+      const legacyIdempRef = db.collection("idempotency_keys").doc(idempotencyKey);
+      const legacySnap = await transaction.get(legacyIdempRef);
+      if (legacySnap.exists) {
+        const legData = legacySnap.data();
+        if (legData && (legData.userId === uid || legData.uid === uid)) {
+          existing = legData;
+        }
+      }
+    }
 
     // 1.2 Read authenticated customer's cart
     const cartSnap = await transaction.get(cartRef);
 
     // If an idempotency record already exists, validate it and handle retry
-    if (idempotencySnap.exists) {
-      const existing = idempotencySnap.data();
-
+    if (existing) {
       // Detect malformed or corrupted idempotency record
       if (
-        !existing ||
         typeof existing !== "object" ||
         typeof existing.orderId !== "string" ||
         !existing.orderId ||
@@ -511,7 +521,7 @@ export async function executeCreateOrder(
     const orderId = orderRef.id;
     const now = FieldValue.serverTimestamp();
     const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
-    const pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const pickupCode = crypto.randomInt(100000, 1000000).toString();
 
     const orderRecord = {
       id: orderId,
@@ -690,7 +700,7 @@ export async function executeTransitionOrderStatus(
 
   const orderRef = db.collection("orders").doc(orderId);
 
-  return await db.runTransaction(async (transaction) => {
+  const result = await db.runTransaction<any>(async (transaction) => {
     const snap = await transaction.get(orderRef);
     if (!snap.exists) {
       throw new HttpsError("not-found", `Order ${orderId} does not exist.`);
@@ -762,17 +772,18 @@ export async function executeTransitionOrderStatus(
       const expectedCode = String(order.pickupCode || "").trim();
 
       if (!cleanCode || cleanCode !== expectedCode) {
-        await orderRef.update({
-          pickupAttempts: attempts + 1,
+        const nextAttempts = attempts + 1;
+        transaction.update(orderRef, {
+          pickupAttempts: nextAttempts,
           updatedAt: FieldValue.serverTimestamp(),
         });
-        const remaining = Math.max(0, maxAttempts - (attempts + 1));
-        throw new HttpsError(
-          "invalid-argument",
-          `Invalid 6-digit collection code. ${remaining} attempts remaining before lock.`
-        );
+        const remaining = Math.max(0, maxAttempts - nextAttempts);
+        return {
+          failedVerification: true,
+          remaining,
+          nextAttempts,
+        };
       }
-
 
       pickupVerified = true;
     }
@@ -872,6 +883,16 @@ export async function executeTransitionOrderStatus(
       pickupVerified,
     };
   });
+
+  if (result && (result as any).failedVerification) {
+    const remaining = (result as any).remaining;
+    throw new HttpsError(
+      "invalid-argument",
+      `Invalid 6-digit collection code. ${remaining} attempts remaining before lock.`
+    );
+  }
+
+  return result as TransitionOrderStatusResult;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1101,6 +1122,52 @@ export interface UpdateOrderStatusRequestData {
   note?: string;
 }
 
+export const PRIMARY_SUPERADMIN_EMAIL = "akashprabhu0302@gmail.com";
+
+export interface ResolvedOrderAdminStatus {
+  isAdmin: boolean;
+  isRevoked: boolean;
+}
+
+/**
+ * Verifies caller's current authorization against trusted real-time server records.
+ * Never trusts a cached Firebase custom claim alone.
+ */
+export async function verifyOrderAdminCaller(
+  db: FirebaseFirestore.Firestore,
+  uid: string,
+  email?: string,
+  hasAdminClaim?: boolean
+): Promise<ResolvedOrderAdminStatus> {
+  const cleanEmail = email ? email.toLowerCase().trim() : "";
+  const isSuperadmin = cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+
+  // 1. Superadmin always has admin privileges and can never be revoked
+  if (isSuperadmin) {
+    return { isAdmin: true, isRevoked: false };
+  }
+
+  // 2. Real-time revocation check: Revoked administrators are strictly blocked from admin privileges
+  const revocationDoc = await db.collection("admin_revocations").doc(uid).get();
+  if (revocationDoc.exists) {
+    return { isAdmin: false, isRevoked: true };
+  }
+
+  // 3. Verify active administrator record in /admins/{uid}
+  const adminDoc = await db.collection("admins").doc(uid).get();
+  if (!adminDoc.exists) {
+    return { isAdmin: false, isRevoked: false };
+  }
+
+  const adminData = adminDoc.data();
+  if (adminData?.isActive === false) {
+    return { isAdmin: false, isRevoked: false };
+  }
+
+  const hasClaimOrDoc = Boolean(hasAdminClaim) || Boolean(adminDoc.exists);
+  return { isAdmin: hasClaimOrDoc, isRevoked: false };
+}
+
 export const updateOrderStatus = onCall(
   { cors: true, invoker: "public" },
   async (request: CallableRequest<UpdateOrderStatusRequestData>): Promise<TransitionOrderStatusResult> => {
@@ -1112,13 +1179,16 @@ export const updateOrderStatus = onCall(
     const email = request.auth.token.email;
     const db = admin.firestore();
 
-    // Check if user has admin claim or is in admins collection
-    let isAdmin = Boolean(request.auth.token.admin);
-    if (!isAdmin) {
-      const adminSnap = await db.collection("admins").doc(uid).get();
-      if (adminSnap.exists) {
-        isAdmin = true;
-      }
+    const { isAdmin, isRevoked } = await verifyOrderAdminCaller(
+      db,
+      uid,
+      email,
+      Boolean(request.auth.token.admin)
+    );
+
+    // If caller is revoked and attempting an admin status transition or another user's order, block immediately
+    if (isRevoked && request.data.newStatus !== "cancelled") {
+      throw new HttpsError("permission-denied", "Administrator privilege has been revoked for this account.");
     }
 
     try {
@@ -1154,12 +1224,18 @@ export const recordOrderPayment = onCall(
     const email = request.auth.token.email;
     const db = admin.firestore();
 
-    let isAdmin = Boolean(request.auth.token.admin);
+    const { isAdmin, isRevoked } = await verifyOrderAdminCaller(
+      db,
+      uid,
+      email,
+      Boolean(request.auth.token.admin)
+    );
+
+    if (isRevoked) {
+      throw new HttpsError("permission-denied", "Administrator privilege has been revoked for this account.");
+    }
     if (!isAdmin) {
-      const adminSnap = await db.collection("admins").doc(uid).get();
-      if (adminSnap.exists) {
-        isAdmin = true;
-      }
+      throw new HttpsError("permission-denied", "Only authorized dispensary staff can record payment receipt.");
     }
 
     try {
@@ -1194,10 +1270,18 @@ export const correctOrderPayment = onCall(
     const email = request.auth.token.email;
     const db = admin.firestore();
 
-    let isAdmin = Boolean(request.auth.token.admin);
+    const { isAdmin, isRevoked } = await verifyOrderAdminCaller(
+      db,
+      uid,
+      email,
+      Boolean(request.auth.token.admin)
+    );
+
+    if (isRevoked) {
+      throw new HttpsError("permission-denied", "Administrator privilege has been revoked for this account.");
+    }
     if (!isAdmin) {
-      const adminSnap = await db.collection("admins").doc(uid).get();
-      if (adminSnap.exists) isAdmin = true;
+      throw new HttpsError("permission-denied", "Only authorized dispensary staff can record payment corrections.");
     }
 
     try {

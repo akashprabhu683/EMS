@@ -25,6 +25,7 @@ export interface ProductFormData {
   stock: string;
   lowStockThreshold: string;
   isActive: boolean;
+  expectedCurrentStock?: number;
 }
 
 export interface Category {
@@ -64,6 +65,9 @@ export type AuditAction =
   | 'PRODUCT_UPDATED'
   | 'PRODUCT_DELETED'
   | 'INVENTORY_ADJUSTED'
+  | 'CATEGORY_CREATED'
+  | 'CATEGORY_UPDATED'
+  | 'CATEGORY_DELETED'
   | 'ADMIN_ROLE_GRANTED'
   | 'ADMIN_ROLE_REVOKED'
   | 'ADMIN_INVITED'
@@ -95,6 +99,14 @@ export interface AuditLogEntry {
 export interface OperationalReportData {
   generatedAt: string;
   timezone: string;
+  meta?: {
+    isTruncated?: boolean;
+    ordersProcessed?: number;
+    maxOrdersCeiling?: number;
+    startDate?: string;
+    endDate?: string;
+    warning?: string;
+  };
   orders: {
     totalOrders: number;
     activeOrders: number;

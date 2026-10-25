@@ -39,6 +39,10 @@ ui-debug.log*
 serviceAccountKey.json
 *serviceAccount*.json
 emulator-data/
+*.jks
+*.keystore
+keystore.properties
+signing.properties
 
 # TypeScript cache
 *.tsbuildinfo

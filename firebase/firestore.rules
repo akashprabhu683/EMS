@@ -8,10 +8,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isSuperadmin() {
+      return isAuthenticated() && request.auth.token.email.lower() == 'akashprabhu0302@gmail.com';
+    }
+
+    function isRevoked() {
+      return exists(/databases/$(database)/documents/admin_revocations/$(request.auth.uid));
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.admin == true ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        isSuperadmin() ||
+        (!isRevoked() && (
+          request.auth.token.admin == true ||
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        ))
       );
     }
 
@@ -26,8 +37,11 @@ service cloud.firestore {
       // Public can read active categories; Admins can read all
       allow read: if (resource.data.isActive == true) || isAdmin();
 
-      // Only admins can create/update/delete categories
-      allow create, update, delete: if isAdmin();
+      // SECURITY LOCKDOWN (PHASE 6C):
+      // Direct client creation, update, and deletion are strictly denied for all clients.
+      // All category mutations MUST route through authoritative Cloud Functions
+      // or trusted Express backend APIs via the Firebase Admin SDK.
+      allow create, update, delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -37,8 +51,11 @@ service cloud.firestore {
       // Public can read active products; Admins can read all
       allow read: if (resource.data.isActive == true) || isAdmin();
 
-      // Only admins can create/update/delete products
-      allow create, update, delete: if isAdmin();
+      // SECURITY LOCKDOWN (PHASE 6C):
+      // Direct client creation, update, and deletion are strictly denied for all clients.
+      // All product mutations, stock adjustments, and deactivations MUST route
+      // through authoritative Cloud Functions or trusted Express backend APIs.
+      allow create, update, delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -68,29 +85,19 @@ service cloud.firestore {
       // Read: Customer owner can read their own orders; Admins can read all orders
       allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
 
-      // SECURITY LOCKDOWN (PHASE 1):
-      // Direct client creation is blocked. All orders MUST be created via the trusted
-      // serverless `createOrder` Cloud Function which performs atomic inventory reservation,
-      // idempotency checking, trusted price calculation in paise, and cart clearing.
+      // SECURITY LOCKDOWN (PHASE 6A):
+      // Direct client creation, update, and deletion are strictly denied for all clients (customers and admins).
+      // All business-critical order operations (creation, lifecycle status transitions, collection PIN verification,
+      // cancellation with atomic stock restoration, and payment recording) MUST route
+      // through authoritative Cloud Functions or trusted Express backend APIs via the Firebase Admin SDK.
       allow create: if false;
+      allow update: if false;
+      allow delete: if false;
 
-      // Update: Admins can update status; Owner cannot change totals or status arbitrarily
-      allow update: if isAdmin() || (
-        isAuthenticated() &&
-        resource.data.userId == request.auth.uid &&
-        // Customer can only cancel their own order if it's still 'placed'
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orderStatus', 'statusHistory', 'updatedAt']) &&
-        request.resource.data.orderStatus == 'cancelled' &&
-        resource.data.orderStatus == 'placed'
-      );
-
-      // Customer can delete from their personal order history; Admins can delete
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-
-      // Notifications subcollection
+      // Notifications subcollection (immutable by clients)
       match /notifications/{notifId} {
         allow read: if (isAuthenticated() && get(/databases/$(database)/documents/orders/$(orderId)).data.userId == request.auth.uid) || isAdmin();
-        allow write: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/orders/$(orderId)).data.userId == request.auth.uid);
+        allow write: if false;
       }
     }
 
@@ -100,7 +107,7 @@ service cloud.firestore {
     match /admins/{uid} {
       // Admins can read all; authenticated user can read their own admin doc to observe live revocation
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
-      allow write: if isAdmin();
+      allow write: if isSuperadmin();
 
       match /fcm_tokens/{tokenId} {
         allow read, write: if (isAuthenticated() && request.auth.uid == uid) || isAdmin();
@@ -115,11 +122,12 @@ service cloud.firestore {
     match /admin_revocations/{uid} {
       // Real-time broadcast signal for revoked administrators
       allow read: if isAuthenticated() && request.auth.uid == uid;
-      allow write: if isAdmin();
+      allow write: if isSuperadmin();
     }
 
     match /admin_invitations/{email} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if isSuperadmin();
     }
 
     // ─────────────────────────────────────────────────────────────

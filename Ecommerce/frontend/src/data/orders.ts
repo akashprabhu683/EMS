@@ -255,48 +255,19 @@ export function getOrderById(id: string): Order | undefined {
   );
 }
 
+import { generateDispensaryReceiptContent } from '../services/receiptService';
+
 /**
  * Generates and triggers browser download of an invoice document.
- * Purely client-side demo file download.
+ * Backward compatible wrapper delegating to authoritative receiptService.
  */
-export function downloadMockInvoice(order: {
-  id: string;
-  date?: string;
-  total?: number;
-  items?: { product: { name: string }; quantity: number; price: number }[];
-  shippingAddress?: { fullName?: string; street?: string; city?: string; state?: string };
-}) {
-  const invoiceContent = `
-=============================================================
-                  NOVASHOP OFFICIAL RECEIPT
-=============================================================
-Order Reference  : ${order.id}
-Date Issued      : ${order.date || new Date().toLocaleDateString()}
-Customer Name    : ${order.shippingAddress?.fullName || 'Valued Customer'}
-Delivery Address : ${order.shippingAddress?.street || '742 Evergreen Terrace'}, ${order.shippingAddress?.city || 'Portland'}, ${order.shippingAddress?.state || 'OR'}
-Payment Status   : Paid (Demo Checkout - No real payment processed)
--------------------------------------------------------------
-ITEMS PURCHASED:
-${(order.items || [])
-  .map(
-    (item, idx) =>
-      `  ${idx + 1}. ${item.product.name.padEnd(35)} x${item.quantity}   $${(item.price * item.quantity).toFixed(2)}`
-  )
-  .join('\n')}
--------------------------------------------------------------
-Total Amount     : $${(order.total || 0).toFixed(2)} USD
-Security Check   : Verified 256-Bit SSL Encrypted Transaction
-=============================================================
-Thank you for choosing NovaShop!
-Support contact: support@novashop.demo
-=============================================================
-`.trim();
-
-  const blob = new Blob([invoiceContent], { type: 'text/plain;charset=utf-8' });
+export function downloadMockInvoice(order: any) {
+  const { filename, content } = generateDispensaryReceiptContent(order as Order);
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `Invoice-${order.id}.txt`;
+  anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);

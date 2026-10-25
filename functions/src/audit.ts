@@ -20,6 +20,9 @@ export type AuditAction =
   | "PRODUCT_UPDATED"
   | "PRODUCT_DELETED"
   | "INVENTORY_ADJUSTED"
+  | "CATEGORY_CREATED"
+  | "CATEGORY_UPDATED"
+  | "CATEGORY_DELETED"
   | "ADMIN_ROLE_GRANTED"
   | "ADMIN_ROLE_REVOKED"
   | "ADMIN_INVITED"
@@ -32,7 +35,7 @@ export interface AuditActor {
 }
 
 export interface AuditTarget {
-  collection: "orders" | "products" | "admins" | "admin_invitations";
+  collection: "orders" | "products" | "categories" | "admins" | "admin_invitations";
   id: string;
   label?: string; // Product name or non-PII order reference
 }
@@ -138,8 +141,16 @@ export async function appendAuditLog(
 export const onProductWrittenAudit = onDocumentWritten("products/{productId}", async (event) => {
   const beforeSnap = event.data?.before;
   const afterSnap = event.data?.after;
-  const productId = event.params.productId;
   const db = admin.firestore();
+  const productId = event.params.productId;
+
+  const beforeData = beforeSnap?.exists ? beforeSnap.data() : null;
+  const afterData = afterSnap?.exists ? afterSnap.data() : null;
+
+  // Skip fallback trigger if authoritative backend already committed an audit log with real admin identity
+  if (afterData?.auditLoggedDirectly || (!afterSnap?.exists && beforeData?.auditLoggedDirectly)) {
+    return;
+  }
 
   // 1. Product Deletion
   if (beforeSnap?.exists && !afterSnap?.exists) {

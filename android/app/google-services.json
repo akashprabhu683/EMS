@@ -1,0 +1,126 @@
+{
+  "project_info": {
+    "project_number": "68130523004",
+    "project_id": "ems-store-6a342",
+    "storage_bucket": "ems-store-6a342.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:68130523004:android:6021da256b24cee383c6f9",
+        "android_client_info": {
+          "package_name": "com.thangamstores.admin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjH5MuPcbXdFY_s_S_adm5SomrXvoVOAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:68130523004:android:28448f6c5b8a7b4383c6f9",
+        "android_client_info": {
+          "package_name": "com.thangamstores.admin.debug"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjH5MuPcbXdFY_s_S_adm5SomrXvoVOAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:68130523004:android:0089bd56f98b109283c6f9",
+        "android_client_info": {
+          "package_name": "com.thangamstores.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjH5MuPcbXdFY_s_S_adm5SomrXvoVOAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:68130523004:android:048072de8b387e8283c6f9",
+        "android_client_info": {
+          "package_name": "com.thangamstores.app.debug"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjH5MuPcbXdFY_s_S_adm5SomrXvoVOAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "68130523004-v08n3a5vndr3neopng6127s000botvgk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

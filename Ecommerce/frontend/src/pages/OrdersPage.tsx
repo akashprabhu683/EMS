@@ -12,6 +12,7 @@ import {
   clearAllUserOrders,
   cancelCustomerOrder,
 } from '../services/orderService';
+import { downloadDispensaryReceipt } from '../services/receiptService';
 import type { OrderStatus, Order } from '../types';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
@@ -33,13 +34,13 @@ export function OrdersPage() {
     if (!orderToDelete) return;
     setIsDeleting(true);
     try {
-      await deleteOrder(orderToDelete.id);
+      await deleteOrder(orderToDelete.id, user?.id);
       setOrders(prev => prev.filter(o => o.id !== orderToDelete.id));
-      toast.success(`Order ${orderToDelete.id} removed from history.`);
+      toast.success(`Order ${orderToDelete.id} hidden from your view.`);
       setOrderToDelete(null);
     } catch (err: any) {
-      console.error('Failed to delete order:', err);
-      toast.error(err.message || 'Could not delete order. Please try again.');
+      console.error('Failed to hide order:', err);
+      toast.error(err.message || 'Could not hide order. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -49,13 +50,13 @@ export function OrdersPage() {
     if (!user?.id) return;
     setIsDeleting(true);
     try {
-      await clearAllUserOrders(user.id);
+      await clearAllUserOrders(user.id, orders.map(o => o.id));
       setOrders([]);
-      toast.success('Your complete order history has been cleared.');
+      toast.success('Your order history view has been cleared on this browser.');
       setShowClearAllModal(false);
     } catch (err: any) {
       console.error('Failed to clear orders:', err);
-      toast.error(err.message || 'Could not clear order history. Please try again.');
+      toast.error(err.message || 'Could not clear order view. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -136,7 +137,17 @@ export function OrdersPage() {
   const handleDownloadInvoice = (order: Order, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    toast.success(`Dispensary receipt for order ${order.id} downloaded.`);
+    try {
+      const { isPaidReceipt, filename } = downloadDispensaryReceipt(order);
+      if (isPaidReceipt) {
+        toast.success(`Dispensary payment receipt downloaded (${filename}).`);
+      } else {
+        toast.info(`Order confirmation downloaded (${filename}). Official payment receipt is issued upon collection at the counter.`);
+      }
+    } catch (err) {
+      console.error('Failed to generate receipt:', err);
+      toast.error('Could not generate receipt document. Please try again.');
+    }
   };
 
   const getStatusBadge = (status?: OrderStatus | string) => {
@@ -568,17 +579,17 @@ export function OrdersPage() {
         </div>
       )}
 
-      {/* Delete Single Order Confirmation Modal */}
+      {/* Hide Single Order Confirmation Modal */}
       {orderToDelete && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
               <Trash2 size={22} />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="text-base font-bold text-slate-900">Remove Order?</h3>
+              <h3 className="text-base font-bold text-slate-900">Hide Order from View?</h3>
               <p className="text-xs text-slate-500">
-                Are you sure you want to remove order <span className="font-mono font-semibold text-slate-700">{orderToDelete.id}</span> from your order history?
+                This will hide order <span className="font-mono font-semibold text-slate-700">{orderToDelete.id}</span> from your order history on this browser. Authoritative records remain stored in the dispensary database.
               </p>
             </div>
             <div className="flex gap-2.5 pt-2">
@@ -592,9 +603,9 @@ export function OrdersPage() {
               <button
                 onClick={handleConfirmDeleteSingle}
                 disabled={isDeleting}
-                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 text-white hover:bg-slate-900 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
               >
-                {isDeleting ? 'Removing...' : 'Yes, Remove'}
+                {isDeleting ? 'Hiding...' : 'Hide Order'}
               </button>
             </div>
           </div>
@@ -605,13 +616,13 @@ export function OrdersPage() {
       {showClearAllModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
               <AlertTriangle size={22} />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="text-base font-bold text-slate-900">Clear All Order History?</h3>
+              <h3 className="text-base font-bold text-slate-900">Clear Order History View?</h3>
               <p className="text-xs text-slate-500">
-                This will permanently remove all {orders.length} order records from your dispensary history. This action cannot be undone.
+                This will hide all {orders.length} order records from your history view on this browser. Authoritative records remain safely preserved in the dispensary database.
               </p>
             </div>
             <div className="flex gap-2.5 pt-2">
@@ -625,9 +636,9 @@ export function OrdersPage() {
               <button
                 onClick={handleConfirmClearAll}
                 disabled={isDeleting}
-                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 text-white hover:bg-slate-900 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
               >
-                {isDeleting ? 'Clearing...' : 'Clear All'}
+                {isDeleting ? 'Hiding...' : 'Hide All'}
               </button>
             </div>
           </div>

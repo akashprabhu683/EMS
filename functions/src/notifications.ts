@@ -4,7 +4,11 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 
-const db = admin.firestore();
+const db = new Proxy({} as admin.firestore.Firestore, {
+  get(_target, prop) {
+    return (admin.firestore() as any)[prop];
+  },
+});
 
 /**
  * Standard Customer Notification Message Generator.

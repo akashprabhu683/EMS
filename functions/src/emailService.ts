@@ -18,10 +18,10 @@ export async function sendAdminInvitationEmail(params: SendInviteEmailParams): P
 
   if (!apiKey) {
     logger.warn(
-      `[Resend] RESEND_API_KEY is not set in Cloud Functions environment. Invitation generated for ${toEmail}. Accept URL: ${acceptUrl}`
+      `[Resend] RESEND_API_KEY is not set in Cloud Functions environment. Invitation generated for ${toEmail}, but email could not be dispatched.`
     );
     return {
-      success: true,
+      success: false,
       error: "RESEND_API_KEY_NOT_CONFIGURED",
     };
   }

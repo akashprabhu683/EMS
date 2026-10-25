@@ -50,3 +50,17 @@ export {
 export {
   getOperationalReport,
 } from "./reports.js";
+
+// 7. Authoritative Catalog & Inventory Management
+export {
+  createAdminProduct,
+  updateAdminProduct,
+  adjustAdminProductStock,
+  setAdminProductStatus,
+  deleteAdminProduct,
+  createAdminCategory,
+  updateAdminCategory,
+  setAdminCategoryStatus,
+  deleteAdminCategory,
+} from "./catalog.js";
+

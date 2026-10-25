@@ -108,12 +108,25 @@ export function AdminUsersPage() {
 
   const handleGrant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput.trim()) return;
+    const targetEmail = emailInput.trim();
+    if (!targetEmail) return;
 
     setActionLoading(true);
     try {
-      const res = await grantAdmin(emailInput.trim());
-      toast.success(res.message || `Admin invitation sent to ${emailInput.trim()}!`);
+      const res = await grantAdmin(targetEmail);
+      if ((res as any).emailSent === false) {
+        toast.warning(res.message || `Admin invitation created for ${targetEmail}, but email could not be sent. Please copy and share the invitation link.`);
+        if (res.acceptUrl) {
+          try {
+            await navigator.clipboard.writeText(res.acceptUrl);
+            toast.info(`Invitation link copied to clipboard for ${targetEmail}`);
+          } catch {
+            // Ignore clipboard write rejection
+          }
+        }
+      } else {
+        toast.success(res.message || `Admin invitation email sent to ${targetEmail}!`);
+      }
       setEmailInput('');
       setIsModalOpen(false);
       await loadData();
@@ -144,7 +157,11 @@ export function AdminUsersPage() {
     setResendingEmail(email);
     try {
       const res = await resendInvitation(email);
-      toast.success(res.message || `Invitation email resent to ${email}!`);
+      if ((res as any).emailSent === false) {
+        toast.warning(res.message || `Invitation refreshed for ${email}, but email delivery failed. You may copy the link below.`);
+      } else {
+        toast.success(res.message || `Invitation email resent to ${email}!`);
+      }
       await loadData();
     } catch (err: any) {
       toast.error(err.message || `Failed to resend invitation to ${email}. Please try again.`);

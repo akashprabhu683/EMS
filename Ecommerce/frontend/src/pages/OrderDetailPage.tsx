@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Package, CheckCircle2, Clock, MapPin, Store, CreditCard, ShieldCheck, ExternalLink, Trash2, AlertTriangle, X } from 'lucide-react';
 import { getOrderById, deleteOrder, subscribeOrderDetail, cancelCustomerOrder } from '../services/orderService';
+import { downloadDispensaryReceipt } from '../services/receiptService';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { SEO } from '../components/SEO';
 import type { Order } from '../types';
 
@@ -12,6 +14,7 @@ export function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -48,7 +51,17 @@ export function OrderDetailPage() {
 
   const handleDownloadInvoice = () => {
     if (!order) return;
-    toast.success(`Dispensary receipt for ${order.id} downloaded.`);
+    try {
+      const { isPaidReceipt, filename } = downloadDispensaryReceipt(order);
+      if (isPaidReceipt) {
+        toast.success(`Dispensary payment receipt downloaded (${filename}).`);
+      } else {
+        toast.info(`Order confirmation downloaded (${filename}). Official payment receipt is issued upon collection at the counter.`);
+      }
+    } catch (err) {
+      console.error('Failed to generate receipt:', err);
+      toast.error('Could not generate receipt document. Please try again.');
+    }
   };
 
   const handleViewLocation = () => {
@@ -75,12 +88,12 @@ export function OrderDetailPage() {
     if (!order) return;
     setIsDeleting(true);
     try {
-      await deleteOrder(order.id);
-      toast.success(`Order ${order.id} has been removed from your history.`);
+      await deleteOrder(order.id, user?.id);
+      toast.success(`Order ${order.id} hidden from your order view.`);
       navigate('/orders');
     } catch (err: any) {
-      console.error('Failed to remove order:', err);
-      toast.error(err.message || 'Could not remove order. Please try again.');
+      console.error('Failed to hide order:', err);
+      toast.error(err.message || 'Could not hide order. Please try again.');
       setIsDeleting(false);
     }
   };
@@ -196,7 +209,7 @@ export function OrderDetailPage() {
               className="btn-secondary py-2.5 px-4 text-xs sm:text-sm rounded-xl gap-2 shadow-2xs hover:border-emerald-600 hover:text-emerald-700"
             >
               <Download size={15} />
-              <span>Download Receipt</span>
+              <span>{order.paymentStatus === 'paid' ? 'Download Payment Receipt' : 'Download Order Confirmation'}</span>
             </button>
             <button
               onClick={handleViewLocation}
@@ -452,17 +465,17 @@ export function OrderDetailPage() {
         </div>
       )}
 
-      {/* Delete Order Confirmation Modal */}
+      {/* Hide Order Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
               <Trash2 size={22} />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="text-base font-bold text-slate-900">Remove Order?</h3>
+              <h3 className="text-base font-bold text-slate-900">Hide Order from View?</h3>
               <p className="text-xs text-slate-500">
-                Are you sure you want to remove order <span className="font-mono font-semibold text-slate-700">{order.id}</span> from your order history?
+                This will hide order <span className="font-mono font-semibold text-slate-700">{order.id}</span> from your order history view on this browser. The authoritative dispensary record is safely preserved for collection and receipts.
               </p>
             </div>
             <div className="flex gap-2.5 pt-2">
@@ -476,9 +489,9 @@ export function OrderDetailPage() {
               <button
                 onClick={handleDeleteOrder}
                 disabled={isDeleting}
-                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 text-white hover:bg-slate-900 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
               >
-                {isDeleting ? 'Removing...' : 'Yes, Remove'}
+                {isDeleting ? 'Hiding...' : 'Hide Order'}
               </button>
             </div>
           </div>

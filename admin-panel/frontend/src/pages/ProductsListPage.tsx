@@ -191,7 +191,7 @@ export function ProductsListPage() {
 
     try {
       if (editingProduct) {
-        await updateProduct(editingProduct.id, formData);
+        await updateProduct(editingProduct.id, formData, editingProduct.stock);
         toast.success(`Product "${formData.name}" successfully updated.`);
       } else {
         await createProduct(formData);
