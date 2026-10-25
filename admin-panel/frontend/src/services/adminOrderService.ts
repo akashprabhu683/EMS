@@ -160,37 +160,7 @@ export async function updateOrderStatus(
   const opts: UpdateOrderStatusOptions =
     typeof options === 'string' ? { note: options } : options || {};
 
-  // 1. Try authoritative Cloud Function
-  try {
-    const { httpsCallable } = await import('firebase/functions');
-    const { functions } = await import('../firebase');
-    const updateFn = httpsCallable(functions, 'updateOrderStatus');
-    await updateFn({
-      orderId,
-      newStatus,
-      pickupCode: opts.pickupCode,
-      note: opts.note,
-    });
-    return;
-  } catch (fnErr: any) {
-    console.warn('updateOrderStatus Cloud Function failed, checking Express / direct fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    const errorMsg = String(fnErr?.message || '').toLowerCase();
-    const isDomainError =
-      (errorCode.includes('failed-precondition') ||
-       errorCode.includes('invalid-argument') ||
-       errorCode.includes('permission-denied') ||
-       errorCode.includes('already-exists')) &&
-      !errorMsg.includes('internal [0]') &&
-      !errorMsg.includes('internal');
-
-    // If it's an explicit domain logic validation error (e.g. invalid code or illegal transition), rethrow immediately
-    if (isDomainError) {
-      throw new Error(fnErr.message || 'Failed to update order status');
-    }
-  }
-
-  // 2. Fallback to Express backend if configured
+  // 1. Primary: Authoritative Express backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -218,16 +188,28 @@ export async function updateOrderStatus(
         throw new Error(err.error);
       }
     } catch (apiErr: any) {
-      console.warn('Admin API /api/admin/orders/:id/status failed:', apiErr);
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('HTTP')) {
         throw apiErr;
       }
+      console.warn('Express /api/admin/orders/:id/status failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  // 3. Reject unvalidated client-side direct writes.
-  // Both Cloud Function and Express API failed or were unreachable.
-  throw new Error('Unable to update order status at this time. Trusted backend validation is unreachable. Please check your network connection and retry.');
+  // 2. Fallback: Cloud Function callable
+  try {
+    const { httpsCallable } = await import('firebase/functions');
+    const { functions } = await import('../firebase');
+    const updateFn = httpsCallable(functions, 'updateOrderStatus');
+    await updateFn({
+      orderId,
+      newStatus,
+      pickupCode: opts.pickupCode,
+      note: opts.note,
+    });
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr?.message || 'Failed to update order status');
+  }
 }
 
 /**
@@ -235,35 +217,9 @@ export async function updateOrderStatus(
  * Strictly separates payment from fulfilment (does NOT change orderStatus).
  */
 export async function markOrderPaid(orderId: string, note?: string): Promise<void> {
-  // 1. Try authoritative Cloud Function
-  try {
-    const { httpsCallable } = await import('firebase/functions');
-    const { functions } = await import('../firebase');
-    const recordPaymentFn = httpsCallable(functions, 'recordOrderPayment');
-    await recordPaymentFn({
-      orderId,
-      note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
-    });
-    return;
-  } catch (fnErr: any) {
-    console.warn('recordOrderPayment Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    const errorMsg = String(fnErr?.message || '').toLowerCase();
-    const isDomainError =
-      (errorCode.includes('failed-precondition') ||
-       errorCode.includes('invalid-argument') ||
-       errorCode.includes('permission-denied') ||
-       errorCode.includes('already-exists')) &&
-      !errorMsg.includes('internal [0]') &&
-      !errorMsg.includes('internal');
-
-    if (isDomainError) {
-      throw new Error(fnErr.message || 'Failed to record payment');
-    }
-  }
-
-  // 2. Fallback to Express backend if configured
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
+
+  // 1. Primary: Authoritative Express backend API
   if (adminBackendUrl) {
     try {
       const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
@@ -288,11 +244,25 @@ export async function markOrderPaid(orderId: string, note?: string): Promise<voi
         throw new Error(err.error);
       }
     } catch (apiErr: any) {
-      console.warn('Admin API /api/admin/orders/:id/payment failed:', apiErr);
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network') && !apiErr.message.includes('HTTP')) {
         throw apiErr;
       }
+      console.warn('Express /api/admin/orders/:id/payment failed, checking Cloud Function fallback:', apiErr);
     }
+  }
+
+  // 2. Fallback: Cloud Function callable
+  try {
+    const { httpsCallable } = await import('firebase/functions');
+    const { functions } = await import('../firebase');
+    const recordPaymentFn = httpsCallable(functions, 'recordOrderPayment');
+    await recordPaymentFn({
+      orderId,
+      note: note || 'In-person payment confirmed received at dispensary counter (Cash/UPI)',
+    });
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr?.message || 'Failed to record payment');
   }
 
   // 3. Reject unvalidated client-side direct writes.

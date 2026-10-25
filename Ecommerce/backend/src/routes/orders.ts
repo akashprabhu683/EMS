@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb, adminAuth } from '../firebaseAdmin.js';
+import { dispatchCustomerFcmAndInApp, dispatchAdminFcmAndInApp } from '../notifications.js';
 import crypto from 'crypto';
 
 export const ordersRouter = Router();
@@ -435,10 +436,166 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
       return responsePayload;
     });
 
+    // Asynchronous non-blocking notification dispatch (In-App + FCM push)
+    const totalRupees = (Number(orderResult.total || 0) / 100).toFixed(0);
+    const shortId = orderResult.orderId.slice(-6).toUpperCase();
+    dispatchCustomerFcmAndInApp({
+      userId: uid,
+      orderId: orderResult.orderId,
+      status: 'placed',
+      recipientName: fullName,
+    }).catch((e) => console.warn('[Orders] Customer order notification failed:', e));
+
+    dispatchAdminFcmAndInApp({
+      title: `New Order #${shortId} (₹${totalRupees})`,
+      body: `Click & Collect order placed by ${fullName}. Awaiting dispensary acceptance.`,
+      orderId: orderResult.orderId,
+      type: 'new_order',
+    }).catch((e) => console.warn('[Orders] Admin order notification failed:', e));
+
     res.status(201).json(orderResult);
   } catch (err: any) {
     console.error('Order creation failed:', err);
     res.status(err.statusCode || 400).json({ error: err.message || 'Order creation failed.' });
+  }
+});
+
+/**
+ * PATCH /api/orders/:orderId/cancel
+ * Cancels a customer order and atomically restores inventory.
+ * Enforces:
+ * 1. Caller authentication via Firebase ID token.
+ * 2. Ownership check: req.user.uid === order.userId.
+ * 3. Status restriction: Only 'placed' orders with 'unpaid' status can be cancelled.
+ * 4. Atomic stock restoration with lowStock/outOfStock flag recalculation.
+ * 5. Append-only server audit trail logging.
+ * 6. Customer and Admin notification dispatch.
+ */
+ordersRouter.patch('/:orderId/cancel', authenticateFirebaseToken, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const uid = req.user!.uid;
+  const { orderId } = req.params;
+  const { note } = req.body || {};
+
+  if (!orderId || typeof orderId !== 'string') {
+    res.status(400).json({ error: 'Order ID is required.' });
+    return;
+  }
+
+  try {
+    const orderRef = adminDb.collection('orders').doc(orderId);
+
+    const result = await adminDb.runTransaction(async (txn) => {
+      const orderSnap = await txn.get(orderRef);
+      if (!orderSnap.exists) {
+        const err: any = new Error(`Order #${orderId} does not exist.`);
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const orderData = orderSnap.data()!;
+
+      // Ownership verification
+      if (orderData.userId !== uid) {
+        const err: any = new Error('Forbidden: You can only cancel your own orders.');
+        err.statusCode = 403;
+        throw err;
+      }
+
+      // Status check
+      if (orderData.orderStatus !== 'placed') {
+        const err: any = new Error(`Order cannot be cancelled in '${orderData.orderStatus}' status.`);
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (orderData.paymentStatus === 'paid') {
+        const err: any = new Error('Paid orders cannot be cancelled online. Please contact the dispensary.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Read all products in order to restore inventory
+      const items = Array.isArray(orderData.items) ? orderData.items : [];
+      const prodSnaps: { snap: FirebaseFirestore.DocumentSnapshot; qty: number }[] = [];
+      for (const it of items) {
+        if (it?.productId) {
+          const pRef = adminDb.collection('products').doc(it.productId);
+          const snap = (await txn.get(pRef)) as FirebaseFirestore.DocumentSnapshot;
+          prodSnaps.push({ snap, qty: Number(it.quantity ?? 1) });
+        }
+      }
+
+      // Atomically restore product stock
+      for (const { snap: pSnap, qty: restoreQty } of prodSnaps) {
+        if (pSnap.exists) {
+          const pData = pSnap.data()!;
+          const currentStock = Number(pData.stock ?? 0);
+          const newStock = currentStock + restoreQty;
+          const threshold = Number(pData.lowStockThreshold ?? 5);
+
+          txn.update(pSnap.ref, {
+            stock: newStock,
+            isLowStock: newStock > 0 && newStock <= threshold,
+            isOutOfStock: newStock <= 0,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      const cancelHistory = {
+        status: 'cancelled',
+        timestamp: new Date().toISOString(),
+        actor: 'customer',
+        actorId: uid,
+        note: typeof note === 'string' && note.trim() ? note.trim() : 'Customer cancelled order before preparation',
+      };
+
+      txn.update(orderRef, {
+        orderStatus: 'cancelled',
+        cancelledAt: FieldValue.serverTimestamp(),
+        cancelledBy: uid,
+        cancelReason: cancelHistory.note,
+        inventoryRestored: true,
+        inventoryRestoredAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        statusHistory: FieldValue.arrayUnion(cancelHistory),
+      });
+
+      // Append-only audit trail
+      const auditRef = adminDb.collection('audit_logs').doc();
+      txn.set(auditRef, {
+        timestamp: FieldValue.serverTimestamp(),
+        actor: { uid, role: 'customer' },
+        action: 'ORDER_CANCELLED',
+        targetCollection: 'orders',
+        targetId: orderId,
+        orderId,
+        summary: `Customer cancelled order #${orderId.slice(-6)} before preparation`,
+        metadata: { cancelReason: cancelHistory.note },
+      });
+
+      return { success: true, orderId, orderStatus: 'cancelled' };
+    });
+
+    // Async notifications
+    const shortId = orderId.slice(-6).toUpperCase();
+    dispatchCustomerFcmAndInApp({
+      userId: uid,
+      orderId,
+      status: 'cancelled',
+    }).catch((e) => console.warn('[Orders] Customer cancellation alert failed:', e));
+
+    dispatchAdminFcmAndInApp({
+      title: `Order #${shortId} Cancelled`,
+      body: `Customer cancelled Click & Collect order #${shortId}. Stock was restored.`,
+      orderId,
+      type: 'order_cancelled',
+    }).catch((e) => console.warn('[Orders] Admin cancellation alert failed:', e));
+
+    res.json(result);
+  } catch (err: any) {
+    console.error(`Order cancellation failed for ${orderId}:`, err);
+    res.status(err.statusCode || 400).json({ error: err.message || 'Failed to cancel order.' });
   }
 });
 

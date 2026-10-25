@@ -160,29 +160,29 @@ export async function registerDeviceToken(
   }
 
   try {
-    // 1. Authoritative Cloud Function callable
-    const registerFn = httpsCallable<{ token: string; platform: string }, { success: boolean }>(
-      functions,
-      'registerFcmToken'
-    );
-    await registerFn({ token: cleanToken, platform });
+    // 1. Direct Firestore write (instantaneous, permitted by production security rules)
+    const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
+    await setDoc(tokenRef, {
+      token: cleanToken,
+      platform,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    }, { merge: true });
     lastRegisteredCustomerToken = cleanToken;
     lastRegisteredCustomerUid = uid;
-  } catch (callableErr) {
-    console.warn('[NotificationService] registerFcmToken callable error, attempting direct Firestore:', callableErr);
-    // 2. Direct Firestore fallback to users/{uid}/fcm_tokens/{token}
+  } catch (docErr) {
+    console.warn('[NotificationService] Direct Firestore registration note, trying callable fallback:', docErr);
+    // 2. Fallback: Cloud Function callable if deployed
     try {
-      const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
-      await setDoc(tokenRef, {
-        token: cleanToken,
-        platform,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      const registerFn = httpsCallable<{ token: string; platform: string }, { success: boolean }>(
+        functions,
+        'registerFcmToken'
+      );
+      await registerFn({ token: cleanToken, platform });
       lastRegisteredCustomerToken = cleanToken;
       lastRegisteredCustomerUid = uid;
-    } catch (docErr) {
-      console.warn('[NotificationService] Direct Firestore token registration failed:', docErr);
+    } catch (callableErr) {
+      console.warn('[NotificationService] registerFcmToken callable also unavailable:', callableErr);
     }
   }
 }
@@ -198,20 +198,22 @@ export async function unregisterDeviceToken(uid: string, token: string): Promise
   lastRegisteredCustomerUid = null;
 
   try {
-    const unregisterFn = httpsCallable<{ token: string }, { success: boolean }>(
-      functions,
-      'unregisterFcmToken'
-    );
-    await unregisterFn({ token: cleanToken });
-  } catch (callableErr) {
-    console.warn('[NotificationService] unregisterFcmToken callable error, attempting direct Firestore:', callableErr);
+    // 1. Direct Firestore deletion
     if (uid) {
-      try {
-        const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
-        await deleteDoc(tokenRef);
-      } catch (docErr) {
-        console.warn('[NotificationService] Direct Firestore token deletion failed:', docErr);
-      }
+      const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
+      await deleteDoc(tokenRef);
+    }
+  } catch (docErr) {
+    console.warn('[NotificationService] Direct Firestore token deletion note, trying callable fallback:', docErr);
+    // 2. Fallback: Cloud Function callable
+    try {
+      const unregisterFn = httpsCallable<{ token: string }, { success: boolean }>(
+        functions,
+        'unregisterFcmToken'
+      );
+      await unregisterFn({ token: cleanToken });
+    } catch (callableErr) {
+      console.warn('[NotificationService] unregisterFcmToken callable also unavailable:', callableErr);
     }
   }
 }

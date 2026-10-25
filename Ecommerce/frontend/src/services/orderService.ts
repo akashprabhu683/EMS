@@ -390,20 +390,57 @@ export function subscribeOrderDetail(
   }
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ems-ecommerce-backend.onrender.com';
+
 /**
  * Cancels an order requested by the customer.
+ * Routes through the authoritative Express backend API with atomic stock restoration.
  * Permitted only if the order status is currently 'placed'.
  */
 export async function cancelCustomerOrder(orderId: string, note?: string): Promise<void> {
-  const updateFn = httpsCallable<
-    { orderId: string; newStatus: string; note?: string },
-    { success: boolean }
-  >(functions, 'updateOrderStatus');
+  const cancelNote = note || 'Customer requested order cancellation';
 
-  await updateFn({
-    orderId,
-    newStatus: 'cancelled',
-    note: note || 'Customer requested order cancellation',
-  });
+  // 1. Primary: Authoritative Express Backend API
+  try {
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+    const res = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify({ note: cancelNote }),
+    });
+
+    if (res.ok) {
+      return;
+    }
+
+    const errData = await res.json().catch(() => ({}));
+    if (errData?.error) {
+      throw new Error(errData.error);
+    }
+  } catch (apiErr: any) {
+    if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
+      throw apiErr;
+    }
+    console.warn('[orderService] Express cancel endpoint unreachable, trying Cloud Function fallback:', apiErr);
+  }
+
+  // 2. Fallback: Cloud Function callable
+  try {
+    const updateFn = httpsCallable<
+      { orderId: string; newStatus: string; note?: string },
+      { success: boolean }
+    >(functions, 'updateOrderStatus');
+
+    await updateFn({
+      orderId,
+      newStatus: 'cancelled',
+      note: cancelNote,
+    });
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Failed to cancel order.');
+  }
 }
 

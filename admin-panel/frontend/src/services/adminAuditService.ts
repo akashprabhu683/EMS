@@ -26,27 +26,7 @@ export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ 
     }
   }
 
-  // 1. Try secure Cloud Function callable
-  try {
-    const getAuditFn = httpsCallable<any, { logs: AuditLogEntry[]; count: number }>(functions, 'getAuditLogs');
-    const result = await getAuditFn({
-      action: options.action || undefined,
-      targetCollection: options.targetCollection || undefined,
-      limit: pageSize,
-      startAfterId: options.lastDocId || undefined,
-    });
-
-    if (result.data && Array.isArray(result.data.logs)) {
-      return {
-        logs: result.data.logs,
-        hasMore: result.data.logs.length >= pageSize,
-      };
-    }
-  } catch (fnErr: any) {
-    console.warn('[adminAuditService] getAuditLogs callable unavailable, falling back to Express API:', fnErr?.message || fnErr);
-  }
-
-  // 2. Try Express backend API (protected by requireAdminAuth and Firebase Admin SDK)
+  // 1. Primary: Express backend API (protected by requireAdminAuth and Firebase Admin SDK)
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -72,8 +52,28 @@ export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ 
         };
       }
     } catch (apiErr: any) {
-      console.warn('[adminAuditService] Express backend audit API unavailable, falling back to direct Firestore read:', apiErr?.message || apiErr);
+      console.warn('[adminAuditService] Express backend audit API note, checking Cloud Function fallback:', apiErr?.message || apiErr);
     }
+  }
+
+  // 2. Secondary: Cloud Function callable
+  try {
+    const getAuditFn = httpsCallable<any, { logs: AuditLogEntry[]; count: number }>(functions, 'getAuditLogs');
+    const result = await getAuditFn({
+      action: options.action || undefined,
+      targetCollection: options.targetCollection || undefined,
+      limit: pageSize,
+      startAfterId: options.lastDocId || undefined,
+    });
+
+    if (result.data && Array.isArray(result.data.logs)) {
+      return {
+        logs: result.data.logs,
+        hasMore: result.data.logs.length >= pageSize,
+      };
+    }
+  } catch (fnErr: any) {
+    console.warn('[adminAuditService] getAuditLogs callable unavailable, falling back to direct Firestore:', fnErr?.message || fnErr);
   }
 
   // 3. Direct Firestore fallback (protected by Firestore security rules for admin)

@@ -119,22 +119,7 @@ export async function createCategory(form: CategoryFormData): Promise<string> {
     isActive: Boolean(form.isActive),
   };
 
-  // 1. Primary: Authoritative Cloud Function
-  try {
-    const createFn = httpsCallable<typeof payload, { categoryId: string; success: boolean }>(functions, 'createAdminCategory');
-    const res = await createFn(payload);
-    if (res.data?.categoryId) {
-      return res.data.categoryId;
-    }
-  } catch (fnErr: any) {
-    console.warn('createAdminCategory Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('already-exists') || errorCode.includes('invalid-argument') || errorCode.includes('permission-denied')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Authoritative Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -157,14 +142,26 @@ export async function createCategory(form: CategoryFormData): Promise<string> {
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express /api/admin/categories failed, checking Cloud Function fallback:', apiErr);
     }
+  }
+
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const createFn = httpsCallable<typeof payload, { categoryId: string; success: boolean }>(functions, 'createAdminCategory');
+    const res = await createFn(payload);
+    if (res.data?.categoryId) {
+      return res.data.categoryId;
+    }
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Validation error creating category');
   }
 
   throw new Error('Unable to create category at this time. Trusted backend validation is unreachable.');
 }
 
 /**
- * Authoritatively updates a category via Cloud Function, falling back to Express API.
+ * Authoritatively updates a category via Express API, falling back to Cloud Function.
  */
 export async function updateCategory(id: string, form: CategoryFormData): Promise<void> {
   const validationError = validateCategoryForm(form);
@@ -181,20 +178,7 @@ export async function updateCategory(id: string, form: CategoryFormData): Promis
     isActive: Boolean(form.isActive),
   };
 
-  // 1. Primary: Cloud Function
-  try {
-    const updateFn = httpsCallable<typeof payload, { categoryId: string; success: boolean }>(functions, 'updateAdminCategory');
-    await updateFn(payload);
-    return;
-  } catch (fnErr: any) {
-    console.warn('updateAdminCategory Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('already-exists') || errorCode.includes('invalid-argument') || errorCode.includes('not-found')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Authoritative Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -214,32 +198,27 @@ export async function updateCategory(id: string, form: CategoryFormData): Promis
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express /api/admin/categories/:id failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to update category at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const updateFn = httpsCallable<typeof payload, { categoryId: string; success: boolean }>(functions, 'updateAdminCategory');
+    await updateFn(payload);
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Validation error updating category');
+  }
 }
 
 /**
- * Authoritatively sets category active status via Cloud Function or Express API.
+ * Authoritatively sets category active status via Express API or Cloud Function.
  */
 export async function setCategoryActiveStatus(id: string, isActive: boolean): Promise<void> {
   const payload = { categoryId: id, isActive };
 
-  // 1. Primary: Cloud Function
-  try {
-    const setStatusFn = httpsCallable<typeof payload, { categoryId: string; isActive: boolean }>(functions, 'setAdminCategoryStatus');
-    await setStatusFn(payload);
-    return;
-  } catch (fnErr: any) {
-    console.warn('setAdminCategoryStatus Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('invalid-argument') || errorCode.includes('not-found')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -259,33 +238,28 @@ export async function setCategoryActiveStatus(id: string, isActive: boolean): Pr
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express set category status failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to update category status at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const setStatusFn = httpsCallable<typeof payload, { categoryId: string; isActive: boolean }>(functions, 'setAdminCategoryStatus');
+    await setStatusFn(payload);
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Failed to update category status');
+  }
 }
 
 /**
- * Authoritatively deletes a category via Cloud Function or Express API.
+ * Authoritatively deletes a category via Express API or Cloud Function.
  * Rejects deletion if any catalog products reference this category.
  */
 export async function deleteCategory(id: string): Promise<void> {
   const payload = { categoryId: id };
 
-  // 1. Primary: Cloud Function
-  try {
-    const deleteFn = httpsCallable<typeof payload, { categoryId: string; success: boolean }>(functions, 'deleteAdminCategory');
-    await deleteFn(payload);
-    return;
-  } catch (fnErr: any) {
-    console.warn('deleteAdminCategory Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('failed-precondition') || errorCode.includes('not-found') || errorCode.includes('permission-denied')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -304,8 +278,16 @@ export async function deleteCategory(id: string): Promise<void> {
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express delete category failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to delete category at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const deleteFn = httpsCallable<typeof payload, { categoryId: string; success: boolean }>(functions, 'deleteAdminCategory');
+    await deleteFn(payload);
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Failed to delete category');
+  }
 }

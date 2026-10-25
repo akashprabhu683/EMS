@@ -18,7 +18,7 @@ function docToProduct(id: string, data: DocumentData): Product {
     description: String(data.description ?? ''),
     categoryId: String(data.categoryId ?? ''),
     price: Math.max(0, Math.round(Number(data.price ?? 0))),
-    imageUrl: typeof data.imageUrl === 'string' && data.imageUrl.startsWith('https://')
+    imageUrl: typeof data.imageUrl === 'string' && (data.imageUrl.startsWith('https://') || data.imageUrl.startsWith('data:image/'))
       ? data.imageUrl
       : undefined,
     stock: Math.max(0, Math.round(Number(data.stock ?? 0))),
@@ -150,26 +150,7 @@ export async function createProduct(form: ProductFormData): Promise<string> {
     imageUrl: form.imageUrl.trim() || undefined,
   };
 
-  // 1. Primary: Authoritative Cloud Function
-  try {
-    const createFn = httpsCallable<typeof payload, { productId: string; success: boolean }>(functions, 'createAdminProduct');
-    const res = await createFn(payload);
-    if (res.data?.productId) {
-      return res.data.productId;
-    }
-  } catch (fnErr: any) {
-    console.warn('createAdminProduct Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    const isDomainError =
-      errorCode.includes('invalid-argument') ||
-      errorCode.includes('permission-denied') ||
-      errorCode.includes('already-exists');
-    if (isDomainError) {
-      throw new Error(fnErr.message || 'Validation error creating product');
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Authoritative Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -189,18 +170,29 @@ export async function createProduct(form: ProductFormData): Promise<string> {
         throw new Error(errData.error);
       }
     } catch (apiErr: any) {
-      console.warn('Express /api/admin/products failed:', apiErr);
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express /api/admin/products failed, checking Cloud Function fallback:', apiErr);
     }
+  }
+
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const createFn = httpsCallable<typeof payload, { productId: string; success: boolean }>(functions, 'createAdminProduct');
+    const res = await createFn(payload);
+    if (res.data?.productId) {
+      return res.data.productId;
+    }
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Validation error creating product');
   }
 
   throw new Error('Unable to create product at this time. Trusted backend validation is unreachable.');
 }
 
 /**
- * Authoritatively updates a product via Cloud Function, falling back to Express API.
+ * Authoritatively updates a product via Express API, falling back to Cloud Function.
  * Never writes directly to Firestore from the client.
  */
 export async function updateProduct(id: string, form: ProductFormData, expectedCurrentStock?: number): Promise<void> {
@@ -229,24 +221,7 @@ export async function updateProduct(id: string, form: ProductFormData, expectedC
     payload.expectedCurrentStock = expectedStock;
   }
 
-  // 1. Primary: Authoritative Cloud Function
-  try {
-    const updateFn = httpsCallable<typeof payload, { productId: string; success: boolean }>(functions, 'updateAdminProduct');
-    await updateFn(payload);
-    return;
-  } catch (fnErr: any) {
-    console.warn('updateAdminProduct Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    const isDomainError =
-      errorCode.includes('invalid-argument') ||
-      errorCode.includes('permission-denied') ||
-      errorCode.includes('not-found');
-    if (isDomainError) {
-      throw new Error(fnErr.message || 'Validation error updating product');
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Authoritative Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -263,18 +238,25 @@ export async function updateProduct(id: string, form: ProductFormData, expectedC
         throw new Error(errData.error);
       }
     } catch (apiErr: any) {
-      console.warn('Express /api/admin/products/:id failed:', apiErr);
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express /api/admin/products/:id failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to update product at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const updateFn = httpsCallable<typeof payload, { productId: string; success: boolean }>(functions, 'updateAdminProduct');
+    await updateFn(payload);
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Validation error updating product');
+  }
 }
 
 /**
- * Authoritatively adjusts product inventory via Cloud Function or Express.
+ * Authoritatively adjusts product inventory via Express API or Cloud Function.
  */
 export async function adjustProductStock(
   productId: string,
@@ -284,20 +266,7 @@ export async function adjustProductStock(
 ): Promise<{ previousStock: number; newStock: number }> {
   const payload = { productId, adjustmentType, value, reason };
 
-  // 1. Primary: Cloud Function
-  try {
-    const adjustFn = httpsCallable<typeof payload, { previousStock: number; newStock: number }>(functions, 'adjustAdminProductStock');
-    const res = await adjustFn(payload);
-    return res.data;
-  } catch (fnErr: any) {
-    console.warn('adjustAdminProductStock Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('invalid-argument') || errorCode.includes('failed-precondition')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -319,32 +288,27 @@ export async function adjustProductStock(
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express adjust stock failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to adjust stock at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const adjustFn = httpsCallable<typeof payload, { previousStock: number; newStock: number }>(functions, 'adjustAdminProductStock');
+    const res = await adjustFn(payload);
+    return res.data;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Failed to adjust stock');
+  }
 }
 
 /**
- * Authoritatively sets product active status via Cloud Function or Express API.
+ * Authoritatively sets product active status via Express API or Cloud Function.
  */
 export async function setProductActiveStatus(id: string, isActive: boolean): Promise<void> {
   const payload = { productId: id, isActive };
 
-  // 1. Primary: Cloud Function
-  try {
-    const setStatusFn = httpsCallable<typeof payload, { productId: string; isActive: boolean }>(functions, 'setAdminProductStatus');
-    await setStatusFn(payload);
-    return;
-  } catch (fnErr: any) {
-    console.warn('setAdminProductStatus Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('invalid-argument') || errorCode.includes('permission-denied') || errorCode.includes('not-found')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -364,33 +328,28 @@ export async function setProductActiveStatus(id: string, isActive: boolean): Pro
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express set product status failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to update product status at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const setStatusFn = httpsCallable<typeof payload, { productId: string; isActive: boolean }>(functions, 'setAdminProductStatus');
+    await setStatusFn(payload);
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Failed to update product status');
+  }
 }
 
 /**
- * Authoritatively deletes a product via Cloud Function or Express API.
+ * Authoritatively deletes a product via Express API or Cloud Function.
  * Rejects deletion if existing customer orders reference the product.
  */
 export async function deleteProduct(id: string): Promise<void> {
   const payload = { productId: id };
 
-  // 1. Primary: Cloud Function
-  try {
-    const deleteFn = httpsCallable<typeof payload, { productId: string; success: boolean }>(functions, 'deleteAdminProduct');
-    await deleteFn(payload);
-    return;
-  } catch (fnErr: any) {
-    console.warn('deleteAdminProduct Cloud Function failed, checking Express fallback:', fnErr);
-    const errorCode = String(fnErr?.code || '').toLowerCase();
-    if (errorCode.includes('failed-precondition') || errorCode.includes('permission-denied') || errorCode.includes('not-found')) {
-      throw new Error(fnErr.message);
-    }
-  }
-
-  // 2. Secondary: Express Backend API Fallback
+  // 1. Primary: Express Backend API
   const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
   if (adminBackendUrl) {
     try {
@@ -409,8 +368,16 @@ export async function deleteProduct(id: string): Promise<void> {
       if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
         throw apiErr;
       }
+      console.warn('Express delete product failed, checking Cloud Function fallback:', apiErr);
     }
   }
 
-  throw new Error('Unable to delete product at this time. Trusted backend validation is unreachable.');
+  // 2. Secondary: Cloud Function Fallback
+  try {
+    const deleteFn = httpsCallable<typeof payload, { productId: string; success: boolean }>(functions, 'deleteAdminProduct');
+    await deleteFn(payload);
+    return;
+  } catch (fnErr: any) {
+    throw new Error(fnErr.message || 'Failed to delete product');
+  }
 }

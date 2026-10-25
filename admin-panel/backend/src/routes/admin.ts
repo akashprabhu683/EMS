@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { randomBytes, createHash } from 'node:crypto';
 import { adminDb, adminAuth } from '../firebaseAdmin.js';
+import { dispatchCustomerFcmAndInApp } from '../notifications.js';
 
 export const adminRouter = Router();
 
@@ -447,7 +448,13 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
       });
       transaction.set(auditRef, auditPayload);
 
-      return { success: true, orderId, updatedStatus: targetStatus };
+      return {
+        success: true,
+        orderId,
+        updatedStatus: targetStatus,
+        targetUserId: currentOrder.userId,
+        recipientName: currentOrder.pickupContact?.fullName || currentOrder.shippingAddress?.name,
+      };
     });
 
     if (result && (result as any).failedVerification) {
@@ -456,6 +463,16 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
         error: `Invalid 6-digit collection code. ${remaining} attempts remaining before lock.`,
       });
       return;
+    }
+
+    // Asynchronously dispatch in-app and FCM push notification to customer
+    if (result && (result as any).success && (result as any).targetUserId) {
+      dispatchCustomerFcmAndInApp({
+        userId: (result as any).targetUserId,
+        orderId,
+        status: targetStatus,
+        recipientName: (result as any).recipientName,
+      }).catch((e) => console.warn('[AdminRoutes] Status change notification failed:', e));
     }
 
     res.json(result);
@@ -927,6 +944,18 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
         admin: false,
       });
       await adminDb.collection('admins').doc(targetUid).delete();
+
+      // Proactively purge all registered FCM tokens for revoked admin
+      try {
+        const tokensSnap = await adminDb.collection('admins').doc(targetUid).collection('fcm_tokens').get();
+        if (!tokensSnap.empty) {
+          const batch = adminDb.batch();
+          tokensSnap.docs.forEach((tDoc) => batch.delete(tDoc.ref));
+          await batch.commit();
+        }
+      } catch (tokenErr) {
+        console.warn('[AdminRoutes] Failed to purge admin tokens on revocation:', tokenErr);
+      }
 
       // Write immediate real-time revocation marker document
       await adminDb.collection('admin_revocations').doc(targetUid).set({

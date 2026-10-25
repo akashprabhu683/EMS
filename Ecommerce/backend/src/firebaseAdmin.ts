@@ -40,3 +40,12 @@ export function getFirebaseAdmin(): admin.app.App {
 export const adminApp = getFirebaseAdmin();
 export const adminDb = adminApp.firestore();
 export const adminAuth = adminApp.auth();
+
+export function getAdminMessaging(): admin.messaging.Messaging | null {
+  try {
+    return adminApp.messaging();
+  } catch (err) {
+    console.warn('Firebase Messaging not available:', err);
+    return null;
+  }
+}

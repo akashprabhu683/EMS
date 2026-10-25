@@ -73,29 +73,29 @@ export async function registerAdminDeviceToken(
   }
 
   try {
-    // 1. Authoritative Cloud Function callable
-    const registerFn = httpsCallable<{ token: string; platform: string }, { success: boolean }>(
-      functions,
-      'registerFcmToken'
-    );
-    await registerFn({ token: cleanToken, platform });
+    // 1. Direct Firestore write (instantaneous, permitted by production security rules for authenticated admins)
+    const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', cleanToken);
+    await setDoc(adminTokenRef, {
+      token: cleanToken,
+      platform,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    }, { merge: true });
     lastRegisteredAdminToken = cleanToken;
     lastRegisteredAdminUid = uid;
-  } catch (callableErr) {
-    console.warn('[AdminNotificationService] registerFcmToken callable error, attempting direct Firestore:', callableErr);
-    // 2. Direct Firestore fallback to admins/{uid}/fcm_tokens/{token}
+  } catch (docErr) {
+    console.warn('[AdminNotificationService] Direct admin token setDoc note, trying callable fallback:', docErr);
+    // 2. Fallback: Cloud Function callable if deployed
     try {
-      const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', cleanToken);
-      await setDoc(adminTokenRef, {
-        token: cleanToken,
-        platform,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      const registerFn = httpsCallable<{ token: string; platform: string }, { success: boolean }>(
+        functions,
+        'registerFcmToken'
+      );
+      await registerFn({ token: cleanToken, platform });
       lastRegisteredAdminToken = cleanToken;
       lastRegisteredAdminUid = uid;
-    } catch (docErr) {
-      console.warn('[AdminNotificationService] Direct admin token setDoc failed:', docErr);
+    } catch (callableErr) {
+      console.warn('[AdminNotificationService] registerFcmToken callable also unavailable:', callableErr);
     }
   }
 }
@@ -111,20 +111,22 @@ export async function unregisterAdminDeviceToken(uid: string, token: string): Pr
   lastRegisteredAdminUid = null;
 
   try {
-    const unregisterFn = httpsCallable<{ token: string }, { success: boolean }>(
-      functions,
-      'unregisterFcmToken'
-    );
-    await unregisterFn({ token: cleanToken });
-  } catch (callableErr) {
-    console.warn('[AdminNotificationService] unregisterFcmToken callable error, attempting direct Firestore:', callableErr);
+    // 1. Direct Firestore deletion
     if (uid) {
-      try {
-        const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', cleanToken);
-        await deleteDoc(adminTokenRef);
-      } catch (docErr) {
-        console.warn('[AdminNotificationService] Direct admin token deleteDoc failed:', docErr);
-      }
+      const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', cleanToken);
+      await deleteDoc(adminTokenRef);
+    }
+  } catch (docErr) {
+    console.warn('[AdminNotificationService] Direct admin token deleteDoc note, trying callable fallback:', docErr);
+    // 2. Fallback: Cloud Function callable
+    try {
+      const unregisterFn = httpsCallable<{ token: string }, { success: boolean }>(
+        functions,
+        'unregisterFcmToken'
+      );
+      await unregisterFn({ token: cleanToken });
+    } catch (callableErr) {
+      console.warn('[AdminNotificationService] unregisterFcmToken callable also unavailable:', callableErr);
     }
   }
 }

@@ -170,63 +170,11 @@ export function CheckoutPage() {
         }))
       );
 
-      // 2. Call trusted createOrder Cloud Function (enforces atomic inventory deduction & transaction)
+      // 2. Call trusted Express Backend API (enforces atomic inventory deduction & transaction)
       let orderPlaced = false;
       let pickupCode = '';
-      try {
-        const createOrderFn = httpsCallable<
-          { pickupContact: any; idempotencyKey: string; paymentMethod: string },
-          {
-            orderId: string;
-            total: number;
-            subtotal: number;
-            orderStatus: string;
-            paymentStatus: string;
-            pickupCode?: string;
-            itemCount: number;
-            pickupLocation: string;
-          }
-        >(functions, 'createOrder');
 
-        const result = await createOrderFn({
-          pickupContact,
-          idempotencyKey: idempotencyKeyRef.current,
-          paymentMethod: 'click_and_collect',
-        });
-
-        if (result.data && result.data.orderId) {
-          orderId = result.data.orderId;
-          totalPaise = result.data.total;
-          subtotalPaise = result.data.subtotal;
-          orderStatus = result.data.orderStatus;
-          paymentStatus = result.data.paymentStatus;
-          pickupCode = result.data.pickupCode || '';
-          itemCount = result.data.itemCount;
-          orderPlaced = true;
-        }
-      } catch (fnErr: any) {
-        console.warn('[CheckoutPage] Cloud Function createOrder failed, checking backend API:', fnErr);
-        const errorCode = String(fnErr?.code || '').toLowerCase();
-        const errorMessage = String(fnErr?.message || '').toLowerCase();
-        const isInfraOrCorsError =
-          errorCode.includes('internal') ||
-          errorCode.includes('unavailable') ||
-          errorCode.includes('deadline-exceeded') ||
-          errorCode.includes('unknown') ||
-          errorMessage.includes('internal [0]') ||
-          errorMessage.includes('internal') ||
-          errorMessage.includes('cors') ||
-          errorMessage.includes('failed to fetch') ||
-          errorMessage.includes('network');
-
-        // Only re-throw if it's a specific domain validation error (e.g. out-of-stock, invalid-argument)
-        if (!isInfraOrCorsError && fnErr?.code && !errorCode.includes('functions/')) {
-          throw new Error(fnErr.message || 'Failed to place order.');
-        }
-      }
-
-      // 3. Fallback: Try Express Backend API if Cloud Function was unavailable
-      if (!orderPlaced && apiUrl) {
+      if (apiUrl) {
         try {
           const idToken = await auth.currentUser?.getIdToken();
           const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/api/orders`, {
@@ -264,10 +212,49 @@ export function CheckoutPage() {
             }
           }
         } catch (apiErr: any) {
-          console.warn('[CheckoutPage] Backend API /api/orders failed:', apiErr);
+          console.warn('[CheckoutPage] Express /api/orders failed, checking Cloud Function fallback:', apiErr);
           if (apiErr?.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('network')) {
             throw apiErr;
           }
+        }
+      }
+
+      // 3. Fallback: Try Cloud Function if backend API was unavailable
+      if (!orderPlaced) {
+        try {
+          const createOrderFn = httpsCallable<
+            { pickupContact: any; idempotencyKey: string; paymentMethod: string },
+            {
+              orderId: string;
+              total: number;
+              subtotal: number;
+              orderStatus: string;
+              paymentStatus: string;
+              pickupCode?: string;
+              itemCount: number;
+              pickupLocation: string;
+            }
+          >(functions, 'createOrder');
+
+          const result = await createOrderFn({
+            pickupContact,
+            idempotencyKey: idempotencyKeyRef.current,
+            paymentMethod: 'click_and_collect',
+          });
+
+          if (result.data && result.data.orderId) {
+            orderId = result.data.orderId;
+            totalPaise = result.data.total;
+            subtotalPaise = result.data.subtotal;
+            orderStatus = result.data.orderStatus;
+            paymentStatus = result.data.paymentStatus;
+            pickupCode = result.data.pickupCode || '';
+            itemCount = result.data.itemCount;
+            orderPlaced = true;
+          }
+        } catch (fnErr: any) {
+          console.warn('[CheckoutPage] Cloud Function createOrder fallback error:', fnErr);
+          throw new Error(fnErr?.message || 'Failed to place order.');
         }
       }
 
