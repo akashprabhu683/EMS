@@ -46,10 +46,10 @@ function ToastItem({ toast, onRemove }: { toast: ToastItem; onRemove: (id: strin
     <div
       className={`
         pointer-events-auto flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl
-        shadow-xl border bg-white backdrop-blur-md w-full max-w-full overflow-hidden
-        transition-all duration-300 ease-out
+        shadow-2xl border bg-white/98 backdrop-blur-md w-full max-w-full overflow-hidden
+        transition-all duration-300 ease-out transform
         ${borderColor}
-        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}
+        ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95'}
       `}
       role="alert"
     >
@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast, success, info, warning, error }}>
       {children}
       <div
-        className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 sm:max-w-md z-[9999] flex flex-col gap-2.5 pointer-events-none"
+        className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center gap-2.5 w-full max-w-md px-4 pointer-events-none"
         aria-live="polite"
         role="region"
         aria-label="Notifications"

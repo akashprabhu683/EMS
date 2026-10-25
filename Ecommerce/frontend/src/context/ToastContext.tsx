@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { CheckCircle2, Info, AlertTriangle, XCircle, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'info' | 'warning' | 'error';
@@ -18,6 +18,58 @@ interface ToastContextType {
 }
 
 const ToastContext = createContext<ToastContextType | null>(null);
+
+function ToastItem({ toast, onRemove }: { toast: ToastItem; onRemove: (id: string) => void }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
+  const isSuccess = toast.type === 'success';
+  const isInfo = toast.type === 'info';
+  const isWarning = toast.type === 'warning';
+  const isError = toast.type === 'error';
+
+  return (
+    <div
+      className={`
+        pointer-events-auto flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl
+        shadow-2xl border bg-white/98 backdrop-blur-md w-full max-w-full overflow-hidden
+        transition-all duration-300 ease-out transform
+        ${
+          isSuccess
+            ? 'border-emerald-300 text-slate-800'
+            : isWarning
+            ? 'border-amber-300 text-slate-800'
+            : isError
+            ? 'border-rose-300 text-slate-800'
+            : 'border-emerald-300 text-slate-800'
+        }
+        ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95'}
+      `}
+      role="alert"
+    >
+      <div className="shrink-0 mt-0.5">
+        {isSuccess && <CheckCircle2 size={18} className="text-emerald-600" />}
+        {isInfo && <Info size={18} className="text-emerald-700" />}
+        {isWarning && <AlertTriangle size={18} className="text-amber-500" />}
+        {isError && <XCircle size={18} className="text-rose-600" />}
+      </div>
+      <div className="flex-1 min-w-0 text-xs sm:text-sm font-medium leading-snug break-words [overflow-wrap:anywhere]">
+        {toast.message}
+      </div>
+      <button
+        onClick={() => onRemove(toast.id)}
+        className="shrink-0 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"
+        aria-label="Dismiss toast"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -45,48 +97,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* Toast Notification Container */}
       <div
-        className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 sm:max-w-md z-50 flex flex-col gap-2.5 pointer-events-none"
+        className="fixed top-5 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center gap-2.5 w-full max-w-md px-4 pointer-events-none"
         aria-live="polite"
         role="region"
       >
-        {toasts.map(toast => {
-          const isSuccess = toast.type === 'success';
-          const isInfo = toast.type === 'info';
-          const isWarning = toast.type === 'warning';
-          const isError = toast.type === 'error';
-
-          return (
-            <div
-              key={toast.id}
-              className={`pointer-events-auto flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl shadow-xl border backdrop-blur-md w-full max-w-full overflow-hidden animate-fade-in transition-all ${
-                isSuccess
-                  ? 'bg-white/98 border-emerald-300 text-slate-800'
-                  : isWarning
-                  ? 'bg-white/98 border-amber-300 text-slate-800'
-                  : isError
-                  ? 'bg-white/98 border-rose-300 text-slate-800'
-                  : 'bg-white/98 border-emerald-300 text-slate-800'
-              }`}
-            >
-              <div className="shrink-0 mt-0.5">
-                {isSuccess && <CheckCircle2 size={18} className="text-emerald-600" />}
-                {isInfo && <Info size={18} className="text-emerald-700" />}
-                {isWarning && <AlertTriangle size={18} className="text-amber-500" />}
-                {isError && <XCircle size={18} className="text-rose-600" />}
-              </div>
-              <div className="flex-1 min-w-0 text-xs sm:text-sm font-medium leading-snug break-words [overflow-wrap:anywhere]">
-                {toast.message}
-              </div>
-              <button
-                onClick={() => removeToast(toast.id)}
-                className="shrink-0 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"
-                aria-label="Dismiss toast"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          );
-        })}
+        {toasts.map(toast => (
+          <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
+        ))}
       </div>
     </ToastContext.Provider>
   );
