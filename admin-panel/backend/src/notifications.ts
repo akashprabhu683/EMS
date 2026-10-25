@@ -101,10 +101,21 @@ export async function dispatchCustomerFcmAndInApp(params: {
       tokens,
       notification: { title, body },
       data: {
+        title,
+        body,
         orderId,
         status,
         type: 'order_update',
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'order_updates',
+          priority: 'high',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+        },
       },
     });
 

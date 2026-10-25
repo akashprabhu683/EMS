@@ -92,7 +92,7 @@ export function NotificationCenter() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 py-3 z-50 animate-in fade-in-50 duration-150">
+        <div className="fixed left-3 right-3 top-[68px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 max-w-sm sm:max-w-none bg-white rounded-2xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in-50 duration-150">
           <div className="flex items-center justify-between px-4 pb-2.5 border-b border-slate-100">
             <div className="flex items-center gap-1.5">
               <Bell size={15} className="text-emerald-700" />
@@ -111,7 +111,7 @@ export function NotificationCenter() {
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+          <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto divide-y divide-slate-100">
             {notifications.length === 0 ? (
               <div className="py-8 text-center text-slate-400 space-y-1">
                 <Bell size={24} className="mx-auto opacity-30" />
