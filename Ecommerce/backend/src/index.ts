@@ -13,6 +13,18 @@ export { allowedOrigins, isAllowedOrigin, corsOptions };
 
 app.use(cors(corsOptions));
 
+// Security & Crawling directive: APIs must never be indexed by search engines
+app.use((req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  next();
+});
+
+// Explicit robots.txt for backend API domain
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.send('User-agent: *\nDisallow: /\n');
+});
+
 // CORS rejection error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err?.message === 'Not allowed by CORS') {

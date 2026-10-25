@@ -3,56 +3,56 @@
   <!-- Homepage -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <!-- Public Products Catalog -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/products</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <!-- Click & Collect Guide -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/click-collect</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <!-- About Us -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/about</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <!-- Contact Dispensary -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/contact</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <!-- FAQ -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/faq</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <!-- Privacy Policy -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/privacy</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <!-- Terms of Service -->
   <url>
     <loc>https://ecommerce-storefront-client.vercel.app/terms</loc>
-    <lastmod>2026-10-24</lastmod>
+    <lastmod>2026-10-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>

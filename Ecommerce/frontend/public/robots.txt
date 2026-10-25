@@ -5,6 +5,7 @@
 User-agent: *
 Allow: /
 Allow: /products
+Allow: /products/*
 Allow: /product/*
 Allow: /about
 Allow: /contact
@@ -19,8 +20,11 @@ Disallow: /orders/*
 Disallow: /checkout
 Disallow: /order-confirmation
 Disallow: /profile
+Disallow: /account
 Disallow: /favorites
 Disallow: /wishlist
+Disallow: /login
+Disallow: /register
 
 # Authoritative Sitemap
 Sitemap: https://ecommerce-storefront-client.vercel.app/sitemap.xml
