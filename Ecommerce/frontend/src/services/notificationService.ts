@@ -58,6 +58,14 @@ export function setupFcmTokenListener(onToken: (token: string) => void): () => v
     onToken(immediateToken);
   }
 
+  // Poll once after a short delay in case bridge initializes shortly after page load
+  const timer = setTimeout(() => {
+    const delayedToken = getNativeFcmToken();
+    if (delayedToken) {
+      onToken(delayedToken);
+    }
+  }, 1000);
+
   const handler = (event: Event) => {
     const customEvent = event as CustomEvent<{ token?: string }>;
     const token = customEvent.detail?.token || (window as any).EMS_FCM_TOKEN;
@@ -66,9 +74,22 @@ export function setupFcmTokenListener(onToken: (token: string) => void): () => v
     }
   };
 
+  const focusHandler = () => {
+    const freshToken = getNativeFcmToken();
+    if (freshToken) {
+      onToken(freshToken);
+    }
+  };
+
   window.addEventListener('ems_fcm_token', handler);
+  window.addEventListener('focus', focusHandler);
+  document.addEventListener('visibilitychange', focusHandler);
+
   return () => {
+    clearTimeout(timer);
     window.removeEventListener('ems_fcm_token', handler);
+    window.removeEventListener('focus', focusHandler);
+    document.removeEventListener('visibilitychange', focusHandler);
   };
 }
 
@@ -153,6 +174,7 @@ export async function registerDeviceToken(
 ): Promise<void> {
   if (!uid || !token || token.trim().length < 10) return;
   const cleanToken = token.trim();
+  const safeDocId = cleanToken.replace(/\//g, '_');
 
   // Deduplication check: do not re-register the same token for the same user in current session
   if (lastRegisteredCustomerToken === cleanToken && lastRegisteredCustomerUid === uid) {
@@ -161,7 +183,7 @@ export async function registerDeviceToken(
 
   try {
     // 1. Direct Firestore write (instantaneous, permitted by production security rules)
-    const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
+    const tokenRef = doc(db, 'users', uid, 'fcm_tokens', safeDocId);
     await setDoc(tokenRef, {
       token: cleanToken,
       platform,
@@ -193,6 +215,7 @@ export async function registerDeviceToken(
 export async function unregisterDeviceToken(uid: string, token: string): Promise<void> {
   if (!token) return;
   const cleanToken = token.trim();
+  const safeDocId = cleanToken.replace(/\//g, '_');
 
   lastRegisteredCustomerToken = null;
   lastRegisteredCustomerUid = null;
@@ -200,7 +223,7 @@ export async function unregisterDeviceToken(uid: string, token: string): Promise
   try {
     // 1. Direct Firestore deletion
     if (uid) {
-      const tokenRef = doc(db, 'users', uid, 'fcm_tokens', cleanToken);
+      const tokenRef = doc(db, 'users', uid, 'fcm_tokens', safeDocId);
       await deleteDoc(tokenRef);
     }
   } catch (docErr) {

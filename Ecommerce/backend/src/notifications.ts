@@ -48,19 +48,38 @@ export function buildNotificationMessage(payload: {
   }
 }
 
+export interface FcmDispatchResult {
+  inAppCreated: boolean;
+  tokensFound: number;
+  successCount: number;
+  failureCount: number;
+  errors?: Array<{ code?: string; message: string }>;
+}
+
+export function maskToken(token: string): string {
+  if (!token || typeof token !== 'string') return '[invalid]';
+  const trimmed = token.trim();
+  if (trimmed.length <= 12) return '[short-token]';
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+}
+
 /**
  * Dispatches customer in-app notifications and FCM push notifications without requiring Cloud Functions.
+ * Returns diagnostic send results without throwing unhandled exceptions.
  */
 export async function dispatchCustomerFcmAndInApp(params: {
   userId: string;
   orderId: string;
   status: string;
   recipientName?: string;
-}): Promise<void> {
+}): Promise<FcmDispatchResult> {
   const { userId, orderId, status, recipientName } = params;
-  if (!userId) return;
+  if (!userId) {
+    return { inAppCreated: false, tokensFound: 0, successCount: 0, failureCount: 0 };
+  }
 
   const { title, body } = buildNotificationMessage({ status, orderId, recipientName });
+  let inAppCreated = false;
 
   // 1. In-App Notification (Always reliable in Firestore)
   try {
@@ -75,6 +94,8 @@ export async function dispatchCustomerFcmAndInApp(params: {
       read: false,
       createdAt: FieldValue.serverTimestamp(),
     });
+    inAppCreated = true;
+    console.log(`[Notifications] In-app notification created for customer ${userId} (Order #${orderId.slice(-6).toUpperCase()}, status: ${status})`);
   } catch (inAppErr) {
     console.warn(`[Notifications] In-app notification store failed for ${userId}:`, inAppErr);
   }
@@ -82,20 +103,37 @@ export async function dispatchCustomerFcmAndInApp(params: {
   // 2. FCM Push Notification
   try {
     const tokensSnap = await adminDb.collection('users').doc(userId).collection('fcm_tokens').get();
-    if (tokensSnap.empty) return;
+    if (tokensSnap.empty) {
+      console.log(`[Notifications] No registered FCM tokens found for customer ${userId}. Push notification skipped.`);
+      return { inAppCreated, tokensFound: 0, successCount: 0, failureCount: 0 };
+    }
 
     const tokens: string[] = [];
     tokensSnap.forEach((doc) => {
       const data = doc.data();
-      if (data && typeof data.token === 'string' && data.token.trim()) {
+      if (data && typeof data.token === 'string' && data.token.trim().length >= 10) {
         tokens.push(data.token.trim());
       }
     });
 
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+      console.log(`[Notifications] Customer ${userId} has 0 valid FCM token strings in ${tokensSnap.size} document(s).`);
+      return { inAppCreated, tokensFound: 0, successCount: 0, failureCount: 0 };
+    }
 
     const messaging = getAdminMessaging();
-    if (!messaging) return;
+    if (!messaging) {
+      console.warn(`[Notifications] Firebase Messaging instance unavailable. Check FIREBASE_SERVICE_ACCOUNT_KEY on Render.`);
+      return {
+        inAppCreated,
+        tokensFound: tokens.length,
+        successCount: 0,
+        failureCount: tokens.length,
+        errors: [{ message: 'Firebase Messaging instance unavailable' }],
+      };
+    }
+
+    console.log(`[Notifications] Dispatching FCM multicast to ${tokens.length} device token(s) for customer ${userId}...`);
 
     const response = await messaging.sendEachForMulticast({
       tokens,
@@ -119,11 +157,21 @@ export async function dispatchCustomerFcmAndInApp(params: {
       },
     });
 
-    // Cleanup stale tokens
+    console.log(`[Notifications] FCM send complete for customer ${userId} (Order #${orderId.slice(-6).toUpperCase()}): ${response.successCount} succeeded, ${response.failureCount} failed out of ${tokens.length} token(s).`);
+
+    const errors: Array<{ code?: string; message: string }> = [];
     const staleDocs: FirebaseFirestore.DocumentReference[] = [];
+
     response.responses.forEach((resp, idx) => {
-      if (!resp.success && resp.error) {
-        const code = resp.error.code;
+      const masked = maskToken(tokens[idx]);
+      if (resp.success) {
+        console.log(`[Notifications] Token [${idx}] (${masked}): accepted by FCM. messageId=${resp.messageId}`);
+      } else {
+        const code = resp.error?.code || 'unknown_error';
+        const message = resp.error?.message || 'FCM dispatch failed';
+        console.warn(`[Notifications] Token [${idx}] (${masked}) rejected: code=${code}, message=${message}`);
+        errors.push({ code, message });
+
         if (
           code === 'messaging/registration-token-not-registered' ||
           code === 'messaging/invalid-registration-token'
@@ -133,13 +181,30 @@ export async function dispatchCustomerFcmAndInApp(params: {
       }
     });
 
+    // Cleanup stale tokens
     if (staleDocs.length > 0) {
       const batch = adminDb.batch();
       staleDocs.forEach((ref) => batch.delete(ref));
       await batch.commit();
+      console.log(`[Notifications] Removed ${staleDocs.length} stale/unregistered token document(s) from Firestore.`);
     }
-  } catch (fcmErr) {
-    console.warn(`[Notifications] FCM dispatch error for customer ${userId}:`, fcmErr);
+
+    return {
+      inAppCreated,
+      tokensFound: tokens.length,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  } catch (fcmErr: any) {
+    console.error(`[Notifications] FCM dispatch exception for customer ${userId}: message=${fcmErr?.message}, code=${fcmErr?.code}`, fcmErr);
+    return {
+      inAppCreated,
+      tokensFound: 0,
+      successCount: 0,
+      failureCount: 1,
+      errors: [{ code: fcmErr?.code || 'fcm_exception', message: fcmErr?.message || String(fcmErr) }],
+    };
   }
 }
 

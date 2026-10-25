@@ -465,17 +465,32 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
       return;
     }
 
-    // Asynchronously dispatch in-app and FCM push notification to customer
+    // Dispatch in-app and FCM push notification to the customer who owns this order
+    let notificationResult: any = null;
     if (result && (result as any).success && (result as any).targetUserId) {
-      dispatchCustomerFcmAndInApp({
-        userId: (result as any).targetUserId,
-        orderId,
-        status: targetStatus,
-        recipientName: (result as any).recipientName,
-      }).catch((e) => console.warn('[AdminRoutes] Status change notification failed:', e));
+      try {
+        notificationResult = await dispatchCustomerFcmAndInApp({
+          userId: (result as any).targetUserId,
+          orderId,
+          status: targetStatus,
+          recipientName: (result as any).recipientName,
+        });
+      } catch (e: any) {
+        console.warn('[AdminRoutes] Status change notification failed:', e);
+        notificationResult = {
+          inAppCreated: false,
+          tokensFound: 0,
+          successCount: 0,
+          failureCount: 1,
+          error: e?.message || 'Dispatch failed',
+        };
+      }
     }
 
-    res.json(result);
+    res.json({
+      ...result,
+      notification: notificationResult,
+    });
   } catch (err: any) {
     console.error('Failed to update order status:', err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Failed to update order status.' });

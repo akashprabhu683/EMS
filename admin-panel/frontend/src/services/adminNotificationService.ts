@@ -66,6 +66,7 @@ export async function registerAdminDeviceToken(
 ): Promise<void> {
   if (!uid || !token || token.trim().length < 10) return;
   const cleanToken = token.trim();
+  const safeDocId = cleanToken.replace(/\//g, '_');
 
   // Deduplication check: do not re-register the same token for the same user in current session
   if (lastRegisteredAdminToken === cleanToken && lastRegisteredAdminUid === uid) {
@@ -74,7 +75,7 @@ export async function registerAdminDeviceToken(
 
   try {
     // 1. Direct Firestore write (instantaneous, permitted by production security rules for authenticated admins)
-    const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', cleanToken);
+    const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', safeDocId);
     await setDoc(adminTokenRef, {
       token: cleanToken,
       platform,
@@ -106,6 +107,7 @@ export async function registerAdminDeviceToken(
 export async function unregisterAdminDeviceToken(uid: string, token: string): Promise<void> {
   if (!token) return;
   const cleanToken = token.trim();
+  const safeDocId = cleanToken.replace(/\//g, '_');
 
   lastRegisteredAdminToken = null;
   lastRegisteredAdminUid = null;
@@ -113,7 +115,7 @@ export async function unregisterAdminDeviceToken(uid: string, token: string): Pr
   try {
     // 1. Direct Firestore deletion
     if (uid) {
-      const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', cleanToken);
+      const adminTokenRef = doc(db, 'admins', uid, 'fcm_tokens', safeDocId);
       await deleteDoc(adminTokenRef);
     }
   } catch (docErr) {

@@ -4,7 +4,11 @@ import {
   validateIdempotencyKey,
   computeRequestFingerprint,
 } from '../dist/routes/orders.js';
-import { buildNotificationMessage } from '../dist/notifications.js';
+import {
+  buildNotificationMessage,
+  maskToken,
+  dispatchCustomerFcmAndInApp,
+} from '../dist/notifications.js';
 
 test('Order Service 1: validateIdempotencyKey enforces length and character set constraints', () => {
   assert.equal(validateIdempotencyKey('idemp_abc_12345'), 'idemp_abc_12345');
@@ -76,4 +80,29 @@ test('Notification Service: buildNotificationMessage formats status updates accu
   });
   assert.match(cancelled.title, /Order Cancelled/);
   assert.match(cancelled.body, /has been cancelled/);
+});
+
+test('Notification Service: maskToken obscures device tokens to protect credentials', () => {
+  const token = 'dK_1234567890abcdefghijklmnopqrstuvwxyz_secretToken999';
+  const masked = maskToken(token);
+  assert.equal(masked, 'dK_123...n999');
+  assert.equal(masked.length, 13);
+  assert.doesNotMatch(masked, new RegExp(token));
+
+  assert.equal(maskToken('short'), '[short-token]');
+  assert.equal(maskToken(null), '[invalid]');
+});
+
+test('Notification Service: dispatchCustomerFcmAndInApp handles empty recipient gracefully', async () => {
+  const result = await dispatchCustomerFcmAndInApp({
+    userId: '',
+    orderId: 'ord_empty_user',
+    status: 'placed',
+  });
+  assert.deepEqual(result, {
+    inAppCreated: false,
+    tokensFound: 0,
+    successCount: 0,
+    failureCount: 0,
+  });
 });
