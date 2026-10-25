@@ -4,59 +4,72 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20FCM-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![Android](https://img.shields.io/badge/Android-Native%20FCM%20Bridge-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 
-A full-stack ecommerce and dispensary management system tailored for authentic Ayurvedic, herbal, and natural medicines with an integrated **Click-and-Collect** counter pickup workflow.
+A modern, production-grade ecommerce and dispensary management system tailored for authentic Ayurvedic, herbal, and natural medicines with Click-and-Collect counter pickup, real-time status tracking, native Android FCM push notifications, and administrative delegation.
 
 ---
 
-## 🛒 Live Storefront
+## 🌐 Live Deployments
 
-Experience the customer storefront, browse authentic herbal remedies, and try the Click-and-Collect counter pickup checkout:
-
-[![Shop Now](https://img.shields.io/badge/🌿%20Shop%20Now-Visit%20Storefront-059669?style=for-the-badge&logo=leaf&logoColor=white)](https://ecommerce-storefront-client.vercel.app)
-
-👉 **Live URL:** [https://ecommerce-storefront-client.vercel.app](https://ecommerce-storefront-client.vercel.app)
+| Component | Platform | Live URL |
+|---|---|---|
+| **Customer Storefront** | Vercel | [ecommerce-storefront-client.vercel.app](https://ecommerce-storefront-client.vercel.app) |
+| **Dispensary Admin Portal** | Vercel | [ems-admin-portal.vercel.app](https://ems-admin-portal.vercel.app) |
+| **Ecommerce API Backend** | Render | [ems-ecommerce-backend.onrender.com](https://ems-ecommerce-backend.onrender.com) |
+| **Admin API Backend** | Render | [ems-admin-backend.onrender.com](https://ems-admin-backend.onrender.com) |
 
 ---
 
 ## 🌿 Architecture Overview
 
-EMS is organized as a unified monorepo containing three core packages:
+EMS is organized as a unified monorepo running on a ₹0 free-tier architecture (no Firebase Blaze or paid serverless functions required):
 
 ```
 EMS/
-├── Ecommerce/frontend/       # Customer Storefront (React 19, Vite, Tailwind CSS)
-├── admin-panel/frontend/    # Dispensary Admin Portal (React 19, Vite, Tailwind CSS)
-├── functions/               # Cloud Functions Backend (Node.js, Firebase Admin SDK)
-└── scripts/                 # Administrative tools (claim provisioning, DB scripts)
+├── Ecommerce/
+│   ├── frontend/             # Customer Storefront (React 19, Vite, Tailwind CSS v4)
+│   └── backend/              # Customer API (Express, Node.js, Firebase Admin SDK)
+├── admin-panel/
+│   ├── frontend/             # Dispensary Admin Portal (React 19, Vite, Tailwind CSS v4)
+│   └── backend/              # Admin API (Express, Node.js, Firebase Admin SDK)
+├── android/                  # Native Android WebView wrappers with bi-directional FCM bridge
+├── firebase/                 # Production Firestore security rules & indexes
+└── apks/                     # Release-ready Android APK packages
 ```
 
-### 1. Storefront (`Ecommerce/frontend`)
-- **Amazon-Inspired Hero Showcase**: Dynamic top showcase cards featuring curated categories, best-selling remedies, and special offers under ₹499 and ₹299.
-- **Deal Filter Pill Strip**: Instant client-side filtering for budget values, 4.8+ star ratings, and classical formulations.
-- **Click-and-Collect Workflow**: Customers browse the catalog, select medicines, authenticate with Google Sign-In, and reserve without upfront online payment.
-- **Null-Safe Orders & Tracking**: View order status, dispensary pickup counter hours, and in-person payment confirmation.
-- **Botanical Design System**: Clean emerald green palette with high-contrast typography and responsive layouts.
+### 1. Customer Storefront (`Ecommerce/frontend`)
+- **Herbal Showcase**: Curated categories, deal filter pill strip, and remedies under ₹499 and ₹299.
+- **Click-and-Collect Workflow**: Reserve remedies with Google Sign-In and collect in person with zero online transaction fees.
+- **Push & In-App Notifications**: Real-time Firestore notification center and native Android FCM alerts with dedicated notification channels (`order_updates`).
+- **Eye-Level Toasts**: Top-center pop notifications with smooth scale and slide physics.
 
 ### 2. Admin Portal (`admin-panel/frontend`)
-- **Secure Access Control**: Protected by Firebase Auth custom claims (`admin: true`).
-- **Order Management & Fulfillment**: Real-time Firestore order tracking with transition controls (`pending` → `ready_for_pickup` → `completed` or `cancelled`).
-- **Product & Inventory Catalog**: Create, edit, and toggle active/inactive status for herbal formulations with pricing in Indian Rupees (`₹`) and inventory stock levels.
-- **Category Taxonomies**: Manage botanical categories with unique URL slugs and descriptions.
+- **Role-Based Security**: Superadmin control with secure cryptographic admin invitation delegation (`/accept-invite`).
+- **Order Pipeline Fulfillment**: Transition orders through `placed` → `accepted` → `preparing` → `ready_for_pickup` → `collected` / `cancelled`.
+- **Instant Dispatch Telemetry**: Status updates trigger multicast FCM push notifications to the customer's registered devices with observable diagnostic logging.
+- **Product & Category Management**: Dynamic inventory counters, pricing in Indian Rupees (`₹`), and botanical taxonomy management.
 
-### 3. Backend Engine (`functions/`)
-- **Click-and-Collect Placement**: Atomic transactional inventory decrement with idempotency key enforcement.
-- **Role Validation**: Enforces server-side administrator authorization and prevents unauthorized status alterations.
+### 3. Dedicated Express Backends (`Ecommerce/backend` & `admin-panel/backend`)
+- **Zero-Cost Free Tier**: Hosted on Render without Blaze billing requirements.
+- **Order Idempotency**: Cryptographic fingerprinting prevents double submissions.
+- **Credential Protection**: Strict device token masking (`maskToken`) and token hash storage in Firestore.
+- **CORS Protection**: Explicit domain allowlists for production and staging origins.
+
+### 4. Native Android Apps (`android/`)
+- Native WebView wrappers injecting secure `window.EMSAndroid` JavaScript bridges.
+- Foreground, background, and terminated push notification delivery via Firebase Cloud Messaging.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js**: `v18+` or `v20+`
+- **Node.js**: `v20+` or `v22+`
 - **npm** or **pnpm**
-- **Firebase CLI**: `npm install -g firebase-tools` (optional for local emulators)
+- **Git**
 
 ---
 
@@ -68,72 +81,68 @@ EMS/
    cd EMS
    ```
 
-2. **Install dependencies for all workspaces:**
+2. **Install dependencies:**
    ```bash
-   # Install Storefront dependencies
-   cd Ecommerce/frontend
-   npm install
+   # Customer Storefront & Backend
+   cd Ecommerce/frontend && npm install
+   cd ../backend && npm install
 
-   # Install Admin Panel dependencies
-   cd ../../admin-panel/frontend
-   npm install
-
-   # Install Cloud Functions dependencies
-   cd ../../functions
-   npm install
+   # Admin Portal & Backend
+   cd ../../admin-panel/frontend && npm install
+   cd ../backend && npm install
    ```
 
 ---
 
 ### Running Locally
 
-Run both frontends in separate terminal windows:
+Run the frontend and backend services concurrently:
 
-#### 1. Storefront
+#### 1. Storefront & API
 ```bash
+# Terminal 1: Ecommerce Backend
+cd Ecommerce/backend
+npm run dev
+
+# Terminal 2: Storefront Client
 cd Ecommerce/frontend
 npm run dev
 ```
-- **Local URL:** `http://localhost:5173`
-- **Live Deployed Storefront:** [https://ecommerce-storefront-client.vercel.app](https://ecommerce-storefront-client.vercel.app)
 
-#### 2. Admin Panel
+#### 2. Admin Portal & API
 ```bash
+# Terminal 3: Admin Backend
+cd admin-panel/backend
+npm run dev
+
+# Terminal 4: Admin Portal Client
 cd admin-panel/frontend
 npm run dev
-```
-- **Local URL:** `http://localhost:5174`
-
-#### 3. Firebase Emulators (Optional)
-If running local Firestore, Auth, and Functions emulators:
-```bash
-firebase emulators:start
 ```
 
 ---
 
-## 📋 Technology Stack
+## 🧪 Testing & Verification
 
-| Layer | Technology |
-|---|---|
-| **Storefront** | React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons |
-| **Admin Panel** | React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons |
-| **Authentication** | Firebase Authentication (Google Sign-In, Email/Password) |
-| **Database** | Cloud Firestore (Real-time collections & transactions) |
-| **Serverless Functions** | Firebase Cloud Functions (Node.js) |
-| **Currency** | Indian Rupee (`₹`) |
+Run automated test suites across both backends:
+
+```bash
+# Admin Backend Tests (Auth, CORS, Sanitizers, FCM status dispatch)
+cd admin-panel/backend
+npm test
+
+# Ecommerce Backend Tests (CORS, Idempotency, Fingerprinting, Notifications)
+cd Ecommerce/backend
+npm test
+```
 
 ---
 
 ## 🔒 Security & Admin Provisioning
 
-To assign administrator privileges to an email account:
-
-```bash
-node scripts/set-admin-claim.mjs your-admin-email@example.com
-```
-
-This applies the `admin: true` custom claim required to pass the admin portal's `ProtectedRoute` verification.
+- **Invitation System**: The primary superadmin generates secure, cryptographically hashed invitation links (`/accept-invite?token=...`) directly from the Admin Portal.
+- **Firestore Rules**: Strict path-based and claim-based access controls enforcing token ownership and admin authorization.
+- **Token Protection**: Plaintext tokens are never stored in Firestore documents; device tokens are masked in server logs.
 
 ---
 
