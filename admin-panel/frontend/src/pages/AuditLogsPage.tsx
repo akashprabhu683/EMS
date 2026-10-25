@@ -227,6 +227,7 @@ export function AuditLogsPage() {
             className="w-full sm:w-auto max-w-full truncate px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:bg-white focus:border-indigo-600 cursor-pointer"
           >
             <option value="all">All Actions</option>
+            <option value="ORDER_PLACED">Order Placed (Online)</option>
             <option value="ORDER_STATUS_CHANGED">Order Status Changed</option>
             <option value="ORDER_COLLECTED">Order Collected (PIN Verified)</option>
             <option value="ORDER_CANCELLED">Order Cancelled</option>
@@ -251,6 +252,7 @@ export function AuditLogsPage() {
             <option value="products">products</option>
             <option value="admins">admins</option>
             <option value="admin_invitations">admin_invitations</option>
+            <option value="categories">categories</option>
           </select>
         </div>
       </div>

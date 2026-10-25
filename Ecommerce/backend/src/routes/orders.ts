@@ -423,6 +423,11 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
           role: 'customer',
         },
         action: 'ORDER_PLACED',
+        target: {
+          collection: 'orders',
+          id: orderRef.id,
+          label: `Order #${orderRef.id.slice(-6)}`,
+        },
         targetCollection: 'orders',
         targetId: orderRef.id,
         orderId: orderRef.id,
@@ -567,6 +572,11 @@ ordersRouter.patch('/:orderId/cancel', authenticateFirebaseToken, async (req: Au
         timestamp: FieldValue.serverTimestamp(),
         actor: { uid, role: 'customer' },
         action: 'ORDER_CANCELLED',
+        target: {
+          collection: 'orders',
+          id: orderId,
+          label: `Order #${orderId.slice(-6)}`,
+        },
         targetCollection: 'orders',
         targetId: orderId,
         orderId,

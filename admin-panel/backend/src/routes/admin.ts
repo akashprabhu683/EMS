@@ -717,6 +717,27 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
       acceptedByUid: null,
     });
 
+    // Record append-only audit trail
+    await adminDb.collection('audit_logs').add({
+      action: 'ADMIN_INVITED',
+      actor: {
+        uid: callerUid || 'superadmin',
+        email: callerEmail,
+        role: 'superadmin',
+      },
+      target: {
+        collection: 'admin_invitations',
+        id: cleanEmail,
+        label: cleanEmail,
+      },
+      summary: `Admin invitation created for ${cleanEmail} by ${callerEmail}.`,
+      metadata: {
+        emailSent: false,
+        expiresAt: expiresAt.toISOString(),
+      },
+      timestamp: FieldValue.serverTimestamp(),
+    });
+
     res.json({
       success: true,
       status: 'invited',
@@ -896,6 +917,27 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
         grantedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      const auditRef = adminDb.collection('audit_logs').doc();
+      transaction.set(auditRef, {
+        action: 'ADMIN_ROLE_GRANTED',
+        actor: {
+          uid,
+          email: userEmail,
+          role: 'admin',
+        },
+        target: {
+          collection: 'admins',
+          id: uid,
+          label: userEmail,
+        },
+        summary: `Admin role successfully claimed and activated for ${userEmail}.`,
+        metadata: {
+          name: decoded.name || userEmail.split('@')[0],
+          grantedBy: data.invitedBy || 'invitation',
+        },
+        timestamp: FieldValue.serverTimestamp(),
+      });
     });
 
     // Grant Firebase Auth custom claim
@@ -983,6 +1025,30 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
     }
 
     await adminDb.collection('admin_invitations').doc(cleanEmail).delete().catch(() => {});
+
+    // Record append-only audit trail
+    const auditRef = adminDb.collection('audit_logs').doc();
+    await auditRef.set({
+      action: 'ADMIN_ROLE_REVOKED',
+      actor: {
+        uid: req.adminUser?.uid || 'superadmin',
+        email: callerEmail,
+        role: 'superadmin',
+      },
+      target: {
+        collection: targetUid ? 'admins' : 'admin_invitations',
+        id: targetUid || cleanEmail,
+        label: cleanEmail,
+      },
+      summary: targetUid
+        ? `Admin privileges revoked for ${cleanEmail} by ${callerEmail}.`
+        : `Admin invitation removed for ${cleanEmail} by ${callerEmail}.`,
+      metadata: {
+        email: cleanEmail,
+        targetUid,
+      },
+      timestamp: FieldValue.serverTimestamp(),
+    });
 
     res.json({
       success: true,
