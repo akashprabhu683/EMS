@@ -8,6 +8,8 @@ import {
   ChevronDown,
   ChevronRight,
   Shield,
+  ShieldAlert,
+  AlertCircle,
   Package,
   ShoppingCart,
   IndianRupee,
@@ -27,9 +29,15 @@ export function AuditLogsPage() {
   const [collectionFilter, setCollectionFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadLogs = async (isInitial = true) => {
     setLoading(true);
+    if (isInitial) {
+      setPermissionDenied(false);
+      setErrorMessage(null);
+    }
     try {
       const lastDocId = !isInitial && logs.length > 0 ? logs[logs.length - 1].id : undefined;
       const res = await getAuditTrail({
@@ -45,8 +53,23 @@ export function AuditLogsPage() {
         setLogs((prev) => [...prev, ...res.logs]);
       }
       setHasMore(res.hasMore);
+      setPermissionDenied(false);
+      setErrorMessage(null);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load audit logs.');
+      const errMsg = err?.message || 'Failed to load audit logs.';
+      const isPerm =
+        err?.code === 'permission-denied' ||
+        err?.status === 403 ||
+        errMsg.toLowerCase().includes('permission') ||
+        errMsg.toLowerCase().includes('missing or insufficient');
+
+      if (isPerm) {
+        setPermissionDenied(true);
+        setErrorMessage('Missing or insufficient permissions to view audit trail. Administrator role required.');
+      } else {
+        setErrorMessage(errMsg);
+      }
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }
@@ -174,7 +197,7 @@ export function AuditLogsPage() {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row items-center gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center gap-3">
         {/* Search */}
         <div className="relative flex-1 w-full">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -188,11 +211,11 @@ export function AuditLogsPage() {
         </div>
 
         {/* Action Filter */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
           <select
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:bg-white focus:border-indigo-600 cursor-pointer"
+            className="w-full sm:w-auto max-w-full truncate px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:bg-white focus:border-indigo-600 cursor-pointer"
           >
             <option value="all">All Actions</option>
             <option value="ORDER_STATUS_CHANGED">Order Status Changed</option>
@@ -212,7 +235,7 @@ export function AuditLogsPage() {
           <select
             value={collectionFilter}
             onChange={(e) => setCollectionFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:bg-white focus:border-indigo-600 cursor-pointer"
+            className="w-full sm:w-auto max-w-full truncate px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:bg-white focus:border-indigo-600 cursor-pointer"
           >
             <option value="all">All Collections</option>
             <option value="orders">orders</option>
@@ -229,6 +252,40 @@ export function AuditLogsPage() {
           <div className="py-20 text-center">
             <div className="w-8 h-8 border-3 border-indigo-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-xs font-semibold text-slate-500">Querying append-only audit trail...</p>
+          </div>
+        ) : permissionDenied ? (
+          <div className="py-16 px-4 text-center max-w-md mx-auto">
+            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-amber-200">
+              <ShieldAlert size={28} />
+            </div>
+            <p className="text-sm font-bold text-slate-800">Missing or Insufficient Permissions</p>
+            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
+              Your account does not have verified administrative access to read the audit log stream. Contact a store super admin or re-authenticate.
+            </p>
+            <button
+              onClick={() => loadLogs(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold transition-colors"
+            >
+              <RefreshCw size={13} />
+              <span>Retry Authorization</span>
+            </button>
+          </div>
+        ) : errorMessage && logs.length === 0 ? (
+          <div className="py-16 px-4 text-center max-w-md mx-auto">
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-rose-200">
+              <AlertCircle size={28} />
+            </div>
+            <p className="text-sm font-bold text-slate-800">Unable to Load Audit Records</p>
+            <p className="text-xs text-rose-600 mt-1 mb-4 leading-relaxed">
+              {errorMessage}
+            </p>
+            <button
+              onClick={() => loadLogs(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors"
+            >
+              <RefreshCw size={13} />
+              <span>Retry Query</span>
+            </button>
           </div>
         ) : filteredLogs.length === 0 ? (
           <div className="py-16 text-center">

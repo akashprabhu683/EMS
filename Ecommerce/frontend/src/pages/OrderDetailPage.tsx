@@ -231,13 +231,13 @@ export function OrderDetailPage() {
             {order.pickupCode && (
               <div className="bg-emerald-50/90 border-2 border-dashed border-emerald-400 rounded-2xl p-5 text-center shadow-xs">
                 <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-widest block mb-1">
-                  Counter Collection Verification PIN
+                  Order Collection Verification Code (Show at Counter)
                 </span>
                 <div className="font-mono text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-950 my-1">
                   {order.pickupCode}
                 </div>
                 <p className="text-xs text-emerald-700 mt-1">
-                  Please show this 6-digit PIN to the pharmacist at the dispensary counter to verify collection.
+                  Show this 6-digit verification code to the dispensary pharmacist to complete pickup. (This is unique to your order and separate from the store postal code 560001).
                 </p>
               </div>
             )}

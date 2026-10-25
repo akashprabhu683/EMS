@@ -82,7 +82,7 @@ export function formatFirestoreOrder(docId: string, data: any): Order {
   const totalRupees = (data.total || 0) / 100;
   const subtotalRupees = (data.subtotal || 0) / 100;
   const shippingRupees = (data.shippingFee || 0) / 100;
-  const pickupLocation = data.pickupLocation || 'EMS Herbal Dispensary, Main Road Health Complex, Pin: 560001';
+  const pickupLocation = data.pickupLocation || 'EMS Herbal Dispensary, Main Road Health Complex, Postal Code: 560001';
   const customerName = data.pickupContact?.fullName || data.shippingAddress?.name || data.shippingAddress?.fullName || 'Valued Customer';
   const customerPhone = data.pickupContact?.phone || data.shippingAddress?.phone || '';
 
@@ -134,21 +134,32 @@ export function formatFirestoreOrder(docId: string, data: any): Order {
       if (s === 'cancelled') return 'Order Cancelled';
       if (s === 'accepted') return 'Accepted — Preparing soon';
       if (s === 'preparing') return 'Being Prepared now';
-      return 'Ready within 2–4 hours';
+      if (s === 'placed') return 'Awaiting dispensary acceptance';
+      return 'Awaiting dispensary acceptance';
     })(),
     timeline: Array.isArray(data.statusHistory) && data.statusHistory.length > 0
-      ? data.statusHistory.map((h: any) => ({
-          title: statusTitleMap[h.status] || h.status,
-          timestamp: h.timestamp ? new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : createdDate,
-          completed: true,
-          description: h.note || `Order status updated to ${h.status}`,
-        }))
+      ? data.statusHistory.map((h: any) => {
+          const isPayment = h.eventType === 'PAYMENT_RECORDED' || h.paymentStatus === 'paid';
+          const title = isPayment
+            ? 'Payment Received (Counter)'
+            : (statusTitleMap[h.status] || (h.status ? String(h.status).replace(/_/g, ' ').toUpperCase() : 'Order Update'));
+          const description = h.note || (isPayment ? 'In-person payment confirmed received at dispensary counter.' : `Order status updated to ${h.status || 'current state'}`);
+          const timestamp = h.timestamp
+            ? new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : createdDate;
+          return {
+            title,
+            timestamp,
+            completed: true,
+            description,
+          };
+        })
       : [
           {
             title: 'Order Placed',
             timestamp: createdDate,
             completed: true,
-            description: 'Order registered. The dispensary pharmacist is preparing your herbal remedies.',
+            description: 'Order registered. Awaiting dispensary acceptance.',
           },
         ],
   };

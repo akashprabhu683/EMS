@@ -1016,7 +1016,7 @@ export const PRODUCTS: Product[] = [
     price: 449,
     originalPrice: 600,
     images: [
-      'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
+      'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=600&q=80',
     ],
     category: 'herbal-extracts',
     rating: 4.8,

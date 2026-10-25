@@ -32,15 +32,21 @@ export function OrdersPage() {
 
   const handleConfirmDeleteSingle = async () => {
     if (!orderToDelete) return;
+    const isTerminal = orderToDelete.status === 'collected' || orderToDelete.status === 'cancelled';
+    if (!isTerminal) {
+      toast.error('Only completed (collected) or cancelled orders can be removed from history.');
+      setOrderToDelete(null);
+      return;
+    }
     setIsDeleting(true);
     try {
       await deleteOrder(orderToDelete.id, user?.id);
       setOrders(prev => prev.filter(o => o.id !== orderToDelete.id));
-      toast.success(`Order ${orderToDelete.id} hidden from your view.`);
+      toast.success(`Order ${orderToDelete.id} removed from your view.`);
       setOrderToDelete(null);
     } catch (err: any) {
       console.error('Failed to hide order:', err);
-      toast.error(err.message || 'Could not hide order. Please try again.');
+      toast.error(err.message || 'Could not remove order. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -48,15 +54,21 @@ export function OrdersPage() {
 
   const handleConfirmClearAll = async () => {
     if (!user?.id) return;
+    const terminalOrders = orders.filter(o => o.status === 'collected' || o.status === 'cancelled');
+    if (terminalOrders.length === 0) {
+      toast.info('No completed or cancelled orders to clear.');
+      setShowClearAllModal(false);
+      return;
+    }
     setIsDeleting(true);
     try {
-      await clearAllUserOrders(user.id, orders.map(o => o.id));
-      setOrders([]);
-      toast.success('Your order history view has been cleared on this browser.');
+      await clearAllUserOrders(user.id, terminalOrders.map(o => o.id));
+      setOrders(prev => prev.filter(o => o.status !== 'collected' && o.status !== 'cancelled'));
+      toast.success(`${terminalOrders.length} completed/cancelled order(s) cleared from history.`);
       setShowClearAllModal(false);
     } catch (err: any) {
       console.error('Failed to clear orders:', err);
-      toast.error(err.message || 'Could not clear order view. Please try again.');
+      toast.error(err.message || 'Could not clear orders. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -344,15 +356,15 @@ export function OrdersPage() {
                   />
                 </div>
 
-                {orders.length > 0 && (
+                {orders.some(o => o.status === 'collected' || o.status === 'cancelled') && (
                   <button
                     onClick={() => setShowClearAllModal(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors shrink-0"
-                    title="Clear your complete order history"
+                    title="Clear completed and cancelled orders from view"
                   >
                     <Trash2 size={13} />
-                    <span className="hidden sm:inline">Clear History</span>
-                    <span className="sm:inline hidden">({orders.length})</span>
+                    <span className="hidden sm:inline">Clear Completed</span>
+                    <span className="sm:inline hidden">({orders.filter(o => o.status === 'collected' || o.status === 'cancelled').length})</span>
                     <span className="sm:hidden">Clear</span>
                   </button>
                 )}
@@ -410,22 +422,23 @@ export function OrdersPage() {
                     >
                       {/* Order Top Meta */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/80">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                          <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/80 shrink-0">
                             {order.id}
                           </span>
-                          <span className="text-xs text-slate-400">·</span>
-                          <span className="text-xs text-slate-500 font-medium">
-                            Placed on {order.date || 'Recent'}
-                          </span>
-                          <span className="text-xs text-slate-400">·</span>
-                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                            isPaid
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : 'bg-amber-50 text-amber-800 border-amber-200'
-                          }`}>
-                            {isPaid ? '✓ Paid' : '⏳ Pay at Dispensary'}
-                          </span>
+                          <div className="inline-flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-slate-500 font-medium">
+                              Placed on {order.date || 'Recent'}
+                            </span>
+                            <span className="text-xs text-slate-400">·</span>
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                              isPaid
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              {isPaid ? '✓ Paid' : '⏳ Pay at Dispensary'}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -518,14 +531,16 @@ export function OrdersPage() {
                             </button>
                           )}
 
-                          <button
-                            onClick={() => setOrderToDelete(order)}
-                            className="inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
-                            title="Remove this order from history"
-                          >
-                            <Trash2 size={13} />
-                            <span>Remove</span>
-                          </button>
+                          {(order.status === 'collected' || order.status === 'cancelled') && (
+                            <button
+                              onClick={() => setOrderToDelete(order)}
+                              className="inline-flex items-center gap-1.5 py-2 px-3 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+                              title="Remove completed or cancelled order from history"
+                            >
+                              <Trash2 size={13} />
+                              <span>Remove</span>
+                            </button>
+                          )}
 
                           <Link
                             to={`/orders/${order.id}`}
@@ -620,9 +635,9 @@ export function OrdersPage() {
               <AlertTriangle size={22} />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="text-base font-bold text-slate-900">Clear Order History View?</h3>
+              <h3 className="text-base font-bold text-slate-900">Clear Completed Orders?</h3>
               <p className="text-xs text-slate-500">
-                This will hide all {orders.length} order records from your history view on this browser. Authoritative records remain safely preserved in the dispensary database.
+                This will remove completed and cancelled orders from your history view on this device. Active in-flight orders will remain visible for tracking.
               </p>
             </div>
             <div className="flex gap-2.5 pt-2">
@@ -638,7 +653,7 @@ export function OrdersPage() {
                 disabled={isDeleting}
                 className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 text-white hover:bg-slate-900 transition-colors inline-flex items-center justify-center gap-1.5 shadow-xs"
               >
-                {isDeleting ? 'Hiding...' : 'Hide All'}
+                {isDeleting ? 'Clearing...' : 'Clear Completed'}
               </button>
             </div>
           </div>

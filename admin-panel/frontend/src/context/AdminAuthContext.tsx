@@ -12,6 +12,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import type { AdminUser } from '../types';
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 interface AdminAuthContextType {
   user: AdminUser | null;

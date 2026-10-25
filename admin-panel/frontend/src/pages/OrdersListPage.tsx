@@ -271,25 +271,36 @@ function OrderCard({
                 Status History & Audit Trail
               </h4>
               <div className="space-y-1.5">
-                {order.statusHistory.map((entry, i) => (
-                  <div key={i} className="flex items-start gap-2 text-[11px] text-slate-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                    <span>
-                      {entry.status && <strong>{entry.status}</strong>}
-                      {entry.paymentStatus && ` — Payment: ${entry.paymentStatus}`}
-                      {entry.note && ` · ${entry.note}`}
-                      {entry.updatedBy && ` (by ${entry.updatedBy})`}
-                      <span className="text-slate-400 ml-1">{formatDate(entry.timestamp)}</span>
-                    </span>
-                  </div>
-                ))}
+                {order.statusHistory.map((entry, i) => {
+                  const isPaymentEvent = (entry as any).eventType === 'PAYMENT_RECORDED' || (!entry.status && !!entry.paymentStatus);
+                  return (
+                    <div key={i} className="flex items-start gap-2 text-[11px] text-slate-600">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                      <span>
+                        {entry.status ? (
+                          <>
+                            <strong>{entry.status}</strong>
+                            {entry.paymentStatus && ` — Payment: ${entry.paymentStatus}`}
+                          </>
+                        ) : isPaymentEvent ? (
+                          <strong>Payment Recorded ({entry.paymentStatus || 'paid'})</strong>
+                        ) : (
+                          <strong>Order Updated</strong>
+                        )}
+                        {entry.note && ` · ${entry.note}`}
+                        {entry.updatedBy && ` (by ${entry.updatedBy})`}
+                        <span className="text-slate-400 ml-1">{formatDate(entry.timestamp)}</span>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {/* Actions */}
           {(nextStatuses.length > 0 || canMarkPaid) && (
-            <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-200/60">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-1 border-t border-slate-200/60">
               {updating ? (
                 <div className="flex items-center gap-2 text-xs text-slate-500 px-3 py-2">
                   <Loader2 size={14} className="animate-spin text-emerald-600" />
@@ -307,7 +318,7 @@ function OrderCard({
                         onClick={() => handleStatusClick(s)}
                         id={`order-${order.id}-status-${s}`}
                         className={clsx(
-                          'px-3 py-2 rounded-xl text-xs font-semibold transition-colors border',
+                          'w-full sm:w-auto text-center justify-center px-3 py-2 rounded-xl text-xs font-semibold transition-colors border',
                           isCollectAction
                             ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 shadow-xs'
                             : isPrimary
@@ -323,7 +334,7 @@ function OrderCard({
                     <button
                       onClick={handleMarkPaid}
                       id={`order-${order.id}-mark-paid`}
-                      className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white border border-amber-700 hover:bg-amber-700 transition-colors flex items-center gap-1.5 shadow-xs"
+                      className="w-full sm:w-auto text-center justify-center px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white border border-amber-700 hover:bg-amber-700 transition-colors flex items-center gap-1.5 shadow-xs"
                     >
                       <IndianRupee size={12} />
                       Record In-Person Payment Received (₹{paiseToRupees(totalPaise)})

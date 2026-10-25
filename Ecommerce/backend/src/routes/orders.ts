@@ -292,7 +292,7 @@ ordersRouter.post('/', authenticateFirebaseToken, async (req: AuthenticatedReque
       const shippingFeePaise = 0;
       const codFeePaise = 0;
       const totalPaise = subtotalPaise;
-      const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
+      const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Postal Code: 560001";
       const pickupCode = crypto.randomInt(100000, 1000000).toString();
 
       const orderRef = adminDb.collection('orders').doc();

@@ -7,6 +7,35 @@ export const adminRouter = Router();
 
 export const PRIMARY_SUPERADMIN_EMAIL = 'akashprabhu0302@gmail.com';
 
+/**
+ * Recursively cleans an object by stripping any keys with value `undefined`.
+ * Preserves `null`, `false`, `0`, `""`, Date, and FieldValue instances.
+ * Prevents Firestore Admin SDK crash: Cannot use "undefined" as a Firestore value.
+ */
+export function cleanFirestorePayload<T>(val: T): T {
+  if (val === null || val === undefined || typeof val !== 'object') {
+    return val;
+  }
+  if (
+    val instanceof Date ||
+    val instanceof FieldValue ||
+    (val as any).constructor?.name === 'FieldValue' ||
+    (val as any).constructor?.name?.includes('Transform')
+  ) {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val.map(cleanFirestorePayload) as unknown as T;
+  }
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(val as Record<string, any>)) {
+    if (v !== undefined) {
+      result[k] = cleanFirestorePayload(v);
+    }
+  }
+  return result as T;
+}
+
 export interface AdminAuthenticatedRequest extends Request {
   adminUser?: {
     uid: string;
@@ -128,6 +157,60 @@ adminRouter.get('/stats', requireAdminAuth, async (req: AdminAuthenticatedReques
   } catch (err: any) {
     console.error('Failed to aggregate stats:', err);
     res.status(500).json({ error: 'Failed to aggregate admin stats.' });
+  }
+});
+
+/**
+ * GET /api/admin/audit-logs
+ * Queries append-only server audit trail with filtering and pagination.
+ */
+adminRouter.get('/audit-logs', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const action = typeof req.query.action === 'string' && req.query.action !== 'all' ? req.query.action : undefined;
+    const targetCollection = typeof req.query.targetCollection === 'string' && req.query.targetCollection !== 'all' ? req.query.targetCollection : undefined;
+    const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 30, 1), 100);
+    const lastDocId = typeof req.query.lastDocId === 'string' ? req.query.lastDocId : undefined;
+
+    let q: FirebaseFirestore.Query = adminDb.collection('audit_logs').orderBy('timestamp', 'desc');
+
+    if (action) {
+      q = q.where('action', '==', action);
+    }
+    if (targetCollection) {
+      q = q.where('target.collection', '==', targetCollection);
+    }
+    if (lastDocId) {
+      const lastDoc = await adminDb.collection('audit_logs').doc(lastDocId).get();
+      if (lastDoc.exists) {
+        q = q.startAfter(lastDoc);
+      }
+    }
+
+    q = q.limit(pageSize);
+    const snap = await q.get();
+
+    const logs = snap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        action: data.action,
+        actor: data.actor || { uid: 'unknown', role: 'admin' },
+        target: data.target || { collection: 'orders', id: 'unknown' },
+        summary: data.summary || '',
+        changes: data.changes || undefined,
+        metadata: data.metadata || undefined,
+        timestamp: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : String(data.timestamp || new Date().toISOString()),
+      };
+    });
+
+    res.json({
+      logs,
+      hasMore: logs.length >= pageSize,
+      count: logs.length,
+    });
+  } catch (err: any) {
+    console.error('Failed to query audit logs:', err);
+    res.status(500).json({ error: err.message || 'Failed to query audit logs.' });
   }
 });
 
@@ -283,6 +366,7 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
 
       // 2.2 Update order document
       const historyEntry = {
+        eventType: 'ORDER_STATUS_CHANGED',
         status: targetStatus,
         timestamp: new Date().toISOString(),
         actor: 'admin',
@@ -315,7 +399,7 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
 
       // 2.3 Record server-side append-only audit trail atomically
       const auditRef = adminDb.collection('audit_logs').doc();
-      transaction.set(auditRef, {
+      const auditPayload = cleanFirestorePayload({
         action: targetStatus === 'collected' ? 'ORDER_COLLECTED' : targetStatus === 'cancelled' ? 'ORDER_CANCELLED' : 'ORDER_STATUS_CHANGED',
         actor: {
           uid: req.adminUser?.uid || 'admin',
@@ -331,10 +415,11 @@ adminRouter.patch('/orders/:orderId/status', requireAdminAuth, async (req: Admin
         changes: [{ field: 'orderStatus', before: currentStatus, after: targetStatus }],
         metadata: {
           pickupVerified,
-          note: note || undefined,
+          ...(typeof note === 'string' && note.trim().length > 0 ? { note: note.trim() } : {}),
         },
         timestamp: FieldValue.serverTimestamp(),
       });
+      transaction.set(auditRef, auditPayload);
 
       return { success: true, orderId, updatedStatus: targetStatus };
     });
@@ -390,6 +475,7 @@ adminRouter.patch('/orders/:orderId/payment', requireAdminAuth, async (req: Admi
       }
 
       const historyEntry = {
+        eventType: 'PAYMENT_RECORDED',
         paymentStatus: 'paid',
         timestamp: new Date().toISOString(),
         actor: 'admin',
@@ -407,7 +493,7 @@ adminRouter.patch('/orders/:orderId/payment', requireAdminAuth, async (req: Admi
 
       // Record server-side append-only audit trail atomically in transaction
       const auditRef = adminDb.collection('audit_logs').doc();
-      transaction.set(auditRef, {
+      const auditPayload = cleanFirestorePayload({
         action: 'PAYMENT_RECORDED',
         actor: {
           uid: req.adminUser?.uid || 'admin',
@@ -421,8 +507,14 @@ adminRouter.patch('/orders/:orderId/payment', requireAdminAuth, async (req: Admi
         },
         summary: `In-person payment of ₹${Number(currentOrder.total || currentOrder.subtotal || 0) / 100} confirmed received at counter by ${adminEmail}.`,
         changes: [{ field: 'paymentStatus', before: currentOrder.paymentStatus || 'unpaid', after: 'paid' }],
+        metadata: {
+          totalPaise: currentOrder.total || currentOrder.subtotal || 0,
+          confirmedBy: adminEmail,
+          ...(typeof note === 'string' && note.trim().length > 0 ? { note: note.trim() } : {}),
+        },
         timestamp: FieldValue.serverTimestamp(),
       });
+      transaction.set(auditRef, auditPayload);
 
       return { success: true, orderId, paymentStatus: 'paid' };
     });

@@ -160,12 +160,12 @@ export function Navbar() {
         <Link
           to="/"
           id="nav-logo"
-          className="flex items-center gap-2 sm:gap-2.5 shrink-0 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg min-w-0"
+          className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 max-w-[160px] sm:max-w-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
         >
-          <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors shrink-0">
-            <Leaf size={16} className="text-white" />
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-2xs group-hover:bg-emerald-800 transition-colors shrink-0">
+            <Leaf size={15} className="text-white" />
           </div>
-          <span className="font-display font-bold text-base sm:text-xl text-slate-900 tracking-tight truncate">
+          <span className="font-display font-bold text-sm sm:text-xl text-slate-900 tracking-tight truncate">
             THANGAM<span className="text-emerald-700"> STORES</span>
           </span>
         </Link>
@@ -201,28 +201,28 @@ export function Navbar() {
         </ul>
 
         {/* Actions: Wishlist, Cart, User, Hamburger */}
-        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Wishlist Button - clean without count badge */}
           <Link
             to="/favorites"
             id="nav-wishlist-btn"
-            className="flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
+            className="hidden min-[420px]:flex items-center justify-center w-8 h-8 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
             aria-label="My Favourites"
           >
-            <Heart size={18} className="text-slate-700" />
+            <Heart size={16} className="text-slate-700" />
             <span className="text-xs font-semibold hidden lg:inline text-slate-700 ml-1.5">Favourites</span>
           </Link>
 
           <button
             id="nav-cart-btn"
             onClick={openCart}
-            className="relative flex items-center justify-center w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
+            className="relative flex items-center justify-center w-8 h-8 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 shrink-0"
             aria-label={`Shopping Cart with ${totalItems} items`}
           >
             <div className="relative flex items-center justify-center">
-              <ShoppingBag size={18} className="text-slate-700" />
+              <ShoppingBag size={16} className="text-slate-700" />
               {totalItems > 0 && (
-                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-emerald-700 text-white text-[9px] font-bold px-0.5 shadow-2xs">
+                <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] flex items-center justify-center rounded-full bg-emerald-700 text-white text-[8px] font-bold px-0.5 shadow-2xs">
                   {totalItems > 99 ? '99+' : totalItems}
                 </span>
               )}

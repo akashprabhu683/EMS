@@ -10,6 +10,7 @@ import {
   executeCreateOrder,
   executeTransitionOrderStatus,
   executeRecordPayment,
+  cleanFirestorePayload,
   PERMITTED_STATUS_TRANSITIONS,
   MAX_DISTINCT_ITEMS_PER_ORDER,
 } from "../lib/orders.js";
@@ -17,6 +18,23 @@ import {
 /* ═══════════════════════════════════════════════════════════════════════
    IN-MEMORY FIRESTORE TRANSACTION ENGINE FOR REALISTIC TESTING
    ═══════════════════════════════════════════════════════════════════════ */
+
+function assertNoUndefinedInFirestoreData(obj, path = "") {
+  if (obj === undefined) {
+    throw new Error(`Cannot use "undefined" as a Firestore value (found in field "${path || "root"}")`);
+  }
+  if (obj !== null && typeof obj === "object") {
+    for (const [key, val] of Object.entries(obj)) {
+      const fieldPath = path ? `${path}.${key}` : key;
+      if (val === undefined) {
+        throw new Error(`Cannot use "undefined" as a Firestore value (found in field "${fieldPath}")`);
+      }
+      if (typeof val === "object" && val !== null) {
+        assertNoUndefinedInFirestoreData(val, fieldPath);
+      }
+    }
+  }
+}
 
 class MockFirestore {
   constructor() {
@@ -29,6 +47,7 @@ class MockFirestore {
   }
 
   _setDoc(coll, id, data) {
+    assertNoUndefinedInFirestoreData(data);
     if (!this.store.has(coll)) this.store.set(coll, new Map());
     const collMap = this.store.get(coll);
     const existing = collMap.get(id);
@@ -137,7 +156,17 @@ class MockFirestore {
           } else if (w.type === "update") {
             const existing = this._getDoc(w.coll, w.id);
             if (!existing) throw new Error(`Cannot update non-existent document ${w.coll}/${w.id}`);
-            const merged = { ...existing.data, ...w.data };
+            const merged = { ...existing.data };
+            for (const [k, v] of Object.entries(w.data)) {
+              if (v && v.constructor && v.constructor.name === "ArrayUnionTransform" && Array.isArray(v.elements)) {
+                const currentArr = Array.isArray(merged[k]) ? [...merged[k]] : [];
+                merged[k] = [...currentArr, ...v.elements];
+              } else if (v && v.constructor && v.constructor.name === "ServerTimestampTransform") {
+                merged[k] = new Date().toISOString();
+              } else {
+                merged[k] = v;
+              }
+            }
             this._setDoc(w.coll, w.id, merged);
           } else if (w.type === "delete") {
             this._deleteDoc(w.coll, w.id);
@@ -977,4 +1006,172 @@ test("24. Order cancellation automatically restores catalog stock atomically", a
   assert.equal(db._getDoc("products", "prod_1").data.stock, 10, "Stock must be fully restored upon cancellation");
   assert.equal(db._getDoc("orders", orderRes.orderId).data.inventoryRestored, true);
 });
+
+test("25. cleanFirestorePayload strips nested undefined while preserving null, 0, false, Date, and empty strings", () => {
+  const now = new Date();
+  const input = {
+    validStr: "hello",
+    emptyStr: "",
+    zeroNum: 0,
+    falseBool: false,
+    nullVal: null,
+    undefVal: undefined,
+    nested: {
+      innerOk: 123,
+      innerUndef: undefined,
+      deep: {
+        note: undefined,
+        actual: "remedy",
+      },
+    },
+    arr: [
+      { id: "1", note: undefined },
+      { id: "2", active: true },
+    ],
+    timestamp: now,
+  };
+
+  const cleaned = cleanFirestorePayload(input);
+
+  assert.equal(cleaned.validStr, "hello");
+  assert.equal(cleaned.emptyStr, "");
+  assert.equal(cleaned.zeroNum, 0);
+  assert.equal(cleaned.falseBool, false);
+  assert.equal(cleaned.nullVal, null);
+  assert.equal("undefVal" in cleaned, false);
+  assert.equal("innerUndef" in cleaned.nested, false);
+  assert.equal(cleaned.nested.innerOk, 123);
+  assert.equal("note" in cleaned.nested.deep, false);
+  assert.equal(cleaned.nested.deep.actual, "remedy");
+  assert.equal("note" in cleaned.arr[0], false);
+  assert.equal(cleaned.arr[0].id, "1");
+  assert.equal(cleaned.timestamp, now);
+});
+
+test("26. executeRecordPayment succeeds without note and does not throw undefined Firestore error", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_pay_no_note",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // Advance order to ready_for_pickup
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "accepted",
+  });
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "preparing",
+  });
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "ready_for_pickup",
+  });
+
+  // Call executeRecordPayment with note omitted / undefined
+  const payRes = await executeRecordPayment({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    note: undefined,
+  });
+
+  assert.equal(payRes.success, true);
+  assert.equal(payRes.paymentStatus, "paid");
+
+  const orderDoc = db._getDoc("orders", orderRes.orderId).data;
+  assert.equal(orderDoc.paymentStatus, "paid");
+
+  // Check last status history entry
+  const lastHistory = orderDoc.statusHistory[orderDoc.statusHistory.length - 1];
+  assert.equal(lastHistory.eventType, "PAYMENT_RECORDED");
+  assert.equal(lastHistory.note, "In-person payment (Cash / UPI) confirmed received at dispensary counter.");
+
+  // Check audit log entry
+  const auditLogs = Array.from(db.store.get("audit_logs").values()).map(e => e.data);
+  const paymentAudit = auditLogs.find(a => a.action === "PAYMENT_RECORDED" && a.target.id === orderRes.orderId);
+  assert.ok(paymentAudit, "Audit record for PAYMENT_RECORDED must exist");
+  assert.equal("note" in paymentAudit.metadata, false, "metadata.note must not be present if note was undefined");
+});
+
+test("27. executeRecordPayment is idempotent on retries and prevents duplicate payment records", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_pay_retry",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  // First payment recording
+  const firstPay = await executeRecordPayment({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    note: "Paid in cash at counter",
+  });
+  assert.equal(firstPay.success, true);
+
+  const historyLengthAfterFirst = db._getDoc("orders", orderRes.orderId).data.statusHistory.length;
+  const auditCountAfterFirst = Array.from(db.store.get("audit_logs").values()).filter(
+    e => e.data.action === "PAYMENT_RECORDED" && e.data.target.id === orderRes.orderId
+  ).length;
+  assert.equal(auditCountAfterFirst, 1);
+
+  // Retry the exact same payment recording
+  const retryPay = await executeRecordPayment({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    note: "Paid in cash at counter",
+  });
+  assert.equal(retryPay.success, true);
+  assert.equal(retryPay.alreadyPaid, true);
+
+  const historyLengthAfterRetry = db._getDoc("orders", orderRes.orderId).data.statusHistory.length;
+  const auditCountAfterRetry = Array.from(db.store.get("audit_logs").values()).filter(
+    e => e.data.action === "PAYMENT_RECORDED" && e.data.target.id === orderRes.orderId
+  ).length;
+
+  assert.equal(historyLengthAfterRetry, historyLengthAfterFirst, "History length must not increase on retry");
+  assert.equal(auditCountAfterRetry, 1, "Audit log must not be duplicated on retry");
+});
+
+test("28. executeTransitionOrderStatus includes explicit eventType: ORDER_STATUS_CHANGED", async () => {
+  const db = new MockFirestore();
+  seedDatabase(db);
+
+  const orderRes = await executeCreateOrder(db, "customer_alice", {
+    pickupContact: validPickupContact,
+    idempotencyKey: "idem_status_event_type",
+  });
+
+  const adminCaller = { uid: "admin_bob", email: "bob@ems.dispensary", isAdmin: true };
+
+  await executeTransitionOrderStatus({
+    db,
+    caller: adminCaller,
+    orderId: orderRes.orderId,
+    newStatus: "accepted",
+  });
+
+  const orderDoc = db._getDoc("orders", orderRes.orderId).data;
+  const acceptedEntry = orderDoc.statusHistory.find(h => h.status === "accepted");
+  assert.ok(acceptedEntry);
+  assert.equal(acceptedEntry.eventType, "ORDER_STATUS_CHANGED");
+});
+
 

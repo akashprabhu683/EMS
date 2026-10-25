@@ -15,6 +15,35 @@ export const FREE_SHIPPING_THRESHOLD_PAISE = 0; // Click & Collect is free picku
 export const STANDARD_SHIPPING_FEE_PAISE = 0; // No delivery fee for store pickup
 export const COD_FEE_PAISE = 0; // No COD handling fee
 
+/**
+ * Recursively cleans an object by stripping any keys with value `undefined`.
+ * Preserves `null`, `false`, `0`, `""`, Date, and FieldValue instances.
+ * Prevents Firestore Admin SDK crash: Cannot use "undefined" as a Firestore value.
+ */
+export function cleanFirestorePayload<T>(val: T): T {
+  if (val === null || val === undefined || typeof val !== 'object') {
+    return val;
+  }
+  if (
+    val instanceof Date ||
+    val instanceof FieldValue ||
+    (val as any).constructor?.name === 'FieldValue' ||
+    (val as any).constructor?.name?.includes('Transform')
+  ) {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val.map(cleanFirestorePayload) as unknown as T;
+  }
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(val as Record<string, any>)) {
+    if (v !== undefined) {
+      result[k] = cleanFirestorePayload(v);
+    }
+  }
+  return result as T;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    TYPES & CONTRACTS
    ═══════════════════════════════════════════════════════════════════════ */
@@ -44,9 +73,9 @@ export interface OrderItemSnapshot {
   unitPrice: number; // in paise
   quantity: number;
   lineTotal: number; // in paise
-  selectedColor?: string;
-  selectedSize?: string;
-  imageUrl?: string;
+  selectedColor?: string | null;
+  selectedSize?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface CreateOrderResponse {
@@ -497,9 +526,9 @@ export async function executeCreateOrder(
         unitPrice: price,
         quantity: cartItem.quantity,
         lineTotal,
-        selectedColor: cartItem.selectedColor,
-        selectedSize: cartItem.selectedSize,
-        imageUrl,
+        selectedColor: cartItem.selectedColor || null,
+        selectedSize: cartItem.selectedSize || null,
+        imageUrl: imageUrl || null,
       });
 
       stockUpdates.push({
@@ -520,7 +549,7 @@ export async function executeCreateOrder(
     const orderRef = db.collection("orders").doc();
     const orderId = orderRef.id;
     const now = FieldValue.serverTimestamp();
-    const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Pin: 560001";
+    const DEFAULT_PICKUP_LOCATION = "EMS Herbal & Ayurvedic Dispensary, Main Road Health Complex (Opp. City Wellness Center), Postal Code: 560001";
     const pickupCode = crypto.randomInt(100000, 1000000).toString();
 
     const orderRecord = {
@@ -575,7 +604,7 @@ export async function executeCreateOrder(
        ───────────────────────────────────────────────────────────── */
 
     // 3.1 Create immutable order snapshot
-    transaction.set(orderRef, orderRecord);
+    transaction.set(orderRef, cleanFirestorePayload(orderRecord));
 
     // 3.2 Atomically decrement product stock
     for (const update of stockUpdates) {
@@ -810,6 +839,7 @@ export async function executeTransitionOrderStatus(
     const actorRole = caller.isAdmin ? "admin" : "customer";
     const actorId = caller.email || caller.uid;
     const historyEntry = {
+      eventType: "ORDER_STATUS_CHANGED",
       status: newStatus,
       timestamp: new Date().toISOString(),
       actor: actorRole,
@@ -852,7 +882,7 @@ export async function executeTransitionOrderStatus(
       auditSummary = `Order #${orderId.slice(-6)} was cancelled by ${actorId}. Reason: ${note || "Cancelled"}.`;
     }
 
-    transaction.set(auditRef, {
+    const auditPayload = cleanFirestorePayload({
       action: auditAction,
       actor: {
         uid: caller.uid,
@@ -870,10 +900,12 @@ export async function executeTransitionOrderStatus(
       ],
       metadata: {
         pickupVerified,
-        note: note || undefined,
+        note: (typeof note === "string" && note.trim().length > 0) ? note.trim() : undefined,
       },
       timestamp: FieldValue.serverTimestamp(),
     });
+
+    transaction.set(auditRef, auditPayload);
 
     return {
       success: true,
@@ -916,6 +948,7 @@ export interface RecordPaymentResult {
   paymentStatus: "paid";
   paidAt: string;
   paidConfirmedBy: string;
+  alreadyPaid?: boolean;
 }
 
 /**
@@ -960,10 +993,12 @@ export async function executeRecordPayment(
         paymentStatus: "paid",
         paidAt: order.paidAt?.toDate ? order.paidAt.toDate().toISOString() : nowIso,
         paidConfirmedBy: order.paidConfirmedBy || actorId,
+        alreadyPaid: true,
       };
     }
 
     const historyEntry = {
+      eventType: "PAYMENT_RECORDED",
       paymentStatus: "paid",
       timestamp: nowIso,
       actor: "admin",
@@ -981,7 +1016,7 @@ export async function executeRecordPayment(
 
     // Append-only server audit log
     const auditRef = db.collection("audit_logs").doc();
-    transaction.set(auditRef, {
+    const auditPayload = cleanFirestorePayload({
       action: "PAYMENT_RECORDED",
       actor: {
         uid: caller.uid,
@@ -1000,10 +1035,12 @@ export async function executeRecordPayment(
       metadata: {
         totalPaise: order.total || 0,
         paidAt: nowIso,
-        note: note || undefined,
+        note: (typeof note === "string" && note.trim().length > 0) ? note.trim() : undefined,
       },
       timestamp: FieldValue.serverTimestamp(),
     });
+
+    transaction.set(auditRef, auditPayload);
 
     return {
       success: true,

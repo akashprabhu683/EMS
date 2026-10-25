@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { collection, query, orderBy, limit, getDocs, startAfter, doc, getDoc, where } from 'firebase/firestore';
-import { functions, db } from '../firebase';
+import { functions, db, auth } from '../firebase';
 import type { AuditLogEntry } from '../types';
 
 export interface AuditQueryOptions {
@@ -11,7 +11,8 @@ export interface AuditQueryOptions {
 }
 
 /**
- * Loads audit logs through the trusted Cloud Function callable with graceful fallback to Firestore.
+ * Loads audit logs through the trusted Cloud Function callable or Express backend API,
+ * with direct Firestore query fallback.
  */
 export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ logs: AuditLogEntry[]; hasMore: boolean }> {
   const pageSize = options.pageSize || 30;
@@ -32,11 +33,53 @@ export async function getAuditTrail(options: AuditQueryOptions = {}): Promise<{ 
         hasMore: result.data.logs.length >= pageSize,
       };
     }
-  } catch (fnErr) {
-    console.warn('[adminAuditService] getAuditLogs callable unavailable, falling back to direct Firestore read:', fnErr);
+  } catch (fnErr: any) {
+    console.warn('[adminAuditService] getAuditLogs callable unavailable, checking Express API:', fnErr);
+    if (fnErr?.code === 'permission-denied') {
+      throw fnErr;
+    }
   }
 
-  // 2. Direct Firestore fallback (protected by Firestore security rules for admin)
+  // 2. Try Express backend API (protected by requireAdminAuth and Firebase Admin SDK)
+  const adminBackendUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_ADMIN_API_URL;
+  if (adminBackendUrl) {
+    try {
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const params = new URLSearchParams();
+      if (options.action) params.set('action', options.action);
+      if (options.targetCollection) params.set('targetCollection', options.targetCollection);
+      if (options.pageSize) params.set('pageSize', String(options.pageSize));
+      if (options.lastDocId) params.set('lastDocId', options.lastDocId);
+
+      const res = await fetch(`${adminBackendUrl.replace(/\/$/, '')}/api/admin/audit-logs?${params.toString()}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          logs: data.logs || [],
+          hasMore: Boolean(data.hasMore),
+        };
+      }
+      if (res.status === 403 || res.status === 401) {
+        const errJson = await res.json().catch(() => ({}));
+        const err: any = new Error(errJson.error || 'Permission denied: Admin privilege required to view audit trail.');
+        err.code = 'permission-denied';
+        throw err;
+      }
+    } catch (apiErr: any) {
+      if (apiErr?.code === 'permission-denied') {
+        throw apiErr;
+      }
+      console.warn('[adminAuditService] Express backend audit API unavailable, checking direct Firestore read:', apiErr);
+    }
+  }
+
+  // 3. Direct Firestore fallback (protected by Firestore security rules for admin)
   try {
     let q = query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'));
 
