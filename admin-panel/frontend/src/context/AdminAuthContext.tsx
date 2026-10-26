@@ -18,16 +18,25 @@ import {
 } from '../services/adminNotificationService';
 
 export const PRIMARY_SUPERADMIN_EMAIL = 'akashprabhu0302@gmail.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ems-admin-backend.onrender.com';
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+interface PendingInviteInfo {
+  token?: string;
+  role?: string;
+  invitedBy?: string;
+}
 
 interface AdminAuthContextType {
   user: AdminUser | null;
   rawUser: User | null;
   isAdmin: boolean;
+  isSuperadmin: boolean;
   isLoading: boolean;
   isRevoked: boolean;
+  pendingInvitation: PendingInviteInfo | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -40,31 +49,41 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [rawUser, setRawUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRevoked, setIsRevoked] = useState(false);
+  const [pendingInvitation, setPendingInvitation] = useState<PendingInviteInfo | null>(null);
 
   const verifyAdminClaims = useCallback(async (firebaseUser: User): Promise<boolean> => {
     try {
       const email = (firebaseUser.email || '').toLowerCase().trim();
       const isEmailVerified = Boolean(firebaseUser.emailVerified);
-      const isSuperadmin = isEmailVerified && email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+      const isPrimaryOwner = isEmailVerified && email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
 
       // Force refresh token to obtain latest claims
       let tokenResult = await firebaseUser.getIdTokenResult(true);
-      let hasAdminClaim = isSuperadmin || Boolean(tokenResult.claims.admin);
+      let isSuper = isPrimaryOwner || Boolean(tokenResult.claims.superadmin);
+      let hasAdminClaim = isSuper || Boolean(tokenResult.claims.admin);
+      let currentRole: 'superadmin' | 'admin' = isSuper ? 'superadmin' : 'admin';
 
-      // Check canonical Firestore admins collection
+      // 1. Check canonical Firestore admins collection
       try {
         const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
         if (adminDoc.exists()) {
           const data = adminDoc.data();
-          if (data?.isActive !== false || isSuperadmin) {
+          if (data?.role === 'superadmin') {
+            isSuper = true;
+            currentRole = 'superadmin';
+          }
+          if (data?.isActive !== false || isSuper) {
             hasAdminClaim = true;
           } else {
             hasAdminClaim = false;
           }
-        } else if (isSuperadmin) {
+        } else if (isPrimaryOwner) {
           hasAdminClaim = true;
+          isSuper = true;
+          currentRole = 'superadmin';
           // Check if an admin record for this email already exists before auto-creating
           try {
             const querySnap = await getDocs(query(collection(db, 'admins'), where('email', '==', email)));
@@ -88,38 +107,108 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
           const querySnap = await getDocs(query(collection(db, 'admins'), where('email', '==', email)));
           if (!querySnap.empty && querySnap.docs[0].data()?.isActive !== false) {
             hasAdminClaim = true;
-          } else if (!isSuperadmin) {
-            hasAdminClaim = false;
+            const data = querySnap.docs[0].data();
+            if (data?.role === 'superadmin') {
+              isSuper = true;
+              currentRole = 'superadmin';
+            }
           }
-        } else {
-          hasAdminClaim = false;
         }
       } catch (docErr) {
-        console.warn('Checking admins collection in Firestore failed:', docErr);
-        if (isSuperadmin) {
+        console.warn('Checking admins collection in Firestore note:', docErr);
+        if (isSuper) {
           hasAdminClaim = true;
         }
       }
 
+      // 2. Check for pending invitation if user is authenticated but not yet recognized as admin
+      if (!hasAdminClaim && email) {
+        try {
+          const inviteSnap = await getDoc(doc(db, 'admin_invitations', email));
+          if (inviteSnap.exists()) {
+            const invData = inviteSnap.data();
+            if (invData?.status === 'pending') {
+              const inviteInfo: PendingInviteInfo = {
+                token: invData.token || undefined,
+                role: invData.role || 'admin',
+                invitedBy: invData.invitedBy || 'Admin',
+              };
+              setPendingInvitation(inviteInfo);
+
+              // Auto-activate invitation seamlessly if token is available
+              const invToken = invData.token || invData.tokenHash;
+              if (invToken) {
+                try {
+                  const idTok = await firebaseUser.getIdToken();
+                  const acceptRes = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/api/admin/invitations/accept`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${idTok}`,
+                    },
+                    body: JSON.stringify({ token: invToken }),
+                  });
+                  if (acceptRes.ok) {
+                    tokenResult = await firebaseUser.getIdTokenResult(true);
+                    hasAdminClaim = true;
+                    if (invData.role === 'superadmin') {
+                      isSuper = true;
+                      currentRole = 'superadmin';
+                    }
+                    setPendingInvitation(null);
+                  }
+                } catch (autoErr) {
+                  console.warn('[AdminAuthContext] Auto-activation notice:', autoErr);
+                }
+              }
+            }
+          }
+        } catch (invErr) {
+          console.warn('[AdminAuthContext] Pending invite lookup note:', invErr);
+        }
+      } else if (hasAdminClaim) {
+        setPendingInvitation(null);
+      }
+
+      // 3. Check explicit real-time revocation marker
+      let isExplicitlyRevoked = false;
+      if (!isSuper) {
+        try {
+          const revDoc = await getDoc(doc(db, 'admin_revocations', firebaseUser.uid));
+          if (revDoc.exists()) {
+            isExplicitlyRevoked = true;
+            hasAdminClaim = false;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       setIsAdmin(hasAdminClaim);
-      setIsRevoked(!hasAdminClaim);
+      setIsSuperadmin(isSuper);
+      setIsRevoked(isExplicitlyRevoked);
       setUser({
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
         isAdmin: hasAdminClaim,
+        isSuperadmin: isSuper,
+        role: currentRole,
       });
       return hasAdminClaim;
     } catch (err) {
       console.error('Failed to verify admin custom claims:', err);
       const isSuper = Boolean(firebaseUser.emailVerified) && (firebaseUser.email || '').toLowerCase().trim() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
       setIsAdmin(isSuper);
-      setIsRevoked(!isSuper);
+      setIsSuperadmin(isSuper);
+      setIsRevoked(false);
       setUser({
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
         isAdmin: isSuper,
+        isSuperadmin: isSuper,
+        role: isSuper ? 'superadmin' : 'admin',
       });
       return isSuper;
     }
@@ -149,7 +238,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
       if (firebaseUser) {
         const hasAdminAccess = await verifyAdminClaims(firebaseUser);
-        const isSuperadmin = Boolean(firebaseUser.emailVerified) && (firebaseUser.email || '').toLowerCase().trim() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+        const email = (firebaseUser.email || '').toLowerCase().trim();
+        const isSuperadminCaller = Boolean(firebaseUser.emailVerified) && email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
 
         // If authorized as an administrator, bind native FCM device registration
         if (hasAdminAccess) {
@@ -175,29 +265,25 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         adminDocUnsub = onSnapshot(
           doc(db, 'admins', firebaseUser.uid),
           (snapshot) => {
-            if (isSuperadmin) {
+            if (isSuperadminCaller) {
               setIsAdmin(true);
+              setIsSuperadmin(true);
               setIsRevoked(false);
-              setUser((prev) => (prev ? { ...prev, isAdmin: true } : null));
+              setUser((prev) => (prev ? { ...prev, isAdmin: true, isSuperadmin: true, role: 'superadmin' } : null));
               return;
             }
-            if (!snapshot.exists()) {
-              setIsAdmin(false);
-              setIsRevoked(true);
-              setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
-            } else {
-              const active = snapshot.data()?.isActive !== false;
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              const active = data?.isActive !== false;
+              const isSuper = data?.role === 'superadmin';
               setIsAdmin(active);
+              setIsSuperadmin(isSuper);
               setIsRevoked(!active);
-              setUser((prev) => (prev ? { ...prev, isAdmin: active } : null));
+              setUser((prev) => (prev ? { ...prev, isAdmin: active, isSuperadmin: isSuper, role: data?.role } : null));
             }
           },
           (error) => {
-            if (!isSuperadmin && error.code === 'permission-denied') {
-              setIsAdmin(false);
-              setIsRevoked(true);
-              setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
-            }
+            console.warn('[AdminAuthContext] Admin doc listener note:', error.message);
           }
         );
 
@@ -205,7 +291,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         revocationDocUnsub = onSnapshot(
           doc(db, 'admin_revocations', firebaseUser.uid),
           (snapshot) => {
-            if (!isSuperadmin && snapshot.exists()) {
+            if (!isSuperadminCaller && snapshot.exists()) {
               setIsAdmin(false);
               setIsRevoked(true);
               setUser((prev) => (prev ? { ...prev, isAdmin: false } : null));
@@ -218,7 +304,9 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null);
         setIsAdmin(false);
+        setIsSuperadmin(false);
         setIsRevoked(false);
+        setPendingInvitation(null);
       }
       setIsLoading(false);
     });
@@ -292,8 +380,10 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         user,
         rawUser,
         isAdmin,
+        isSuperadmin,
         isLoading,
         isRevoked,
+        pendingInvitation,
         login,
         loginWithGoogle,
         logout,

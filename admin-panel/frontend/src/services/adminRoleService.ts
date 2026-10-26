@@ -16,6 +16,7 @@ export interface AdminInvitation {
   id: string;
   email: string;
   status: 'pending' | 'accepted';
+  role?: 'superadmin' | 'admin';
   invitedBy: string;
   invitedAt: string;
   expiresAt?: string | null;
@@ -126,6 +127,7 @@ export async function getAdminsAndInvitations(): Promise<{
       id: d.id,
       email: data.email || d.id,
       status: 'pending',
+      role: data.role || 'admin',
       invitedBy: data.invitedBy || 'Admin',
       invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : String(data.invitedAt || ''),
       expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,
@@ -138,19 +140,18 @@ export async function getAdminsAndInvitations(): Promise<{
 }
 
 /**
- * Grants admin role to an email address and dispatches an invitation.
+ * Grants admin or superadmin role to an email address and dispatches an invitation.
  */
-export async function grantAdmin(email: string): Promise<{
+export async function grantAdmin(
+  email: string,
+  role: 'superadmin' | 'admin' = 'admin'
+): Promise<{
   success: boolean;
   status: string;
   message: string;
   acceptUrl?: string;
+  role?: string;
 }> {
-  const currentEmail = auth.currentUser?.email?.toLowerCase().trim();
-  if (currentEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
-    throw new Error('Only the primary site owner (akashprabhu0302@gmail.com) has authority to grant admin roles.');
-  }
-
   const cleanEmail = email.trim().toLowerCase();
 
   // 1. Primary: Authoritative Express Backend API
@@ -159,7 +160,7 @@ export async function grantAdmin(email: string): Promise<{
     const res = await fetch(`${API_BASE_URL}/api/admin/invitations`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ email: cleanEmail }),
+      body: JSON.stringify({ email: cleanEmail, role }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -178,10 +179,10 @@ export async function grantAdmin(email: string): Promise<{
   // 2. Secondary: Cloud Function Fallback
   try {
     const grantFn = httpsCallable<
-      { email: string },
+      { email: string; role?: string },
       { success: boolean; status: string; message: string; acceptUrl?: string }
     >(functions, 'grantAdminRole');
-    const result = await grantFn({ email: cleanEmail });
+    const result = await grantFn({ email: cleanEmail, role });
     if (result.data) {
       return result.data;
     }
@@ -198,7 +199,7 @@ export async function grantAdmin(email: string): Promise<{
 export async function verifyInvitation(
   token: string,
   email?: string
-): Promise<{ valid: boolean; email?: string; invitedBy?: string; reason?: string }> {
+): Promise<{ valid: boolean; email?: string; role?: 'superadmin' | 'admin'; invitedBy?: string; reason?: string }> {
   // 1. Primary: Express Backend API
   try {
     const url = new URL(`${API_BASE_URL}/api/admin/invitations/verify`);
@@ -284,11 +285,6 @@ export async function revokeAdmin(uid?: string, email?: string): Promise<{ succe
   // Protect akashprabhu0302@gmail.com from ever being revoked
   if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
     throw new Error('The primary site owner (akashprabhu0302@gmail.com) cannot be revoked.');
-  }
-
-  // Ensure only the primary site owner can perform revocations
-  if (currentEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
-    throw new Error('Only the primary site owner (akashprabhu0302@gmail.com) has authority to revoke administrator accounts.');
   }
 
   if (uid && uid === auth.currentUser?.uid) {

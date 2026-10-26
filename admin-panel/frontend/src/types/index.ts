@@ -50,6 +50,8 @@ export interface AdminUser {
   email: string | null;
   displayName: string | null;
   isAdmin: boolean;
+  isSuperadmin?: boolean;
+  role?: 'superadmin' | 'admin';
 }
 
 export type AuditAction =

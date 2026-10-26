@@ -9,7 +9,10 @@ service cloud.firestore {
     }
 
     function isSuperadmin() {
-      return isAuthenticated() && request.auth.token.email.lower() == 'akashprabhu0302@gmail.com';
+      return isAuthenticated() && (
+        request.auth.token.email.lower() == 'akashprabhu0302@gmail.com' ||
+        request.auth.token.superadmin == true
+      );
     }
 
     function isRevoked() {

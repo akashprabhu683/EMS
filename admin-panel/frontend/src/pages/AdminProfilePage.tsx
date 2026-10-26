@@ -113,12 +113,24 @@ export function AdminProfilePage() {
 
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-1">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Role Authority
+              Role Authority &amp; Tier
             </span>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span
+                className={`w-2 h-2 rounded-full animate-pulse ${
+                  user?.email?.toLowerCase().trim() === 'akashprabhu0302@gmail.com'
+                    ? 'bg-amber-500'
+                    : user?.isSuperadmin || user?.role === 'superadmin'
+                    ? 'bg-purple-500'
+                    : 'bg-emerald-500'
+                }`}
+              />
               <span className="text-xs font-bold text-slate-800">
-                Dispensary Administrator (Claims: admin=true)
+                {user?.email?.toLowerCase().trim() === 'akashprabhu0302@gmail.com'
+                  ? 'Primary Site Owner (Root Authority)'
+                  : user?.isSuperadmin || user?.role === 'superadmin'
+                  ? 'Superadministrator (Claims: admin=true, superadmin=true)'
+                  : 'Dispensary Administrator (Claims: admin=true)'}
               </span>
             </div>
           </div>

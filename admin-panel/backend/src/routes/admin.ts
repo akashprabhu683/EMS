@@ -42,6 +42,9 @@ export interface AdminAuthenticatedRequest extends Request {
     uid: string;
     email?: string;
     claims: Record<string, any>;
+    isSuperadmin?: boolean;
+    isPrimarySuperadmin?: boolean;
+    role?: 'superadmin' | 'admin';
   };
 }
 
@@ -65,7 +68,16 @@ export async function requireAdminAuth(
     const decoded = await adminAuth.verifyIdToken(token);
     const email = (decoded.email || '').toLowerCase().trim();
     const isEmailVerified = Boolean(decoded.email_verified);
-    const isSuperadmin = isEmailVerified && email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+    const isPrimarySuperadmin = isEmailVerified && email === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+
+    // Check canonical /admins/{uid} doc
+    const adminDoc = await adminDb.collection('admins').doc(decoded.uid).get();
+    const adminDocData = adminDoc.exists ? adminDoc.data() : null;
+
+    const isSuperadmin =
+      isPrimarySuperadmin ||
+      Boolean(decoded.superadmin) ||
+      (adminDocData?.role === 'superadmin' && adminDocData?.isActive !== false);
 
     // 1. Real-time revocation check: Revoked administrators are strictly blocked (superadmin immune)
     if (!isSuperadmin) {
@@ -78,9 +90,8 @@ export async function requireAdminAuth(
 
     // 2. Real-time active admin check in /admins/{uid}
     let hasAdmin = isSuperadmin || Boolean(decoded.admin);
-    const adminDoc = await adminDb.collection('admins').doc(decoded.uid).get();
     if (adminDoc.exists) {
-      if (adminDoc.data()?.isActive === false && !isSuperadmin) {
+      if (adminDocData?.isActive === false && !isSuperadmin) {
         res.status(403).json({ error: 'Forbidden: Admin privilege has been deactivated.' });
         return;
       }
@@ -97,7 +108,7 @@ export async function requireAdminAuth(
       return;
     }
 
-    if (isSuperadmin && !adminDoc.exists) {
+    if (isPrimarySuperadmin && !adminDoc.exists) {
       // Prevent creating duplicate admin documents if an admin record for this email already exists
       const existingEmailSnap = await adminDb.collection('admins').where('email', '==', email).limit(1).get();
       if (existingEmailSnap.empty) {
@@ -119,6 +130,9 @@ export async function requireAdminAuth(
       uid: decoded.uid,
       email: decoded.email,
       claims: decoded,
+      isSuperadmin,
+      isPrimarySuperadmin,
+      role: isSuperadmin ? 'superadmin' : (adminDocData?.role || 'admin'),
     };
     next();
   } catch (err: any) {
@@ -662,6 +676,7 @@ adminRouter.get('/invitations', requireAdminAuth, async (_req: AdminAuthenticate
         id: doc.id,
         email: data.email || doc.id,
         status: 'pending',
+        role: data.role || 'admin',
         invitedBy: data.invitedBy || 'Admin',
         invitedAt: data.invitedAt?.toDate?.() ? data.invitedAt.toDate().toISOString() : data.invitedAt || null,
         expiresAt: data.expiresAt?.toDate?.() ? data.expiresAt.toDate().toISOString() : data.expiresAt || null,
@@ -681,14 +696,15 @@ adminRouter.get('/invitations', requireAdminAuth, async (_req: AdminAuthenticate
  */
 adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
   const callerEmail = req.adminUser?.email?.toLowerCase().trim();
-  if (callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+  const isSuperadmin = req.adminUser?.isSuperadmin;
+  if (!isSuperadmin) {
     res.status(403).json({
-      error: 'Only the primary site owner (akashprabhu0302@gmail.com) has authority to grant admin roles.',
+      error: 'Only superadministrators have authority to grant administrator or superadministrator roles.',
     });
     return;
   }
 
-  const { email } = req.body;
+  const { email, role } = req.body;
   if (!email || typeof email !== 'string') {
     res.status(400).json({ error: 'Valid email address is required.' });
     return;
@@ -696,6 +712,7 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
 
   const cleanEmail = email.trim().toLowerCase();
   const callerUid = req.adminUser?.uid || null;
+  const targetRole: 'superadmin' | 'admin' = role === 'superadmin' ? 'superadmin' : 'admin';
 
   try {
     const token = randomBytes(32).toString('hex');
@@ -704,11 +721,12 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
     const portalUrl = getCanonicalPortalUrl();
     const acceptUrl = `${portalUrl}/accept-invite?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
 
-    // Store only tokenHash and metadata in Firestore (never plaintext token or raw acceptUrl)
+    // Store only tokenHash, role, and metadata in Firestore
     await adminDb.collection('admin_invitations').doc(cleanEmail).set({
       email: cleanEmail,
       tokenHash,
       status: 'pending',
+      role: targetRole,
       invitedBy: callerEmail,
       invitedByUid: callerUid,
       invitedAt: FieldValue.serverTimestamp(),
@@ -723,15 +741,16 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
       actor: {
         uid: callerUid || 'superadmin',
         email: callerEmail,
-        role: 'superadmin',
+        role: req.adminUser?.role || 'superadmin',
       },
       target: {
         collection: 'admin_invitations',
         id: cleanEmail,
         label: cleanEmail,
       },
-      summary: `Admin invitation created for ${cleanEmail} by ${callerEmail}.`,
+      summary: `${targetRole === 'superadmin' ? 'Superadmin' : 'Admin'} invitation created for ${cleanEmail} by ${callerEmail}.`,
       metadata: {
+        role: targetRole,
         emailSent: false,
         expiresAt: expiresAt.toISOString(),
       },
@@ -741,9 +760,10 @@ adminRouter.post('/invitations', requireAdminAuth, async (req: AdminAuthenticate
     res.json({
       success: true,
       status: 'invited',
+      role: targetRole,
       acceptUrl,
       emailSent: false,
-      message: `Admin invitation link created for ${cleanEmail}.`,
+      message: `${targetRole === 'superadmin' ? 'Superadmin' : 'Admin'} invitation link created for ${cleanEmail}.`,
     });
   } catch (err: any) {
     console.error('Failed to create invitation:', err);
@@ -831,6 +851,7 @@ adminRouter.get('/invitations/verify', async (req: Request, res: Response): Prom
     res.json({
       valid: true,
       email: data.email,
+      role: data.role || 'admin',
       invitedBy: data.invitedBy || 'EMS Administrator',
       status: 'pending',
     });
@@ -875,7 +896,7 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
     const inviteDocRef = adminDb.collection('admin_invitations').doc(userEmail);
     const adminDocRef = adminDb.collection('admins').doc(uid);
 
-    await adminDb.runTransaction(async (transaction) => {
+    const { assignedRole } = await adminDb.runTransaction(async (transaction) => {
       const inviteSnap = await transaction.get(inviteDocRef);
       if (!inviteSnap.exists) {
         throw new Error(`No invitation found for ${userEmail}. Please sign in with the invited email address.`);
@@ -901,6 +922,8 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
         }
       }
 
+      const roleToAssign: 'superadmin' | 'admin' = data.role === 'superadmin' ? 'superadmin' : 'admin';
+
       transaction.update(inviteDocRef, {
         status: 'accepted',
         acceptedAt: FieldValue.serverTimestamp(),
@@ -912,7 +935,7 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
         email: userEmail,
         displayName: decoded.name || userEmail.split('@')[0],
         photoURL: decoded.picture || null,
-        role: 'admin',
+        role: roleToAssign,
         grantedBy: data.invitedBy || 'invitation',
         grantedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -924,20 +947,23 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
         actor: {
           uid,
           email: userEmail,
-          role: 'admin',
+          role: roleToAssign,
         },
         target: {
           collection: 'admins',
           id: uid,
           label: userEmail,
         },
-        summary: `Admin role successfully claimed and activated for ${userEmail}.`,
+        summary: `${roleToAssign === 'superadmin' ? 'Superadmin' : 'Admin'} role successfully claimed and activated for ${userEmail}.`,
         metadata: {
           name: decoded.name || userEmail.split('@')[0],
+          role: roleToAssign,
           grantedBy: data.invitedBy || 'invitation',
         },
         timestamp: FieldValue.serverTimestamp(),
       });
+
+      return { assignedRole: roleToAssign };
     });
 
     // Grant Firebase Auth custom claim
@@ -945,11 +971,13 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
     await adminAuth.setCustomUserClaims(uid, {
       ...(userRecord.customClaims || {}),
       admin: true,
+      ...(assignedRole === 'superadmin' ? { superadmin: true } : {}),
     });
 
     res.json({
       success: true,
-      message: 'Admin role activated successfully! You now have full administrator access.',
+      role: assignedRole,
+      message: `${assignedRole === 'superadmin' ? 'Superadmin' : 'Admin'} role activated successfully! You now have full access.`,
     });
   } catch (err: any) {
     console.error('Failed to accept invitation:', err);
@@ -963,9 +991,10 @@ adminRouter.post('/invitations/accept', async (req: Request, res: Response): Pro
  */
 adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAuthenticatedRequest, res: Response): Promise<void> => {
   const callerEmail = req.adminUser?.email?.toLowerCase().trim();
-  if (callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+  const isSuperadmin = req.adminUser?.isSuperadmin;
+  if (!isSuperadmin) {
     res.status(403).json({
-      error: 'Only the primary site owner (akashprabhu0302@gmail.com) has authority to revoke administrator accounts.',
+      error: 'Only superadministrators have authority to revoke administrator accounts.',
     });
     return;
   }
@@ -973,6 +1002,7 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
   const { email } = req.params;
   const cleanEmail = email.trim().toLowerCase();
 
+  // Primary superadmin owner can NEVER be revoked by anyone
   if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
     res.status(403).json({
       error: 'The primary site owner (akashprabhu0302@gmail.com) cannot be revoked.',
@@ -980,6 +1010,7 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
     return;
   }
 
+  // Prevent self-revocation
   if (cleanEmail === callerEmail) {
     res.status(400).json({ error: 'You cannot revoke your own administrator account.' });
     return;
@@ -987,19 +1018,33 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
 
   try {
     let targetUid: string | null = null;
+    let targetRole: string = 'admin';
     try {
       const user = await adminAuth.getUserByEmail(cleanEmail);
       targetUid = user.uid;
+      const targetAdminDoc = await adminDb.collection('admins').doc(targetUid).get();
+      if (targetAdminDoc.exists) {
+        targetRole = targetAdminDoc.data()?.role || 'admin';
+      }
     } catch {
       // User may not have registered in Auth yet
     }
 
+    // Only the primary site owner can revoke fellow superadministrators
+    if (targetRole === 'superadmin' && callerEmail !== PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+      res.status(403).json({
+        error: 'Only the primary site owner (akashprabhu0302@gmail.com) has authority to revoke fellow superadministrators.',
+      });
+      return;
+    }
+
     if (targetUid) {
       const user = await adminAuth.getUser(targetUid);
-      const { admin: _, ...remainingClaims } = (user.customClaims || {}) as any;
+      const { admin: _, superadmin: __, ...remainingClaims } = (user.customClaims || {}) as any;
       await adminAuth.setCustomUserClaims(targetUid, {
         ...remainingClaims,
         admin: false,
+        superadmin: false,
       });
       await adminDb.collection('admins').doc(targetUid).delete();
 
@@ -1033,7 +1078,7 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
       actor: {
         uid: req.adminUser?.uid || 'superadmin',
         email: callerEmail,
-        role: 'superadmin',
+        role: req.adminUser?.role || 'superadmin',
       },
       target: {
         collection: targetUid ? 'admins' : 'admin_invitations',
@@ -1041,11 +1086,12 @@ adminRouter.delete('/invitations/:email', requireAdminAuth, async (req: AdminAut
         label: cleanEmail,
       },
       summary: targetUid
-        ? `Admin privileges revoked for ${cleanEmail} by ${callerEmail}.`
+        ? `${targetRole === 'superadmin' ? 'Superadmin' : 'Admin'} privileges revoked for ${cleanEmail} by ${callerEmail}.`
         : `Admin invitation removed for ${cleanEmail} by ${callerEmail}.`,
       metadata: {
         email: cleanEmail,
         targetUid,
+        targetRole,
       },
       timestamp: FieldValue.serverTimestamp(),
     });

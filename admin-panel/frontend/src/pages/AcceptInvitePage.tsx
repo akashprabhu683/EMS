@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { ShieldCheck, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, AlertCircle, CheckCircle2, Loader2, ArrowRight, Crown, Sparkles, Shield } from 'lucide-react';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../firebase';
 import { verifyInvitation, acceptInvitation } from '../services/adminRoleService';
@@ -17,6 +17,7 @@ export function AcceptInvitePage() {
   const [canonicalEmail, setCanonicalEmail] = useState<string>(emailParam);
   const [isLoading, setIsLoading] = useState(true);
   const [isValid, setIsValid] = useState(false);
+  const [invitedRole, setInvitedRole] = useState<'superadmin' | 'admin'>('admin');
   const [invitedBy, setInvitedBy] = useState<string>('EMS Administrator');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,6 +38,7 @@ export function AcceptInvitePage() {
           setIsValid(true);
           if (res.email) setCanonicalEmail(res.email);
           if (res.invitedBy) setInvitedBy(res.invitedBy);
+          if (res.role) setInvitedRole(res.role);
         } else {
           setErrorMsg(res.reason || 'This invitation is invalid, has expired, or was already accepted.');
         }
@@ -58,7 +60,6 @@ export function AcceptInvitePage() {
 
     try {
       const provider = new GoogleAuthProvider();
-      // Hint Google to prompt the invited email
       provider.setCustomParameters({
         login_hint: targetEmail,
         prompt: 'select_account',
@@ -75,16 +76,16 @@ export function AcceptInvitePage() {
         return;
       }
 
-      // Call backend to accept token and grant admin claim
+      // Call backend to accept token and grant claims
       await acceptInvitation(token);
 
-      // Force refresh user claims so the app recognizes them as an admin immediately
+      // Refresh claims so the portal recognizes the new role immediately
       await refreshClaims();
 
       setAcceptedSuccess(true);
       setTimeout(() => {
-        navigate('/');
-      }, 1500);
+        window.location.href = '/';
+      }, 1200);
     } catch (err: any) {
       console.error('Accept invitation error:', err);
       let msg = 'Failed to accept invitation. Please try again.';
@@ -100,20 +101,32 @@ export function AcceptInvitePage() {
     }
   };
 
+  const isSuper = invitedRole === 'superadmin';
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 sm:p-10 border border-slate-200 shadow-xl space-y-6">
         {/* Header Branding */}
         <div className="text-center space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto shadow-md">
-            <ShieldCheck size={30} />
+          <div
+            className={`w-14 h-14 rounded-2xl text-white flex items-center justify-center mx-auto shadow-md transition-all ${
+              isSuper ? 'bg-purple-700 shadow-purple-500/20' : 'bg-emerald-700 shadow-emerald-500/20'
+            }`}
+          >
+            {isSuper ? <Crown size={30} /> : <ShieldCheck size={30} />}
           </div>
           <div>
-            <span className="text-[11px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-              EMS Dispensary
+            <span
+              className={`text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border ${
+                isSuper
+                  ? 'text-purple-700 bg-purple-50 border-purple-200'
+                  : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+              }`}
+            >
+              {isSuper ? 'Superadministrator Access' : 'Dispensary Administrator'}
             </span>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight font-display mt-2">
-              Administrator Invitation
+              {isSuper ? 'Accept Superadmin Role' : 'Administrator Invitation'}
             </h1>
           </div>
         </div>
@@ -121,7 +134,7 @@ export function AcceptInvitePage() {
         {/* Loading State */}
         {isLoading && (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-500">
-            <Loader2 size={32} className="animate-spin text-emerald-600" />
+            <Loader2 size={32} className={`animate-spin ${isSuper ? 'text-purple-600' : 'text-emerald-600'}`} />
             <p className="text-sm font-medium">Validating invitation credentials...</p>
           </div>
         )}
@@ -147,11 +160,17 @@ export function AcceptInvitePage() {
 
         {/* Success Transition */}
         {acceptedSuccess && (
-          <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-center space-y-2">
-            <CheckCircle2 size={36} className="text-emerald-600 mx-auto" />
-            <h3 className="font-bold text-base">Invitation Accepted!</h3>
-            <p className="text-xs text-emerald-700">
-              Your administrator privileges are now active. Redirecting to dispensary dashboard...
+          <div
+            className={`p-5 rounded-2xl border text-center space-y-2 ${
+              isSuper ? 'bg-purple-50 border-purple-200 text-purple-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            }`}
+          >
+            <CheckCircle2 size={36} className={`mx-auto ${isSuper ? 'text-purple-600' : 'text-emerald-600'}`} />
+            <h3 className="font-bold text-base">
+              {isSuper ? 'Superadmin Privileges Activated!' : 'Administrator Privileges Activated!'}
+            </h3>
+            <p className="text-xs text-slate-600">
+              Your credentials are active. Entering dispensary management console...
             </p>
           </div>
         )}
@@ -159,14 +178,43 @@ export function AcceptInvitePage() {
         {/* Valid State: Prompt to Accept */}
         {!isLoading && isValid && !acceptedSuccess && (
           <div className="space-y-5">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-              <p className="text-slate-600">
-                You have been invited by <strong className="text-slate-900">{invitedBy}</strong> to become an Administrator for the EMS Dispensary system.
+            <div className={`p-4 rounded-2xl border text-xs space-y-2.5 ${isSuper ? 'bg-purple-50/50 border-purple-200/80' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="text-slate-700">
+                You have been invited by <strong className="text-slate-900 font-semibold">{invitedBy}</strong> to become{' '}
+                {isSuper ? (
+                  <strong className="text-purple-900 font-bold">a Superadministrator</strong>
+                ) : (
+                  <strong className="text-emerald-900 font-bold">an Administrator</strong>
+                )}{' '}
+                for the EMS Dispensary system.
               </p>
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
-                <span>Invited Account:</span>
-                <span className="font-mono font-semibold text-slate-800">{canonicalEmail || emailParam}</span>
+
+              <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                <span>Account:</span>
+                <span className="font-bold text-slate-800">{canonicalEmail || emailParam}</span>
               </div>
+            </div>
+
+            {/* Scope / Privilege Card */}
+            <div className={`p-3.5 rounded-xl border text-[11px] space-y-1.5 ${isSuper ? 'bg-purple-50 border-purple-200 text-purple-950' : 'bg-emerald-50 border-emerald-200 text-emerald-950'}`}>
+              <span className="font-bold uppercase tracking-wider text-[10px] block">
+                {isSuper ? 'Superadmin Privileges Granted:' : 'Administrator Privileges Granted:'}
+              </span>
+              <ul className="space-y-1 list-disc list-inside text-slate-700">
+                {isSuper ? (
+                  <>
+                    <li>Invite &amp; delegate roles to new administrators</li>
+                    <li>Full access to system audit logs &amp; activity records</li>
+                    <li>Manage dispensary catalog, orders, and operational settings</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Product catalog, stock &amp; category management</li>
+                    <li>Order verification, processing &amp; counter payments</li>
+                    <li>Dispensary operational reports and customer directory</li>
+                  </>
+                )}
+              </ul>
             </div>
 
             {errorMsg && (
@@ -181,10 +229,12 @@ export function AcceptInvitePage() {
               type="button"
               onClick={handleAcceptWithGoogle}
               disabled={isSubmitting}
-              className="w-full py-3.5 px-4 rounded-xl text-xs sm:text-sm font-semibold border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-3 shadow-sm transition-all disabled:opacity-50 hover:border-emerald-500"
+              className={`w-full py-3.5 px-4 rounded-xl text-xs sm:text-sm font-semibold border-2 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-3 shadow-sm transition-all disabled:opacity-50 cursor-pointer ${
+                isSuper ? 'hover:border-purple-600 border-slate-200' : 'hover:border-emerald-600 border-slate-200'
+              }`}
             >
               {isSubmitting ? (
-                <Loader2 size={18} className="animate-spin text-emerald-600" />
+                <Loader2 size={18} className={`animate-spin ${isSuper ? 'text-purple-600' : 'text-emerald-600'}`} />
               ) : (
                 <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
                   <path
@@ -205,7 +255,13 @@ export function AcceptInvitePage() {
                   />
                 </svg>
               )}
-              <span>{isSubmitting ? 'Authenticating...' : 'Accept Invitation & Sign In with Google'}</span>
+              <span>
+                {isSubmitting
+                  ? 'Authenticating...'
+                  : isSuper
+                  ? 'Accept Superadmin Role & Sign In'
+                  : 'Accept Invitation & Sign In with Google'}
+              </span>
             </button>
 
             <div className="text-center pt-2">

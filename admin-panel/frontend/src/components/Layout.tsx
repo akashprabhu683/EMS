@@ -14,8 +14,9 @@ import {
   User,
   BarChart3,
   History,
+  Crown,
 } from 'lucide-react';
-import { useAdminAuth } from '../context/AdminAuthContext';
+import { useAdminAuth, PRIMARY_SUPERADMIN_EMAIL } from '../context/AdminAuthContext';
 import clsx from 'clsx';
 
 const ROUTE_TITLES: Record<string, string> = {
@@ -31,10 +32,13 @@ const ROUTE_TITLES: Record<string, string> = {
 };
 
 export function Layout() {
-  const { user, logout } = useAdminAuth();
+  const { user, isSuperadmin, logout } = useAdminAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isOwner = user?.email?.toLowerCase().trim() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase();
+  const isSuper = isOwner || isSuperadmin || Boolean(user?.isSuperadmin) || user?.role === 'superadmin';
 
   useEffect(() => {
     const title = ROUTE_TITLES[location.pathname] || 'EMS Dispensary Admin Portal';
@@ -139,8 +143,22 @@ export function Layout() {
           >
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                <span className="text-[11px] font-bold text-slate-700">Administrator</span>
+                {isOwner ? (
+                  <>
+                    <Crown size={12} className="text-amber-600" />
+                    <span className="text-[11px] font-bold text-amber-900">Primary Owner</span>
+                  </>
+                ) : isSuper ? (
+                  <>
+                    <Crown size={12} className="text-purple-600" />
+                    <span className="text-[11px] font-bold text-purple-900">Superadmin</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                    <span className="text-[11px] font-bold text-slate-700">Administrator</span>
+                  </>
+                )}
               </div>
               <span className="text-[10px] text-slate-400 group-hover:text-emerald-700 font-semibold">Profile →</span>
             </div>
