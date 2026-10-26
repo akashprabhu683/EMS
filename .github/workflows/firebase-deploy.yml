@@ -75,8 +75,8 @@ jobs:
 
       - name: Deploy Selected Firebase Resources
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EMS_STORE_6A342 }}
+          FIREBASE_TOKEN: ${{ secrets['FIREBASE_TOKEN'] }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets['FIREBASE_SERVICE_ACCOUNT_EMS_STORE_6A342'] }}
         run: |
           TARGET="${{ github.event.inputs.target }}"
           PROJECT_ID="ems-store-6a342"
