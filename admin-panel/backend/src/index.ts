@@ -55,6 +55,7 @@ app.use((req, res) => {
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(port, () => {
+    console.log(`[runtime-check] service=ems-admin-backend node=${process.version} openssl=${process.versions.openssl}`);
     console.log(`Admin panel backend listening on port ${port}`);
   });
 }

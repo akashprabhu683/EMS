@@ -56,6 +56,7 @@ app.use((req, res) => {
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(port, () => {
+    console.log(`[runtime-check] service=ems-ecommerce-backend node=${process.version} openssl=${process.versions.openssl}`);
     console.log(`Ecommerce backend listening on port ${port}`);
   });
 }
