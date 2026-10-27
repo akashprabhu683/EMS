@@ -8,6 +8,8 @@ services:
     startCommand: npm start
     healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: 22.23.4
       - key: NODE_ENV
         value: production
       - key: FIREBASE_PROJECT_ID
@@ -26,6 +28,8 @@ services:
     startCommand: npm start
     healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: 22.23.4
       - key: NODE_ENV
         value: production
       - key: FIREBASE_PROJECT_ID
